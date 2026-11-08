@@ -1,0 +1,12 @@
+appId: local.aicenter.planner
+productName: AI Center Planner
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+mac:
+  target: dir
+  category: public.app-category.productivity
+  identity: null
