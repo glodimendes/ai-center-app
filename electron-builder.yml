@@ -6,7 +6,13 @@ directories:
 files:
   - out/**
   - package.json
+extraResources:
+  - from: resources/calendar-helper
+    to: calendar-helper
 mac:
   target: dir
   category: public.app-category.productivity
   identity: null
+  extendInfo:
+    NSCalendarsFullAccessUsageDescription: AI Center Planner reads your calendars to plan around your events and adds the blocks you approve.
+    NSCalendarsUsageDescription: AI Center Planner reads your calendars to plan around your events and adds the blocks you approve.

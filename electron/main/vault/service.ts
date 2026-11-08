@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
-import type { DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData } from '@shared/types'
+import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides } from '@shared/types'
 import { isoWeek } from '@shared/time'
 import { parseInbox, parseTasks } from './parser'
 import { addInboxItem, deleteTask, insertTask, patchTask, removeInboxItem, stampLastUpdated } from './edits'
@@ -13,6 +13,7 @@ import { VaultGit } from './git'
 
 export const TODOS_FILE = '05_Tasks/daily-todos.md'
 export const INBOX_FILE = '05_Tasks/braindump-inbox.md'
+export const BRIEF_PROMPT_FILE = '06_Prompts/daily-brief.md'
 
 const DOC_GROUPS: [string, string][] = [
   ['04_Context_Docs', 'Context'],
@@ -175,9 +176,140 @@ export class VaultService {
     }
   }
 
+  // --- manual block edits (weekly overrides, in the week of the block's start) ---
+  private updateOverrides(start: string, fn: (o: WeekOverrides) => void, message: string) {
+    this.updateWeek(
+      isoWeek(new Date(start)),
+      (w) => {
+        const o = w.overrides ?? {}
+        fn(o)
+        w.overrides = o
+      },
+      message
+    )
+  }
+
+  addAssignment(blockId: string, start: string, taskId: string, label = `"${taskId}" into ${blockId}`) {
+    this.updateOverrides(
+      start,
+      (o) => {
+        const list = (o.assignments ??= [])
+        const a = list.find((x) => x.blockId === blockId)
+        if (!a) list.push({ blockId, taskIds: [taskId] })
+        else if (!a.taskIds.includes(taskId)) a.taskIds.push(taskId)
+      },
+      `put ${label}`
+    )
+  }
+
+  /** No-op (no write, no commit) when the pair isn't stored. */
+  removeAssignment(blockId: string, start: string, taskId: string, label = `"${taskId}" from ${blockId}`) {
+    const o = this.weeks()[isoWeek(new Date(start))]?.overrides
+    if (!o?.assignments?.some((a) => a.blockId === blockId && a.taskIds.includes(taskId))) return
+    this.updateOverrides(
+      start,
+      (o) => (o.assignments = (o.assignments ?? []).map((a) => (a.blockId === blockId ? { ...a, taskIds: a.taskIds.filter((t) => t !== taskId) } : a))),
+      `unassign ${label}`
+    )
+  }
+
+  addExclusion(blockId: string, start: string, taskId: string, label = `"${taskId}" from ${blockId}`) {
+    this.updateOverrides(
+      start,
+      (o) => {
+        const list = (o.exclusions ??= [])
+        if (!list.some((x) => x.blockId === blockId && x.taskId === taskId)) list.push({ blockId, taskId })
+      },
+      `take ${label}`
+    )
+  }
+
+  /** No-op (no write, no commit) when the pair isn't stored. */
+  removeExclusion(blockId: string, start: string, taskId: string, label = `"${taskId}" in ${blockId}`) {
+    const o = this.weeks()[isoWeek(new Date(start))]?.overrides
+    if (!o?.exclusions?.some((x) => x.blockId === blockId && x.taskId === taskId)) return
+    this.updateOverrides(start, (o) => (o.exclusions = (o.exclusions ?? []).filter((x) => !(x.blockId === blockId && x.taskId === taskId))), `allow ${label}`)
+  }
+
+  restoreBlock(blockId: string, start: string, label = blockId) {
+    const o = this.weeks()[isoWeek(new Date(start))]?.overrides
+    if (!o?.dismissed?.includes(blockId)) return
+    this.updateOverrides(start, (o) => (o.dismissed = (o.dismissed ?? []).filter((id) => id !== blockId)), `restore block ${label}`)
+  }
+
+  dismissBlock(blockId: string, start: string, label = blockId) {
+    this.updateOverrides(
+      start,
+      (o) => {
+        const list = (o.dismissed ??= [])
+        if (!list.includes(blockId)) list.push(blockId)
+        // Its manual contents go with it.
+        o.assignments = (o.assignments ?? []).filter((a) => a.blockId !== blockId)
+        o.exclusions = (o.exclusions ?? []).filter((x) => x.blockId !== blockId)
+      },
+      `remove block ${label}`
+    )
+  }
+
   // --- preferences ---------------------------------------------------------
   savePreferences(prefs: Preferences) {
     this.write(PREFERENCES_FILE, serializePreferences(prefs, this.read(PREFERENCES_FILE) ?? undefined), 'update planner preferences')
+  }
+
+  // --- brief ---------------------------------------------------------------
+  /** The Codex brief for a date (if written) plus active task notes in 05_Tasks/. */
+  brief(date: string): BriefData {
+    const path = `05_Tasks/briefs/${date}.md`
+    const text = this.read(path)
+    const sections: { title: string; body: string }[] = []
+    if (text) {
+      const parts = text.split(/^##\s+/m).slice(1)
+      for (const part of parts) {
+        const nl = part.indexOf('\n')
+        const title = (nl < 0 ? part : part.slice(0, nl)).replace(/^\d+\.\s*/, '').trim()
+        sections.push({ title, body: nl < 0 ? '' : part.slice(nl + 1).trim() })
+      }
+    }
+    const skip = new Set(['daily-todos.md', 'braindump-inbox.md', 'README.md', 'recordings-checked.md'])
+    const notes: TaskNote[] = []
+    const dir = this.abs('05_Tasks')
+    if (existsSync(dir)) {
+      for (const f of readdirSync(dir).sort()) {
+        if (!f.endsWith('.md') || skip.has(f)) continue
+        const t = readFileSync(join(dir, f), 'utf8')
+        const status = t.match(/^Status:\s*(.+)$/im)?.[1]?.trim()
+        if (status && /^(done|archived|completed|inactive)/i.test(status)) continue
+        const nextBlock = t.match(/^##\s*Next actions?\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1] ?? ''
+        notes.push({
+          path: `05_Tasks/${f}`,
+          title: t.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? basename(f, '.md'),
+          status,
+          updated: t.match(/^Last updated:\s*(\S+)/im)?.[1],
+          next: nextBlock
+            .split('\n')
+            .filter((l) => !/^\s*[-*]\s+\[[xX]\]/.test(l))
+            .map((l) => l.match(/^\s*[-*]\s+(?:\[ \]\s*)?(.+)$/)?.[1]?.trim())
+            .filter((x): x is string => Boolean(x))
+            .slice(0, 3)
+        })
+      }
+    }
+    return { date, codex: text ? { path, sections } : null, notes }
+  }
+
+  writeBrief(date: string, markdown: string) {
+    const at = new Date().toTimeString().slice(0, 5)
+    this.write(`05_Tasks/briefs/${date}.md`, `# Daily Brief ${date}\n\nGenerated by AI Center Planner at ${at} (read-only run).\n\n${markdown}\n`, `daily brief ${date}`)
+  }
+
+  /** The user's brief instructions (06_Prompts/daily-brief.md); null means use the built-in default. */
+  readBriefPrompt(): string | null {
+    const text = this.read(BRIEF_PROMPT_FILE)
+    return text?.trim() ? text : null
+  }
+
+  writeBriefPrompt(text: string) {
+    this.write(BRIEF_PROMPT_FILE, text.endsWith('\n') ? text : `${text}\n`, 'update daily brief prompt')
   }
 
   // --- docs ----------------------------------------------------------------

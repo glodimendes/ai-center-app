@@ -3,3 +3,4 @@ out/
 dist/
 .dev-vault/
 tests/fixtures/
+resources/calendar-helper

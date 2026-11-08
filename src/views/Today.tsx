@@ -9,6 +9,8 @@ import { TimeGrid } from '@/components/TimeGrid'
 import { BlockPanel } from '@/components/BlockPanel'
 import { TaskRow } from '@/components/TaskRow'
 import { QuickAdd } from '@/components/QuickAdd'
+import { ReplanButton } from '@/components/ReplanButton'
+import { CalendarFilter } from '@/components/CalendarFilter'
 import { Button, Dot, Header } from '@/components/ui'
 
 export function Today() {
@@ -20,7 +22,7 @@ export function Today() {
   const date = parseDate(day)
   const isToday = day === isoDate(new Date())
 
-  const dayBlocks = s.plan.blocks.filter((b) => b.start.slice(0, 10) === day)
+  const dayBlocks = s.plan.blocks.filter((b) => b.start.slice(0, 10) === day && b.kind !== 'break')
   const plannedByCat = new Map<string, number>()
   for (const b of dayBlocks) plannedByCat.set(b.category, (plannedByCat.get(b.category) ?? 0) + blockMinutes(b))
   const toLog = dayBlocks.filter((b) => new Date(b.end) < new Date() && !logFor(s, b) && (b.chunks.length || b.kind !== 'topup'))
@@ -55,6 +57,8 @@ export function Today() {
             <AlertTriangle size={13} /> {s.plan.warnings.length}
           </Button>
         )}
+        <ReplanButton />
+        <CalendarFilter />
         <Button kind="ghost" onClick={() => act(api.refreshCalendar())} title="Refresh calendar">
           <RefreshCw size={13} />
         </Button>
@@ -122,6 +126,7 @@ export function Today() {
           onSelect={selectBlock}
           onMove={onMove}
           onDropTask={onDropTask}
+          onDropTaskOnBlock={(taskId, blockId) => act(api.addTaskToBlock(blockId, taskId), 'Added to block')}
         />
         <BlockPanel />
       </div>

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, CalendarRange, FileText, Inbox, ListChecks, Settings as Cog, Sparkles, TrendingUp, Wand2 } from 'lucide-react'
+import { CalendarDays, CalendarRange, Sun, FileText, Inbox, ListChecks, Settings as Cog, Sparkles, TrendingUp, Wand2 } from 'lucide-react'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
 import { CommandPalette } from '@/components/CommandPalette'
 import { ContextUpdate } from '@/components/ContextUpdate'
 import { Today } from '@/views/Today'
+import { Brief } from '@/views/Brief'
 import { Week } from '@/views/Week'
 import { Tasks } from '@/views/Tasks'
 import { InboxView } from '@/views/Inbox'
@@ -14,12 +15,13 @@ import { Review } from '@/views/Review'
 import { Settings } from '@/views/Settings'
 
 const NAV: { view: View; label: string; icon: typeof CalendarDays; key: string }[] = [
-  { view: 'today', label: 'Today', icon: CalendarDays, key: '1' },
-  { view: 'week', label: 'Week', icon: CalendarRange, key: '2' },
-  { view: 'tasks', label: 'Tasks', icon: ListChecks, key: '3' },
-  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '4' },
-  { view: 'docs', label: 'Docs', icon: FileText, key: '5' },
-  { view: 'review', label: 'Review', icon: TrendingUp, key: '6' }
+  { view: 'brief', label: 'Brief', icon: Sun, key: '1' },
+  { view: 'today', label: 'Today', icon: CalendarDays, key: '2' },
+  { view: 'week', label: 'Week', icon: CalendarRange, key: '3' },
+  { view: 'tasks', label: 'Tasks', icon: ListChecks, key: '4' },
+  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '5' },
+  { view: 'docs', label: 'Docs', icon: FileText, key: '6' },
+  { view: 'review', label: 'Review', icon: TrendingUp, key: '7' }
 ]
 
 export function App() {
@@ -117,6 +119,7 @@ export function App() {
         {state.vault.errors.length > 0 && (
           <div className="bg-warn-soft text-warn px-5 py-2 text-[12px]">{state.vault.errors.join(' · ')}</div>
         )}
+        {view === 'brief' && <Brief />}
         {view === 'today' && <Today />}
         {view === 'week' && <Week />}
         {view === 'tasks' && <Tasks />}

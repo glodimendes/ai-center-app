@@ -67,7 +67,8 @@ export function Modal({ children, onClose, width = 'max-w-lg' }: { children: Rea
 export function Popover({ children, onClose, className }: { children: ReactNode; onClose: () => void; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && onClose()
+    // The trigger lives in the same wrapper; let its own click toggle instead of close-then-reopen.
+    const onDown = (e: MouseEvent) => !(ref.current?.parentElement ?? ref.current)?.contains(e.target as Node) && onClose()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     setTimeout(() => window.addEventListener('mousedown', onDown))
     window.addEventListener('keydown', onKey)

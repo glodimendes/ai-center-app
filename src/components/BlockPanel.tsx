@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Minus, Pin, PinOff, Plus, X } from 'lucide-react'
-import type { Block, LogStatus, Task } from '@shared/types'
+import { Check, Minus, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
+import type { Block, CalEvent, LogStatus, Task } from '@shared/types'
 import { fmtDuration, fmtHM, minutesOfDay } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { blockMinutes, blockTitle, eventKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
+import { ACCEPTS_TASKS, REMOVABLE, blockMinutes, blockTitle, eventAvailability, eventKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
 import { categoryOf, cx, inlineMd, parseMinutes } from '@/lib/util'
 import { Button, Dot } from './ui'
 
@@ -14,6 +14,19 @@ export function BlockPanel() {
   const { state, selectedBlockId, selectBlock } = useStore()
   if (!state || !selectedBlockId) return null
   const block = state.plan.blocks.find((b) => b.id === selectedBlockId)
+  if (block?.kind === 'break')
+    return (
+      <Shell onClose={() => selectBlock(null)}>
+        <div className="text-[15px] font-semibold">{block.title}</div>
+        <div className="text-muted text-[12px] mt-1">{timeRange(block.start, block.end)}</div>
+        <p className="mt-4 text-[11.5px] text-faint">Protected break. It floats inside its window (Settings → Planning rules) and isn't synced to your calendar.</p>
+        <div className="mt-3">
+          <Button kind="danger" onClick={() => void act(api.removeBlock(block.id), 'Break removed for this day').then(() => selectBlock(null))}>
+            <Trash2 size={13} /> Remove this break today
+          </Button>
+        </div>
+      </Shell>
+    )
   if (block) return <BlockDetail key={block.id} block={block} onClose={() => selectBlock(null)} />
   const ev = state.events.find((e) => eventKey(e) === selectedBlockId)
   if (!ev) return null
@@ -27,8 +40,42 @@ export function BlockPanel() {
       {ev.description && (
         <div className="mt-3 text-[12px] whitespace-pre-wrap text-muted" dangerouslySetInnerHTML={{ __html: ev.description.replace(/<(?!\/?(b|i|br|p|ul|li|strong|em)\b)[^>]*>/g, '') }} />
       )}
-      <p className="mt-4 text-[11.5px] text-faint">Calendar event: the planner works around it and never changes it.</p>
+      <EventAvailability ev={ev} />
     </Shell>
+  )
+}
+
+const AVAILABILITY_OPTIONS = [
+  { value: 'busy', label: 'Busy' },
+  { value: 'free', label: 'Free' },
+  { value: null, label: 'Calendar default' }
+] as const
+
+/** Busy · Free · Calendar default, like Google/Apple's "show as busy/free"; the override lives in Settings, the event is never changed. */
+function EventAvailability({ ev }: { ev: CalEvent }) {
+  const state = useStore((s) => s.state)!
+  const { value, overridden } = eventAvailability(state, ev)
+  const key = `${ev.calendarId}:${ev.id}`
+  const selected = overridden ? value : null
+  return (
+    <div className="mt-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint mb-1.5">Show as</div>
+      <div className="flex rounded-md border border-line overflow-hidden text-[12px]">
+        {AVAILABILITY_OPTIONS.map((o) => (
+          <button
+            key={o.label}
+            onClick={() => act(api.setEventAvailability(key, o.value))}
+            className={cx('flex-1 px-2 h-7 border-r border-line last:border-r-0 transition-colors', selected === o.value ? 'bg-accent text-white' : 'hover:bg-sunken text-muted')}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[11.5px] text-faint">
+        {value === 'busy' ? 'Busy · plan around it.' : 'Free · may plan over it.'}
+        {overridden ? ' Set here, overriding the calendar.' : ` From the calendar${ev.free ? '' : value === 'free' ? ` (${ev.calendarName} is set to Free)` : ''}.`} The planner never changes the event itself.
+      </p>
+    </div>
   )
 }
 
@@ -97,6 +144,35 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
     useStore.getState().toast(`Logged ${fmtDuration(entry.actualMin)} on ${entry.title}`)
   }
 
+  const accepts = ACCEPTS_TASKS.has(block.kind) && !existing && !ended
+  const removable = REMOVABLE.has(block.kind)
+  const removeBlock = async () => {
+    const snapshot = block
+    const ok = await act(api.removeBlock(block.id).then(() => true))
+    if (!ok) return
+    onClose()
+    useStore.getState().toast(block.kind === 'container' ? 'Calendar event no longer used for tasks' : 'Block removed; its tasks are planned elsewhere', 'info', {
+      label: 'Undo',
+      run: () => void act(api.restoreBlock(snapshot), 'Block restored')
+    })
+  }
+  const removeTask = (taskId: string) => act(api.removeTaskFromBlock(block.id, taskId), 'Removed from this block')
+
+  // Delete/Backspace removes the selected block, unless the user is typing somewhere.
+  useEffect(() => {
+    if (!removable) return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'Delete' && e.key !== 'Backspace') || e.metaKey || e.ctrlKey || e.altKey) return
+      const el = document.activeElement as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+      e.preventDefault()
+      void removeBlock()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id, block.kind, removable])
+
   const togglePin = async () => {
     if (block.pinned) await act(api.unpin(block.id), 'Unpinned: the planner may move it again')
     else await act(api.pin(pinFromBlock(block, block.start, block.end)), 'Pinned in place')
@@ -130,7 +206,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
         </div>
       )}
 
-      {tasks.length > 0 && (
+      {(tasks.length > 0 || accepts) && (
         <section className="mt-5">
           <h3 className="text-[11px] uppercase tracking-wide text-faint mb-2">Tasks in this block</h3>
           <div className="flex flex-col gap-2">
@@ -159,10 +235,29 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
                       </label>
                     )}
                   </div>
+                  {ACCEPTS_TASKS.has(block.kind) && !existing && (
+                    <button onClick={() => removeTask(task.id)} title="Take out of this block (planned elsewhere)" className="mt-0.5 text-faint hover:text-danger shrink-0">
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
               )
             })}
           </div>
+          {accepts && <AddTask block={block} />}
+        </section>
+      )}
+
+      {removable && (
+        <section className="mt-5">
+          <Button kind="danger" onClick={removeBlock} title="Delete / Backspace">
+            <Trash2 size={13} /> Remove block
+          </Button>
+          <p className="mt-1.5 text-[11px] text-faint">
+            {block.kind === 'container'
+              ? 'Stop using this calendar event for tasks (the event itself stays).'
+              : 'Remove this block; its tasks are planned elsewhere. If it was synced, the next Sync removes it from your calendar.'}
+          </p>
         </section>
       )}
 
@@ -229,5 +324,62 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
         </div>
       </section>
     </Shell>
+  )
+}
+
+/** Searchable picker: open leaf tasks not already here, the block's own area first. */
+function AddTask({ block }: { block: Block }) {
+  const state = useStore((s) => s.state)!
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const options = useMemo(() => {
+    const tasks = state.vault.tasks
+    const openIds = new Set(tasks.filter((t) => !t.done).map((t) => t.id))
+    const here = new Set(block.chunks.map((c) => c.taskId))
+    const needle = q.trim().toLowerCase()
+    return tasks
+      .filter((t) => !t.done && !here.has(t.id) && !t.childIds.some((id) => openIds.has(id)))
+      .filter((t) => !needle || t.title.toLowerCase().includes(needle) || t.section.join(' ').toLowerCase().includes(needle))
+      .sort((a, b) => Number(b.category === block.category) - Number(a.category === block.category))
+      .slice(0, 40)
+  }, [state.vault.tasks, block, q])
+
+  if (!open)
+    return (
+      <Button kind="ghost" className="mt-2 -ml-2" onClick={() => setOpen(true)}>
+        <Plus size={13} /> Add task…
+      </Button>
+    )
+  const add = async (t: Task) => {
+    setOpen(false)
+    setQ('')
+    await act(api.addTaskToBlock(block.id, t.id), 'Added to block')
+  }
+  return (
+    <div className="mt-2 rounded-md border border-line bg-bg">
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false)
+          if (e.key === 'Enter' && options[0]) void add(options[0])
+        }}
+        placeholder="Search tasks…"
+        className="w-full h-7 px-2 bg-transparent border-b border-line text-[12.5px] outline-none placeholder:text-faint"
+      />
+      <div className="max-h-56 overflow-y-auto py-1">
+        {options.map((t) => (
+          <button key={t.id} onClick={() => add(t)} className="w-full text-left px-2 py-1 hover:bg-sunken flex items-start gap-1.5">
+            <Dot color={categoryOf(state, t.category).color} className="mt-1" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-[12px] truncate" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
+              {t.section.length > 0 && <span className="block text-[10.5px] text-faint truncate">{t.section.join(' › ')}</span>}
+            </span>
+          </button>
+        ))}
+        {!options.length && <div className="px-2 py-1 text-[11.5px] text-faint">No matching open tasks.</div>}
+      </div>
+    </div>
   )
 }

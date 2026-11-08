@@ -1,15 +1,17 @@
-import type { Priority } from '@shared/types'
+import type { Priority, Timing } from '@shared/types'
 
 // Inline task metadata. Everything is optional so plain checklist lines keep working.
 //   ~2h  ~45m  ~1h30m  ~1.5h        estimate
 //   due:2026-11-12                  deadline (canonical)
 //   by 31/10  by 05.11  by 1/9/2027 deadline (the user's existing style)
 //   !high  !medium  !low            priority
+//   @spread  @asap                  timing override (spread evenly until the deadline / as soon as possible)
 
 const ESTIMATE_RE = /(^|\s)~(\d+(?:\.\d+)?h(?:\d+m)?|\d+m)(?=\s|$)/
 const DUE_ISO_RE = /(^|\s)due:(\d{4}-\d{2}-\d{2})(?=\s|$)/
 const DUE_BY_RE = /(\s[-–—]\s*|\s)by\s+(\d{1,2})([./])(\d{1,2})(?:\3(\d{2,4}))?(?=[\s,.;)]|$)/i
 const PRIORITY_RE = /(^|\s)!(high|medium|low)(?=\s|$)/i
+const TIMING_RE = /(^|\s)@(spread|asap)(?=\s|$)/i
 
 export interface ParsedTokens {
   title: string
@@ -17,6 +19,7 @@ export interface ParsedTokens {
   due?: string
   dueStyle?: 'iso' | 'by-slash' | 'by-dot'
   priority?: Priority
+  timing?: Timing
 }
 
 export function parseDuration(token: string): number | undefined {
@@ -83,6 +86,12 @@ export function parseTokens(text: string, today: Date): ParsedTokens {
     title = title.replace(PRIORITY_RE, '$1')
   }
 
+  const tim = title.match(TIMING_RE)
+  if (tim) {
+    out.timing = tim[2].toLowerCase() as Timing
+    title = title.replace(TIMING_RE, '$1')
+  }
+
   out.title = title.replace(/\s{2,}/g, ' ').trim()
   return out
 }
@@ -101,6 +110,7 @@ export interface TokenEdit {
   estimateMin?: number | null
   due?: string | null
   priority?: Priority
+  timing?: Timing | null
 }
 
 /**
@@ -118,6 +128,8 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
     if (due) parts.push(formatDue(due, parsed.dueStyle))
     if (est) parts.push(`~${formatDuration(est)}`)
     if (pri && pri !== 'medium') parts.push(`!${pri}`)
+    const tim = edit.timing === undefined ? parsed.timing : edit.timing ?? undefined
+    if (tim) parts.push(`@${tim}`)
     return parts.join(' ')
   }
 
@@ -140,6 +152,11 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
   if (edit.priority !== undefined) {
     const token = edit.priority === 'medium' ? '' : `!${edit.priority}`
     if (PRIORITY_RE.test(out)) out = out.replace(PRIORITY_RE, token ? `$1${token}` : '$1')
+    else if (token) out = `${out.trimEnd()} ${token}`
+  }
+  if (edit.timing !== undefined) {
+    const token = edit.timing ? `@${edit.timing}` : ''
+    if (TIMING_RE.test(out)) out = out.replace(TIMING_RE, token ? `$1${token}` : '$1')
     else if (token) out = `${out.trimEnd()} ${token}`
   }
   return out.replace(/[ \t]{2,}/g, ' ').trimEnd()

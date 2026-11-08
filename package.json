@@ -11,8 +11,9 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "package": "electron-vite build && electron-builder --mac --dir",
-    "install-app": "npm run package && rm -rf '/Applications/AI Center Planner.app' && cp -R 'dist/mac-arm64/AI Center Planner.app' /Applications/"
+    "package": "npm run build:helper && electron-vite build && electron-builder --mac --dir",
+    "install-app": "npm run package && rm -rf '/Applications/AI Center Planner.app' && cp -R 'dist/mac-arm64/AI Center Planner.app' /Applications/",
+    "build:helper": "mkdir -p resources && xcrun swiftc -O -o resources/calendar-helper native/calendar-helper/main.swift"
   },
   "dependencies": {
     "@milkdown/crepe": "^7.23.0",

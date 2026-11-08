@@ -79,7 +79,14 @@ describe('buildSyncDiff', () => {
   it('reports unknown or read-only calendars instead of writing', () => {
     const r = diff([block('a', '2026-11-09T09:00:00', '2026-11-09T10:00:00', { calendarName: 'ETH Classes HS26' })], [])
     expect(r.ops).toEqual([])
-    expect(r.problems[0]).toMatch(/read-only/)
+    expect(r.problems[0]).toMatch(/protected|read-only/)
+  })
+
+  it('never writes to protected calendars', () => {
+    const cals = [...calendars, { id: 'fam', name: 'Family', color: '#0f0', writable: true }]
+    const r = buildSyncDiff([block('a', '2026-11-09T09:00:00', '2026-11-09T10:00:00', { calendarName: 'Family' })], [], cals, DEFAULT_PREFERENCES, [], now)
+    expect(r.ops).toEqual([])
+    expect(r.problems[0]).toMatch(/protected/)
   })
 
   it('ignores blocks beyond the sync window', () => {

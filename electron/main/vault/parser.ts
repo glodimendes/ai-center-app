@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto'
 import type { CategoryPref, InboxItem, Section, Task } from '@shared/types'
 import { parseTokens } from './tokens'
+import { resolveCategory } from '@shared/categories'
+
+export { resolveCategory }
 
 export const TASK_RE = /^([\t ]*)([-*+]) \[([ xX])\] ?(.*)$/
 export const HEADING_RE = /^[\t ]*(#{1,6})\s+(.+?)\s*#*\s*$/
@@ -17,16 +20,6 @@ export function indentWidth(ws: string): number {
   let w = 0
   for (const ch of ws) w += ch === '\t' ? 4 : 1
   return w
-}
-
-export function resolveCategory(section: string[], categories: CategoryPref[]): string {
-  for (let i = section.length - 1; i >= 0; i--) {
-    const h = section[i].toLowerCase()
-    for (const c of categories) {
-      if (c.headings.some((needle) => h.includes(needle.toLowerCase()))) return c.key
-    }
-  }
-  return 'other'
 }
 
 interface HeadingState {
@@ -99,6 +92,7 @@ export function parseTasks(
       due: tokens.due,
       dueStyle: tokens.dueStyle,
       priority: tokens.priority ?? 'medium',
+      timing: tokens.timing,
       parentId: parent?.id,
       childIds: []
     }

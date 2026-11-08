@@ -15,6 +15,18 @@ export function Toasts() {
           )}
         >
           {t.text}
+          {t.action && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation()
+                t.action!.run()
+                dismiss(t.id)
+              }}
+              className="ml-3 font-semibold underline underline-offset-2"
+            >
+              {t.action.label}
+            </span>
+          )}
         </button>
       ))}
     </div>

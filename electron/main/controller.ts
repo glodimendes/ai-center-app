@@ -1,31 +1,53 @@
-import { BrowserWindow, dialog, shell } from 'electron'
-import { rmSync, writeFileSync } from 'node:fs'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Api, AppState } from '@shared/api'
-import type { CalEvent, CalendarStatus, ContextChange, ContextResult, Plan, Settings, SyncOp } from '@shared/types'
-import { addDays, startOfDay, weekStart } from '@shared/time'
+import type { CalEvent, CalendarStatus, ContextChange, ContextResult, Plan, Settings, SyncOp, VaultState } from '@shared/types'
+import { addDays, isoDate, localISO, startOfDay, weekStart } from '@shared/time'
 import { VaultService } from './vault/service'
 import { GoogleCalendar } from './calendar/google'
+import { MacCalendar } from './calendar/macos'
+import type { CalendarProvider } from './calendar/provider'
 import { buildSyncDiff } from './calendar/sync'
 import { plan } from './scheduler/plan'
 import { loadSettings, saveSettings } from './settings'
 import { runContextAgent, snapshotVault, type AgentRun } from './context/agent'
+import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
 
 /** Owns vault, calendar and the current plan; implements the renderer API. */
 export class Controller implements Api {
   private settings: Settings = loadSettings()
   private vault!: VaultService
   private google = new GoogleCalendar(this.settings.googleClientId, this.settings.googleClientSecret)
-  private calendar: CalendarStatus = { connected: false, configured: false, calendars: [] }
+  private mac = new MacCalendar()
+  private calendar: CalendarStatus = { provider: 'macos', connected: false, configured: false, calendars: [] }
+  /** Active calendar backend: macOS Calendar by default, Google directly as the alternative. */
+  private get cal(): CalendarProvider {
+    return this.settings.calendarProvider === 'google' ? this.google : this.mac
+  }
   private events: CalEvent[] = []
   private refreshTimer: NodeJS.Timeout | null = null
   private agent: AgentRun | null = null
   private pendingContext: ContextResult | null = null
+  // Plan stability: full re-plans only on demand, once per day, or when preferences change.
+  // Everything else is incremental (existing blocks stay put; only their contents refresh).
+  private lastPlan: Plan | null = null
+  private lastFullDay = ''
+  private lastPrefsHash = ''
+  private forceFull = false
+  // Calendar edits win: what was last synced, so moves/deletions made in the calendar can be detected.
+  private synced: Record<string, { eventId?: string; calendarId: string; start: string; end: string }> = {}
+  private dismissed: string[] = []
+  private briefRunning = false
+  private briefError: string | undefined
+  private briefAttemptDay = ''
 
   constructor(
     private broadcast: (state: AppState) => void,
     private emit: (channel: string, payload: unknown) => void
   ) {
+    this.loadPlanCache()
+    this.loadSyncState()
     this.openVault()
     this.refreshTimer = setInterval(() => void this.refreshCalendar().catch(() => {}), 10 * 60_000)
   }
@@ -36,20 +58,132 @@ export class Controller implements Api {
     this.vault.startWatching()
   }
 
+  private planCacheFile = () => join(app.getPath('userData'), 'plan-cache.json')
+
+  private loadPlanCache() {
+    try {
+      if (!existsSync(this.planCacheFile())) return
+      const c = JSON.parse(readFileSync(this.planCacheFile(), 'utf8'))
+      if (c.vaultPath !== this.settings.vaultPath) return
+      Object.assign(this, { lastPlan: c.plan, lastFullDay: c.fullDay, lastPrefsHash: c.prefsHash })
+    } catch {
+      /* start fresh */
+    }
+  }
+
+  private syncStateFile = () => join(app.getPath('userData'), 'sync-state.json')
+
+  private loadSyncState() {
+    try {
+      if (!existsSync(this.syncStateFile())) return
+      const c = JSON.parse(readFileSync(this.syncStateFile(), 'utf8'))
+      if (c.vaultPath !== this.settings.vaultPath) return
+      this.synced = c.synced ?? {}
+      this.dismissed = c.dismissed ?? []
+    } catch {
+      /* start fresh */
+    }
+  }
+
+  private saveSyncState() {
+    // Forget dismissals older than a week (ids start with their date, e.g. 2026-11-09:thesis:1).
+    const cutoff = isoDate(addDays(new Date(), -7))
+    this.dismissed = this.dismissed.filter((id) => (id.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '9999') >= cutoff)
+    try {
+      writeFileSync(this.syncStateFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, synced: this.synced, dismissed: this.dismissed }))
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /**
+   * Your calendar edits win over the plan. A planner event moved or resized in the calendar becomes a
+   * pin at its new time; one deleted there is dismissed and its work is planned elsewhere.
+   */
+  private adoptCalendarEdits(from: Date) {
+    let changed = false
+    const same = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime()
+    for (const [blockId, s] of Object.entries(this.synced)) {
+      if (new Date(s.start) < from) continue
+      const ev = this.events.find((e) => e.plannerBlockId === blockId)
+      if (!ev) {
+        if (new Date(s.end).getTime() > Date.now()) this.dismissed.push(blockId)
+        delete this.synced[blockId]
+        changed = true
+        continue
+      }
+      if (same(ev.start, s.start) && same(ev.end, s.end)) continue
+      const block = this.lastPlan?.blocks.find((b) => b.id === blockId)
+      const category = block?.category ?? this.vault.preferences.categories.find((c) => c.calendar === ev.calendarName)?.key ?? 'other'
+      this.vault.pin({
+        blockId,
+        category,
+        title: ev.title,
+        start: localISO(new Date(ev.start)),
+        end: localISO(new Date(ev.end)),
+        taskIds: block?.chunks.map((c) => c.taskId) ?? []
+      })
+      this.synced[blockId] = { ...s, start: ev.start, end: ev.end }
+      changed = true
+    }
+    if (changed) this.saveSyncState()
+  }
+
+  /** The planning day rolls over at 04:00, so a late evening doesn't trigger tomorrow's re-plan. */
+  private planningDay = () => isoDate(new Date(Date.now() - 4 * 3_600_000))
+
+  private computePlan(v: VaultState): Plan {
+    const now = new Date()
+    const day = this.planningDay()
+    const prefsHash = JSON.stringify(v.preferences)
+    const full = this.forceFull || !this.lastPlan || this.lastFullDay !== day || this.lastPrefsHash !== prefsHash
+    const p = plan({
+      tasks: v.tasks,
+      events: this.events,
+      prefs: v.preferences,
+      training: v.training,
+      weeks: v.weeks,
+      now,
+      previous: this.lastPlan,
+      anchorFuture: !full,
+      excludeIds: this.dismissed,
+      eventAvailability: this.settings.eventAvailability,
+      fullPlannedAt: full ? undefined : this.lastPlan!.fullPlannedAt
+    })
+    if (full) {
+      this.lastFullDay = day
+      this.lastPrefsHash = prefsHash
+      this.forceFull = false
+    }
+    this.lastPlan = p
+    try {
+      writeFileSync(this.planCacheFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, plan: p, fullDay: this.lastFullDay, prefsHash: this.lastPrefsHash }))
+    } catch {
+      /* cache is best effort */
+    }
+    return p
+  }
+
   private currentPlan(): Plan {
-    const v = this.vault.state()
-    return plan({ tasks: v.tasks, events: this.events, prefs: v.preferences, training: v.training, weeks: v.weeks, now: new Date() })
+    return this.lastPlan ?? this.computePlan(this.vault.state())
+  }
+
+  /** Full re-plan on demand: everything not pinned or already started may move. */
+  async replan() {
+    this.forceFull = true
+    this.push()
   }
 
   async getState(): Promise<AppState> {
     const vault = this.vault.state()
-    const p = plan({ tasks: vault.tasks, events: this.events, prefs: vault.preferences, training: vault.training, weeks: vault.weeks, now: new Date() })
+    const p = this.computePlan(vault)
     return {
       vault,
       plan: p,
       events: this.events,
-      calendar: { ...this.calendar, connected: this.google.connected, configured: this.google.configured },
-      settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined }
+      calendar: { ...this.calendar, provider: this.cal.kind, connected: this.cal.connected, configured: this.cal.configured },
+      settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined },
+      brief: { running: this.briefRunning, error: this.briefError }
     }
   }
 
@@ -105,6 +239,39 @@ export class Controller implements Api {
     this.mutate(() => this.vault.unlog(blockId, start))
   }
 
+  // --- brief ---------------------------------------------------------------
+  async getBrief(date: string) {
+    return this.vault.brief(date)
+  }
+
+  /** First open of the planning day (and on focus): generate the brief once if today's file is missing. */
+  async maybeRunBrief() {
+    const day = this.planningDay()
+    if (!this.settings.briefAuto || this.briefRunning || this.briefAttemptDay === day) return
+    if (this.vault.read(`05_Tasks/briefs/${isoDate(new Date())}.md`) !== null) return
+    this.briefAttemptDay = day
+    await this.generateBrief().catch(() => {})
+  }
+
+  async generateBrief() {
+    if (this.briefRunning) return
+    this.briefRunning = true
+    this.briefError = undefined
+    this.push()
+    const date = isoDate(new Date())
+    try {
+      const today = this.events.filter((e) => e.start.slice(0, 10) <= date && e.end.slice(0, 10) >= date && !e.plannerBlockId)
+      const template = this.vault.readBriefPrompt() ?? DEFAULT_BRIEF_TEMPLATE
+      const md = await runBrief(this.vault.root, template, date, today, this.settings.briefEmail, (line) => this.emit('brief-progress', line))
+      this.vault.writeBrief(date, md)
+    } catch (err) {
+      this.briefError = (err as Error).message
+    } finally {
+      this.briefRunning = false
+      this.push()
+    }
+  }
+
   // --- docs ----------------------------------------------------------------
   async listDocs() {
     return this.vault.listDocs()
@@ -128,8 +295,15 @@ export class Controller implements Api {
     const googleChanged = next.googleClientId !== this.settings.googleClientId || next.googleClientSecret !== this.settings.googleClientSecret
     this.settings = next
     saveSettings(next)
-    if (vaultChanged) this.openVault()
+    if (vaultChanged) {
+      this.lastPlan = null
+      this.openVault()
+    }
     if (googleChanged && next.googleClientId && next.googleClientSecret) this.google.configure(next.googleClientId, next.googleClientSecret)
+    if (patch.calendarProvider) {
+      this.events = []
+      void this.refreshCalendar()
+    }
     this.push()
   }
 
@@ -145,26 +319,28 @@ export class Controller implements Api {
 
   // --- calendar ------------------------------------------------------------
   async connectCalendar() {
-    await this.google.connect()
+    await this.cal.connect()
     await this.refreshCalendar()
   }
 
   async disconnectCalendar() {
-    this.google.disconnect()
+    this.cal.disconnect()
     this.events = []
-    this.calendar = { connected: false, configured: this.google.configured, calendars: [] }
+    this.calendar = { provider: this.cal.kind, connected: false, configured: this.cal.configured, calendars: [] }
     this.push()
   }
 
   async refreshCalendar() {
-    if (!this.google.connected) return
+    if (this.cal === this.mac && this.mac.connected === false) await this.mac.check().catch(() => {})
+    if (!this.cal.connected) return
     try {
-      const calendars = await this.google.calendars()
+      const calendars = await this.cal.calendars()
       const prefs = this.vault.preferences
       const from = addDays(weekStart(new Date()), -7)
       const to = addDays(startOfDay(new Date()), prefs.horizonDays + 7)
-      this.events = await this.google.events(calendars, from, to)
-      this.calendar = { connected: true, configured: true, calendars, lastRefresh: new Date().toISOString() }
+      this.events = await this.cal.events(calendars, from, to)
+      this.adoptCalendarEdits(from)
+      this.calendar = { provider: this.cal.kind, connected: true, configured: true, calendars, lastRefresh: new Date().toISOString() }
     } catch (err) {
       this.calendar = { ...this.calendar, error: String((err as Error).message ?? err) }
     }
@@ -183,14 +359,22 @@ export class Controller implements Api {
     for (const op of ops) {
       try {
         const ev = { title: op.title, start: op.start, end: op.end, description: op.description }
-        if (op.op === 'create') await this.google.insert(op.calendarId!, op.blockId, ev)
-        else if (op.op === 'update') await this.google.patch(op.calendarId!, op.eventId!, ev)
-        else await this.google.remove(op.calendarId!, op.eventId!)
+        if (op.op === 'create') {
+          const eventId = await this.cal.insert(op.calendarId!, op.blockId, ev)
+          this.synced[op.blockId] = { eventId, calendarId: op.calendarId!, start: op.start, end: op.end }
+        } else if (op.op === 'update') {
+          await this.cal.patch(op.calendarId!, op.eventId!, ev, op.blockId)
+          this.synced[op.blockId] = { eventId: op.eventId, calendarId: op.calendarId!, start: op.start, end: op.end }
+        } else {
+          await this.cal.remove(op.calendarId!, op.eventId!)
+          delete this.synced[op.blockId]
+        }
         done++
       } catch (err) {
         failed.push(`${op.op} "${op.title}": ${(err as Error).message}`)
       }
     }
+    this.saveSyncState()
     await this.refreshCalendar()
     return { done, failed }
   }
@@ -260,6 +444,87 @@ export class Controller implements Api {
       else writeFileSync(abs, c.before)
     }
     this.push()
+  }
+
+  // --- brief prompt, calendar display, block editing --------------------------
+  // Agent A: brief prompt
+  async getBriefPrompt(): Promise<{ custom: string | null; defaultText: string; format: string }> {
+    return { custom: this.vault.readBriefPrompt(), defaultText: DEFAULT_BRIEF_TEMPLATE, format: BRIEF_FORMAT }
+  }
+  /** null = reset: write the default text rather than deleting a vault file. */
+  async saveBriefPrompt(text: string | null): Promise<void> {
+    this.vault.writeBriefPrompt(text ?? DEFAULT_BRIEF_TEMPLATE)
+  }
+  // Agent B: calendar visibility & availability
+  async setCalendarVisible(calendarName: string, visible: boolean): Promise<void> {
+    const hidden = (this.settings.hiddenCalendars ?? []).filter((n) => n !== calendarName)
+    if (!visible) hidden.push(calendarName)
+    await this.saveSettings({ hiddenCalendars: hidden })
+  }
+  /** Busy = the planner works around the calendar's events; free = they're in ignoreCalendars. Prefs change → full re-plan. */
+  async setCalendarBusy(calendarName: string, busy: boolean): Promise<void> {
+    const prefs = this.vault.state().preferences
+    const ignoreCalendars = prefs.ignoreCalendars.filter((n) => n !== calendarName)
+    if (!busy) ignoreCalendars.push(calendarName)
+    this.mutate(() => this.vault.savePreferences({ ...prefs, ignoreCalendars }))
+  }
+  async setEventAvailability(eventKey: string, value: 'busy' | 'free' | null): Promise<void> {
+    const eventAvailability = { ...(this.settings.eventAvailability ?? {}) }
+    if (value) eventAvailability[eventKey] = value
+    else delete eventAvailability[eventKey]
+    await this.saveSettings({ eventAvailability })
+  }
+  // Agent C: block editing
+  private blockById(blockId: string) {
+    const b = this.currentPlan().blocks.find((x) => x.id === blockId)
+    if (!b) throw new Error('That block is no longer in the plan. Try again after it refreshes.')
+    return b
+  }
+
+  /** Same shape as the renderer's pinFromBlock: the block keeps its id and time. */
+  private pinBlock(b: Plan['blocks'][number], taskIds: string[]) {
+    this.vault.pin({ blockId: b.id, category: b.category, title: b.title, start: b.start, end: b.end, taskIds })
+  }
+
+  async addTaskToBlock(blockId: string, taskId: string) {
+    const b = this.blockById(blockId)
+    if (b.kind === 'break') throw new Error("Breaks can't hold tasks.")
+    const label = `"${this.taskTitle(taskId)}" into ${b.title}`
+    this.mutate(() => {
+      this.vault.removeExclusion(b.id, b.start, taskId, label)
+      const ids = b.chunks.map((c) => c.taskId)
+      // Containers are the user's own events: never pinned, the planner fills them from the assignment.
+      if (b.kind === 'container') this.vault.addAssignment(b.id, b.start, taskId, label)
+      else if (!ids.includes(taskId)) this.pinBlock(b, [...ids, taskId])
+    })
+  }
+
+  async removeTaskFromBlock(blockId: string, taskId: string) {
+    const b = this.blockById(blockId)
+    const label = `"${this.taskTitle(taskId)}" out of ${b.title}`
+    this.mutate(() => {
+      this.vault.removeAssignment(b.id, b.start, taskId, label)
+      if (b.kind === 'pinned') this.pinBlock(b, b.chunks.map((c) => c.taskId).filter((id) => id !== taskId))
+      else this.vault.addExclusion(b.id, b.start, taskId, label)
+    })
+  }
+
+  /** Planner blocks disappear (a synced one is removed from the calendar at the next Sync); containers just stop being filled. */
+  async removeBlock(blockId: string) {
+    const b = this.blockById(blockId)
+    const label = `${b.title} ${b.start.slice(0, 16).replace('T', ' ')}`
+    this.mutate(() => {
+      if (b.kind === 'pinned') this.vault.unpin(b.id)
+      this.vault.dismissBlock(b.id, b.start, label)
+    })
+  }
+
+  async restoreBlock(block: Parameters<Api['restoreBlock']>[0]) {
+    this.mutate(() => {
+      this.vault.restoreBlock(block.id, block.start, `"${block.title}"`)
+      if (block.kind === 'pinned')
+        this.vault.pin({ blockId: block.id, category: block.category, title: block.title, start: block.start, end: block.end, taskIds: block.chunks.map((c) => c.taskId) })
+    })
   }
 
   async closeCapture() {

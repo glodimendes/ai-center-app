@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { google, type calendar_v3 } from 'googleapis'
 import type { Auth } from 'googleapis'
 import type { CalEvent, CalendarInfo } from '@shared/types'
+import type { CalendarProvider } from './provider'
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.calendarlist.readonly']
 export const PLANNER_TAG = 'aiCenterPlanner'
@@ -27,7 +28,8 @@ function loadTokens(): Auth.Credentials | null {
   }
 }
 
-export class GoogleCalendar {
+export class GoogleCalendar implements CalendarProvider {
+  readonly kind = 'google' as const
   private client: Auth.OAuth2Client | null = null
   private api: calendar_v3.Calendar | null = null
 
@@ -150,7 +152,8 @@ export class GoogleCalendar {
               end: e.end?.dateTime ?? `${e.end?.date ?? e.start!.date}T00:00:00`,
               allDay: !e.start!.dateTime,
               description: e.description ?? undefined,
-              plannerBlockId: e.extendedProperties?.private?.[PLANNER_TAG]
+              plannerBlockId: e.extendedProperties?.private?.[PLANNER_TAG],
+              free: e.transparency === 'transparent'
             })
           )
       })
@@ -159,7 +162,7 @@ export class GoogleCalendar {
   }
 
   async insert(calendarId: string, blockId: string, ev: { title: string; start: string; end: string; description?: string }) {
-    await this.need().events.insert({
+    const res = await this.need().events.insert({
       calendarId,
       requestBody: {
         summary: ev.title,
@@ -169,6 +172,7 @@ export class GoogleCalendar {
         extendedProperties: { private: { [PLANNER_TAG]: blockId } }
       }
     })
+    return res.data.id ?? undefined
   }
 
   /** Only events carrying the planner tag may be changed. */

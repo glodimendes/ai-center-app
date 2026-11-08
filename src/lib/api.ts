@@ -6,6 +6,7 @@ declare global {
       call: (method: keyof Api, ...args: unknown[]) => Promise<unknown>
       onState: (cb: (s: AppState) => void) => () => void
       onProgress: (cb: (line: string) => void) => () => void
+      onBriefProgress: (cb: (line: string) => void) => () => void
     }
   }
 }

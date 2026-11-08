@@ -8,6 +8,8 @@ import { TimeGrid } from '@/components/TimeGrid'
 import { BlockPanel } from '@/components/BlockPanel'
 import { BudgetBars } from '@/components/BudgetBars'
 import { SyncDialog } from '@/components/SyncDialog'
+import { ReplanButton } from '@/components/ReplanButton'
+import { CalendarFilter } from '@/components/CalendarFilter'
 import { Button, Header } from '@/components/ui'
 
 export function Week() {
@@ -26,6 +28,8 @@ export function Week() {
         title={`Week ${week.split('-W')[1]}`}
         sub={`${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(start, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
       >
+        <ReplanButton />
+        <CalendarFilter />
         <Button onClick={() => setDay(isoDate(addDays(start, -7)))}>
           <ChevronLeft size={14} />
         </Button>
@@ -63,6 +67,7 @@ export function Week() {
             const b = s.plan.blocks.find((x) => x.id === id)
             if (b) await act(api.pin(pinFromBlock(b, st, en)))
           }}
+          onDropTaskOnBlock={(taskId, blockId) => act(api.addTaskToBlock(blockId, taskId), 'Added to block')}
           onDropTask={async (taskId, st) => {
             const pin = pinForTask(s, taskId, st)
             if (pin) await act(api.pin(pin))
