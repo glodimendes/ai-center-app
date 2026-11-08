@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Calendar, Check, Clock, Flag, GripVertical, Trash2 } from 'lucide-react'
+import { Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Trash2, Zap } from 'lucide-react'
 import type { Priority, Task } from '@shared/types'
 import { fmtDuration, isoDate } from '@shared/time'
 import { api } from '@/lib/api'
@@ -169,6 +169,21 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
         title={`Priority: ${task.priority} (click to change)`}
       >
         <Flag size={11} fill={task.priority === 'high' ? 'currentColor' : 'none'} />
+      </button>
+
+      <button
+        onClick={() => patch({ timing: task.timing === undefined ? 'spread' : task.timing === 'spread' ? 'asap' : null })}
+        className={cx('h-5 px-1 rounded flex items-center gap-0.5 text-[10.5px]', task.timing ? 'text-accent bg-accent-soft' : 'text-faint hidden group-hover:flex')}
+        title={
+          task.timing === 'spread'
+            ? 'Spread evenly until the deadline (click: as soon as possible)'
+            : task.timing === 'asap'
+              ? 'As soon as possible (click: back to the area default)'
+              : `Timing: area default (${cat.timing === 'spread' ? 'spread' : 'as soon as possible'}). Click to spread this task.`
+        }
+      >
+        {task.timing === 'asap' ? <Zap size={11} /> : <MoveHorizontal size={11} />}
+        {task.timing === 'spread' ? 'spread' : task.timing === 'asap' ? 'asap' : ''}
       </button>
 
       <button onClick={() => act(api.deleteTask(task.id), 'Task deleted (recoverable from git)')} className="h-5 px-1 rounded text-faint hover:text-danger hidden group-hover:block" title="Delete">

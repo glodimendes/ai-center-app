@@ -10,7 +10,7 @@ const file = () => join(app.getPath('userData'), 'settings.json')
 function defaults(): Settings {
   // Development runs against a scratch copy; the packaged app uses the real vault.
   const vaultPath = app.isPackaged ? REAL_VAULT : resolve(app.getAppPath(), '.dev-vault')
-  return { vaultPath, autoCommit: true, contextEngine: 'codex' }
+  return { vaultPath, autoCommit: true, contextEngine: 'codex', calendarProvider: 'macos', briefAuto: true, briefEmail: true, hiddenCalendars: [], eventAvailability: {} }
 }
 
 export function loadSettings(): Settings {

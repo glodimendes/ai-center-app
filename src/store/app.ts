@@ -2,12 +2,13 @@ import { create } from 'zustand'
 import type { AppState } from '@shared/api'
 import { api } from '@/lib/api'
 
-export type View = 'today' | 'week' | 'tasks' | 'inbox' | 'docs' | 'review' | 'settings'
+export type View = 'brief' | 'today' | 'week' | 'tasks' | 'inbox' | 'docs' | 'review' | 'settings'
 
 interface Toast {
   id: number
   text: string
   kind: 'info' | 'error'
+  action?: { label: string; run: () => void }
 }
 
 interface Store {
@@ -23,7 +24,7 @@ interface Store {
   setDay: (d: string) => void
   selectBlock: (id: string | null) => void
   openDoc: (path: string) => void
-  toast: (text: string, kind?: Toast['kind']) => void
+  toast: (text: string, kind?: Toast['kind'], action?: Toast['action']) => void
   dismiss: (id: number) => void
 }
 
@@ -34,7 +35,7 @@ const todayISO = () => {
 
 export const useStore = create<Store>((set, get) => ({
   state: null,
-  view: 'today',
+  view: 'brief',
   day: todayISO(),
   selectedBlockId: null,
   docPath: null,
@@ -44,10 +45,10 @@ export const useStore = create<Store>((set, get) => ({
   setDay: (day) => set({ day, selectedBlockId: null }),
   selectBlock: (selectedBlockId) => set({ selectedBlockId }),
   openDoc: (docPath) => set({ docPath, view: 'docs' }),
-  toast: (text, kind = 'info') => {
+  toast: (text, kind = 'info', action) => {
     const id = Date.now() + Math.random()
-    set({ toasts: [...get().toasts, { id, text, kind }] })
-    setTimeout(() => get().dismiss(id), kind === 'error' ? 7000 : 3500)
+    set({ toasts: [...get().toasts, { id, text, kind, action }] })
+    setTimeout(() => get().dismiss(id), kind === 'error' || action ? 7000 : 3500)
   },
   dismiss: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) })
 }))

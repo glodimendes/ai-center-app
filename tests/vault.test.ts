@@ -5,6 +5,7 @@ import { parseInbox, parseTasks } from '../electron/main/vault/parser'
 import { addInboxItem, deleteTask, insertTask, patchTask } from '../electron/main/vault/edits'
 import { editTokens, inferYear, parseTokens } from '../electron/main/vault/tokens'
 import { DEFAULT_PREFERENCES, parsePreferences, serializePreferences } from '../electron/main/vault/preferences'
+import { parseWeekly, serializeWeekly } from '../electron/main/vault/weekly'
 
 const today = new Date(2026, 10, 8)
 const cats = DEFAULT_PREFERENCES.categories
@@ -32,6 +33,9 @@ describe('tokens', () => {
     })
     expect(parseTokens('Read ~45m', today).estimateMin).toBe(45)
     expect(parseTokens('Read ~1.5h', today).estimateMin).toBe(90)
+    expect(parseTokens('Write chapter ~8h @spread', today)).toMatchObject({ title: 'Write chapter', timing: 'spread' })
+    expect(editTokens('Write chapter ~8h', { timing: 'spread' }, today)).toBe('Write chapter ~8h @spread')
+    expect(editTokens('Write chapter ~8h @spread', { timing: null }, today)).toBe('Write chapter ~8h')
   })
 
   it('infers the nearest year', () => {
@@ -131,5 +135,25 @@ describe('preferences', () => {
   it('round-trips through the frontmatter', () => {
     const text = serializePreferences(DEFAULT_PREFERENCES)
     expect(parsePreferences(text)).toEqual(DEFAULT_PREFERENCES)
+  })
+})
+
+describe('weekly file', () => {
+  const pin = { blockId: 'pin:a', category: 'thesis', title: 'Thesis', start: '2026-11-09T09:00:00', end: '2026-11-09T10:00:00', taskIds: ['t1'] }
+
+  it('round-trips manual overrides', () => {
+    const data = {
+      week: '2026-W46',
+      log: [],
+      pins: [pin],
+      overrides: { dismissed: ['2026-11-09:thesis:1'], assignments: [{ blockId: 'evt:x', taskIds: ['t1', 't2'] }], exclusions: [{ blockId: 'evt:x', taskId: 't3' }] }
+    }
+    expect(parseWeekly(serializeWeekly(data, cats), '2026-W46')).toEqual(data)
+  })
+
+  it('omits empty overrides and reads files written before them', () => {
+    const text = serializeWeekly({ week: '2026-W46', log: [], pins: [pin], overrides: { dismissed: [], assignments: [{ blockId: 'evt:x', taskIds: [] }] } }, cats)
+    expect(text).not.toContain('overrides')
+    expect(parseWeekly(text, '2026-W46')).toEqual({ week: '2026-W46', log: [], pins: [pin] })
   })
 })

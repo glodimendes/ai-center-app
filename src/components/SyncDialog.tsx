@@ -52,7 +52,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal onClose={onClose} width="max-w-2xl">
       <div className="p-5 border-b border-line">
-        <h2 className="text-[15px] font-semibold">Sync to Google Calendar</h2>
+        <h2 className="text-[15px] font-semibold">Sync to calendar</h2>
         <p className="text-[12px] text-muted mt-0.5">
           Only events created by the planner are changed. Your own and Codex's events are never touched. Untick anything you don't want sent.
         </p>

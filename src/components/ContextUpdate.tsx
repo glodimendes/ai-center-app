@@ -71,7 +71,7 @@ export function ContextUpdate({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-[15px] font-semibold">Update context</h2>
           <p className="text-[12px] text-muted mt-0.5">
-            Say what changed. {engine === 'codex' ? 'Codex (GPT-5.6 Terra)' : 'Claude Code (Sonnet 5)'} updates the right files using your context-maintenance workflow. You review the
+            Say what changed. {engine === 'codex' ? 'Codex (GPT-5.6 Luna)' : 'Claude Code (Haiku 5.5)'} updates the right files using your context-maintenance workflow. You review the
             changes before anything is kept.
           </p>
         </div>

@@ -1,5 +1,5 @@
 import { dump, load } from 'js-yaml'
-import type { CategoryPref, LogEntry, Pin, WeekData } from '@shared/types'
+import type { CategoryPref, LogEntry, Pin, WeekData, WeekOverrides } from '@shared/types'
 import { fmtDuration } from '@shared/time'
 
 export const WEEKLY_DIR = '05_Tasks/weekly'
@@ -10,7 +10,26 @@ const DATA_RE = /```yaml planner\r?\n([\s\S]*?)```/
 export function parseWeekly(text: string, week: string): WeekData {
   const m = text.match(DATA_RE)
   const data = (m ? load(m[1]) : null) as Partial<WeekData> | null
-  return { week, log: data?.log ?? [], pins: data?.pins ?? [] }
+  const out: WeekData = { week, log: data?.log ?? [], pins: data?.pins ?? [] }
+  const o = cleanOverrides(data?.overrides)
+  if (o) out.overrides = o
+  return out
+}
+
+/** Drops empty lists so the yaml key is omitted when there's nothing to keep. */
+export function cleanOverrides(o: WeekOverrides | undefined): WeekOverrides | undefined {
+  if (!o) return undefined
+  const out: WeekOverrides = {}
+  if (o.dismissed?.length) out.dismissed = [...new Set(o.dismissed)]
+  const assignments = (o.assignments ?? []).filter((a) => a.taskIds?.length)
+  if (assignments.length) out.assignments = assignments
+  if (o.exclusions?.length) out.exclusions = o.exclusions
+  return Object.keys(out).length ? out : undefined
+}
+
+function yamlData(data: WeekData) {
+  const overrides = cleanOverrides(data.overrides)
+  return overrides ? { log: data.log, pins: data.pins satisfies Pin[], overrides } : { log: data.log, pins: data.pins satisfies Pin[] }
 }
 
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
@@ -53,7 +72,7 @@ export function serializeWeekly(data: WeekData, categories: CategoryPref[]): str
     '## Data',
     '',
     '```yaml planner',
-    dump({ log: data.log, pins: data.pins satisfies Pin[] }, { lineWidth: 160 }).trimEnd(),
+    dump(yamlData(data), { lineWidth: 160 }).trimEnd(),
     '```',
     ''
   ].join('\n')

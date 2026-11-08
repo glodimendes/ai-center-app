@@ -45,6 +45,10 @@ export function buildSyncDiff(
       problems.push(`Calendar "${b.calendarName}" not found for "${b.title}". Check the category's calendar name in preferences.`)
       continue
     }
+    if (prefs.protectedCalendars.some((p) => cal.name.toLowerCase().startsWith(p.toLowerCase()))) {
+      problems.push(`"${b.title}" targets the protected calendar "${cal.name}". Pick another calendar for this area in Settings.`)
+      continue
+    }
     if (!cal.writable) {
       problems.push(`Calendar "${b.calendarName}" is read-only.`)
       continue

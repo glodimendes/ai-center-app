@@ -30,7 +30,7 @@ function createMain() {
     webPreferences: webPreferences()
   })
   load(main)
-  main.on('focus', () => void controller.refreshCalendar().catch(() => {}))
+  main.on('focus', () => void controller.refreshCalendar().catch(() => {}).finally(() => void controller.maybeRunBrief()))
   main.on('closed', () => (main = null))
 }
 
@@ -63,7 +63,7 @@ app.whenReady().then(() => {
 
   createMain()
   globalShortcut.register('CommandOrControl+Shift+Space', openCapture)
-  void controller.refreshCalendar().catch(() => {})
+  void controller.refreshCalendar().catch(() => {}).finally(() => void controller.maybeRunBrief())
 
   app.on('activate', () => {
     if (!main) createMain()

@@ -4,7 +4,19 @@ import { diffMin, isoWeek, localISO } from '@shared/time'
 import type { GridItem } from '@/components/TimeGrid'
 import { calendarColor, categoryOf, plainTitle } from './util'
 
-export const eventKey = (e: CalEvent) => `ev:${e.calendarId}:${e.id}`
+/** Block kinds a task can be dropped into (not breaks, training or plain calendar events). */
+export const ACCEPTS_TASKS = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned'])
+/** Kinds the user can remove from the plan (Remove block / Delete key). */
+export const REMOVABLE = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned', 'training'])
+
+export const eventKey =(e: CalEvent) => `ev:${e.calendarId}:${e.id}`
+
+/** Effective busy/free for the planner: per-event override, else the calendar's own flag or a "free" (ignored) calendar. Mirrors scheduler/plan.ts. */
+export function eventAvailability(state: AppState, e: CalEvent): { value: 'busy' | 'free'; overridden: boolean } {
+  const o = state.settings.eventAvailability?.[`${e.calendarId}:${e.id}`]
+  if (o) return { value: o, overridden: true }
+  return { value: e.free || state.vault.preferences.ignoreCalendars.includes(e.calendarName) ? 'free' : 'busy', overridden: false }
+}
 
 export function logFor(state: AppState, block: { id: string; start: string }): LogEntry | undefined {
   return state.vault.weeks[isoWeek(new Date(block.start))]?.log.find((l) => l.blockId === block.id)
@@ -25,23 +37,28 @@ export function gridItems(state: AppState, days: string[]): { items: GridItem[];
   const inDays = (s: string, e: string) => days.some((d) => s.slice(0, 10) <= d && e.slice(0, 10) >= d)
   const blockEventIds = new Set(state.plan.blocks.filter((b) => b.eventId).map((b) => b.eventId))
   const taskTitle = new Map(state.vault.tasks.map((t) => [t.id, plainTitle(t)]))
-  const ignored = new Set(state.vault.preferences.ignoreCalendars)
+  const hidden = new Set(state.settings.hiddenCalendars ?? [])
   const items: GridItem[] = []
   const allDay: { day: string; title: string; color: string }[] = []
 
   for (const e of state.events) {
-    if (blockEventIds.has(e.id) || e.plannerBlockId) continue
+    if (blockEventIds.has(e.id) || e.plannerBlockId || hidden.has(e.calendarName)) continue
     const color = calendarColor(state, e.calendarName) ?? '#94a3b8'
     if (e.allDay) {
       for (const d of days) if (e.start.slice(0, 10) <= d && e.end.slice(0, 10) > d) allDay.push({ day: d, title: e.title, color })
       continue
     }
     if (!inDays(e.start, e.end)) continue
-    items.push({ id: eventKey(e), start: e.start, end: e.end, title: e.title, subtitle: e.calendarName, color, look: 'outline', dim: ignored.has(e.calendarName) })
+    const free = eventAvailability(state, e).value === 'free'
+    items.push({ id: eventKey(e), start: e.start, end: e.end, title: e.title, subtitle: free ? `${e.calendarName} · free` : e.calendarName, color, look: free ? 'dashed' : 'outline', dim: free })
   }
 
   for (const b of state.plan.blocks) {
     if (!inDays(b.start, b.end)) continue
+    if (b.kind === 'break') {
+      items.push({ id: b.id, start: b.start, end: b.end, title: b.title, color: '#94a3b8', look: 'dashed', dim: true })
+      continue
+    }
     const cat = categoryOf(state, b.category)
     const logged = logFor(state, b)
     const tasks = b.chunks.map((c) => taskTitle.get(c.taskId)).filter(Boolean)
@@ -54,6 +71,7 @@ export function gridItems(state: AppState, days: string[]): { items: GridItem[];
       color: cat.color,
       look: b.kind === 'container' || b.kind === 'pinned' || isSynced(state, b) ? 'solid' : 'dashed',
       draggable: b.kind !== 'container' && !logged,
+      acceptsTasks: ACCEPTS_TASKS.has(b.kind) && !logged && new Date(b.end).getTime() > Date.now(),
       dim: Boolean(logged),
       badge: logged ? <span className="text-[10px] text-ok font-semibold">{logged.status === 'skipped' ? 'skip' : '✓'}</span> : undefined
     })

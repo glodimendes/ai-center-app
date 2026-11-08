@@ -14,6 +14,8 @@ export interface GridItem {
   draggable?: boolean
   dim?: boolean
   badge?: ReactNode
+  /** Tasks dragged from the list may be dropped onto this item (onDropTaskOnBlock). */
+  acceptsTasks?: boolean
 }
 
 interface Props {
@@ -26,6 +28,7 @@ interface Props {
   onSelect?: (id: string | null) => void
   onMove?: (id: string, start: string, end: string) => void
   onDropTask?: (taskId: string, start: string) => void
+  onDropTaskOnBlock?: (taskId: string, blockId: string) => void
   onDayClick?: (day: string) => void
 }
 
@@ -65,11 +68,12 @@ function layout(items: GridItem[], startHour: number): Placed[] {
   return out
 }
 
-export function TimeGrid({ days, items, allDay = [], startHour = 7, endHour = 23, selectedId, onSelect, onMove, onDropTask, onDayClick }: Props) {
+export function TimeGrid({ days, items, allDay = [], startHour = 7, endHour = 23, selectedId, onSelect, onMove, onDropTask, onDropTaskOnBlock, onDayClick }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const cols = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ id: string; dy: number; dDay: number } | null>(null)
   const [dropHint, setDropHint] = useState<{ day: number; min: number } | null>(null)
+  const [dropOn, setDropOn] = useState<string | null>(null)
   const [now, setNow] = useState(new Date())
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i)
 
@@ -204,9 +208,28 @@ export function TimeGrid({ days, items, allDay = [], startHour = 7, endHour = 23
                     const dragging = drag?.id === p.id
                     const offset = dragging ? (drag.dy / 60) * HOUR_PX : 0
                     const width = 100 / p.cols
+                    const takes = Boolean(p.acceptsTasks && onDropTaskOnBlock)
+                    const isTask = (e: React.DragEvent) => takes && e.dataTransfer.types.includes('application/x-task')
                     return (
                       <div
                         key={p.id}
+                        // stopPropagation: a drop on a block must not also schedule the task at that time in the column.
+                        onDragOver={(e) => {
+                          if (!isTask(e)) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDropHint(null)
+                          setDropOn(p.id)
+                        }}
+                        onDragLeave={() => setDropOn((x) => (x === p.id ? null : x))}
+                        onDrop={(e) => {
+                          if (!isTask(e)) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDropOn(null)
+                          const taskId = e.dataTransfer.getData('application/x-task')
+                          if (taskId) onDropTaskOnBlock!(taskId, p.id)
+                        }}
                         onPointerDown={(e) => (p.draggable ? startDrag(e, p) : undefined)}
                         onClick={() => !p.draggable && onSelect?.(p.id)}
                         className={cx(
@@ -215,6 +238,7 @@ export function TimeGrid({ days, items, allDay = [], startHour = 7, endHour = 23
                           p.look === 'outline' && 'bg-panel',
                           p.look === 'dashed' && 'border-dashed',
                           selectedId === p.id && 'ring-2 ring-accent z-10',
+                          dropOn === p.id && 'ring-2 ring-accent ring-offset-1 z-20',
                           dragging && 'z-20 shadow-lg opacity-90',
                           p.dim && 'opacity-55'
                         )}

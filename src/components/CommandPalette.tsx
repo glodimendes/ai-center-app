@@ -25,6 +25,7 @@ export function CommandPalette({ onClose, onUpdateContext }: { onClose: () => vo
 
   const cmds = useMemo<Cmd[]>(() => {
     const views: [View, string][] = [
+      ['brief', 'Go to Brief'],
       ['today', 'Go to Today'],
       ['week', 'Go to Week'],
       ['tasks', 'Go to Tasks'],

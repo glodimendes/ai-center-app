@@ -8,10 +8,10 @@ import { isoDate } from '@shared/time'
 
 const run = promisify(execFile)
 
-/** Models used for "Update context". Effort applies to this run only, not your global CLI config. */
+/** Cheapest models, chosen by the user for cost. Effort applies to this run only, not the global CLI config. */
 export const CONTEXT_MODELS = {
-  codex: { model: 'gpt-5.6-terra', effort: 'medium' },
-  claude: { model: 'claude-sonnet-5', effort: 'medium' }
+  codex: { model: 'gpt-5.6-luna', effort: 'medium' },
+  claude: { model: 'claude-haiku-5-5', effort: 'medium' }
 } as const
 const TEXT_EXT = /\.(md|txt|ya?ml|json)$/i
 const SKIP_DIR = /^(\.git|node_modules|dist|output|\.obsidian)$/
@@ -33,7 +33,7 @@ export function snapshotVault(root: string): Map<string, string> {
 }
 
 /** The packaged app doesn't inherit the shell PATH, so ask a login shell where the CLI lives. */
-async function resolveBinary(name: string): Promise<string> {
+export async function resolveBinary(name: string): Promise<string> {
   for (const p of [`/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`]) if (existsSync(p)) return p
   const { stdout } = await run('/bin/zsh', ['-lc', `command -v ${name}`])
   const p = stdout.trim()
