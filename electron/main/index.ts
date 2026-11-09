@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import type { ApiMethod, AppState } from '@shared/api'
 import { Controller } from './controller'
 
+// App data stays in the folder from before the rename to "AI Center" (settings, plan cache, sync state).
+// Dev builds share the productName with the installed app; keep their settings, caches and sync state apart.
+app.setPath('userData', join(app.getPath('appData'), app.isPackaged ? 'AI Center Planner' : 'ai-center-planner-dev'))
+
 let main: BrowserWindow | null = null
 let capture: BrowserWindow | null = null
 let controller: Controller
@@ -24,7 +28,7 @@ function createMain() {
     height: 900,
     minWidth: 960,
     minHeight: 640,
-    title: 'AI Center Planner',
+    title: 'AI Center',
     titleBarStyle: 'hiddenInset',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f7f7f8',
     webPreferences: webPreferences()

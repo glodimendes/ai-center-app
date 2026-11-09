@@ -1,6 +1,6 @@
 # Roadmap
 
-Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-08.
+Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-09.
 
 ## Open decisions (waiting for the user)
 
@@ -12,18 +12,17 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
    5. Mixed (current behaviour).
    6. No blocks: the plan lives only in the app.
 
-   Edit adoption ("calendar edits win") is built and works with all of them. **Don't change container behaviour until the user decides.**
-2. **Plan options.** Re-plan would offer 3–4 strategy variants (Balanced / Deadlines first / Deep-work first / Light week), each with a mini week strip and metrics (thesis hours, deadlines at risk, evening load, task switches, free time), plus **Shuffle**: a different arrangement under the same strategy, e.g. seeded tie-breaking. Optional **"Plan with a wish"**: Haiku turns a sentence into temporary planner settings; the deterministic planner still places the blocks. Waiting for a go (and whether to include the wish box).
+   Edit adoption ("calendar edits win") is built and works with all of them. **Don't change container behaviour until the user decides.** Since 2026-11-09 the app also plans training sessions itself (TRAINING tasks), so the Codex automation's "six sport sessions" would duplicate them; raise this with the user.
+2. **Plan options.** Built (2026-11-09): four strategies + Shuffle (README "When the plan changes"). Not built: the optional **"Plan with a wish"** box (Haiku turns a sentence into temporary planner settings). Waiting for the user.
 3. **Braindump feature.** The user will explain it. **Don't design or build it before the spec.** It's related to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
+
+## Later (agreed with the user, not now)
+
+- **Skeleton-then-fill placement, with a front-loading option.** Today's order grew from patches: pins → training → breaks → deadlines within the guard → reserved grid hours → other tasks by score (each grabs the first free slot in its area's windows, i.e. front-loading). Proposed redesign (2026-11-09): lay down each area's grid hours first, areas in area-weight order (higher weight wins contested windows), then fill those blocks with tasks by score; unfilled blocks are dropped except for "reserve" areas. Keep the current front-loading behaviour as an option. Rewrites the middle of `scheduler/plan.ts`; most placement tests need review; blocks move once on the first full re-plan.
 
 ## Next (agreed or obvious)
 
-- **Verify Sync live with the user**:
-  1. Dry-run the diff.
-  2. Sync one block to Study Schedule.
-  3. Move it in Calendar.app and check it becomes a pin.
-  4. Delete one and check it isn't recreated.
-  5. Confirm untagged events are untouched.
+- **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
 - **Lighter half-day rule.** The user's planning routine asks for one per week; the planner has no such rule yet (e.g. "no work after 13:00 on a chosen day").
 - **The user's Codex `daily-brief` automation** still runs alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
@@ -31,10 +30,22 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 
 - **Removals:** removing a block (or pressing Delete) asks no confirmation. There's an Undo in the toast; after that, only by editing `overrides.dismissed` in the weekly file.
 - **Overrides** (assignments, exclusions, dismissals) stay in the weekly files permanently.
-- **Blocks that don't take new tasks:** logged or past blocks, and training blocks.
+- **Blocks that don't take new tasks:** logged or past blocks.
 - **Brief ribbon:** "In meetings / classes" counts events that are free only by a per-event override or the calendar's own free flag.
 - **Duplicate blocks:** new blocks may be created next to Codex-made ones for areas without matching containers. That goes away if the user picks ownership option 1.
-- **Packaging:** the app is unsigned (first launch may need right-click → Open). `install-app` replaces the bundle; the user must restart the app.
+- **Packaging:** the app is unsigned (first launch may need right-click → Open). `install-app` replaces the bundle (and removes the old "AI Center Planner.app"); the user must restart the app. A new install can make macOS ask for Calendar access again.
+- **Vault auto-commits take whole files:** a manual edit to a file the app later writes (e.g. `daily-todos.md`) is included in the app's next `planner: …` commit.
+- **Kept-free slots** are released only by Re-plan or "Let the planner use it"; the morning re-plan keeps them.
+- **Re-plan options can look alike:** when the weekly hours grid is what limits each area (the usual case), strategies mostly reorder tasks inside the same blocks; the dialog says "same plan as Balanced right now" when nothing differs.
+- **Weights vs hours:** area weights only order tasks; hours per area come from the grid (and caps). Users expect weights to move hours; Settings explains it.
+- **Docs editor** may normalize Markdown (e.g. `-` → `*` bullets); it shows a diff and asks first.
+- **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses.
+
+## Ideas (proposed, not approved)
+
+- "No estimate" filter in Today, to add `~` estimates quickly.
+- Skip the auto daily brief in dev runs.
+- Docs editor: keep the file's bullet style.
 
 ## Ideas where AI could help (proposed, not approved)
 
@@ -47,11 +58,21 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
 
 - **Vault:** line-local, id-based parser and editor; watcher; batched git commits under the user's identity.
 - **Planner:**
-  - containers, chunking, budgets, deep-work cap, training cycle, pins, warnings;
+  - containers, chunking, budgets, deep-work cap, pins, warnings; training as an ordinary area (the 7-day cycle reader was removed 2026-11-09; sessions are repeating tasks);
   - finer rules: daily cap, per-task-per-day cap, preferred windows, min block sizes, floating breaks, gaps, deadline slack, stale tasks;
   - strategy: weighted score with deadline guard, weekly hours grid with reserve, ASAP/spread per area and per task (`@spread` / `@asap`);
   - stable re-planning: incremental by default, full daily after 04:00, on a preference change, or via Re-plan.
-- **Screens:** Brief (landing), Today, Week, Tasks, Inbox, Docs (Milkdown), Review, Settings, ⌘K palette, quick capture.
+- **Screens:** Brief (landing), Today, Week, Tasks, Alerts, Inbox, Docs (Milkdown), Review, Settings, ⌘K palette, quick capture.
+- **2026-11-09:**
+  - blocks: resize (edge drag or hh:mm), draw on the grid or "+ Block" (area / no area, optional auto-fill), removed blocks leave their time free until Re-plan, postpone all tasks in a block;
+  - calendar views 00:00–24:00; Today icon shows the day of the month; app renamed AI Center with a white icon;
+  - Re-plan options (Balanced / Deadlines first / Deep work first / Light week) with metrics and Shuffle;
+  - Alerts page (grouped, with fixes); Today search, sort, Show filter and area chips; compact rows;
+  - tasks: `repeat:` (common + custom, every N weeks on weekdays), `postpone:` (🌙), check-off logs a 15-min block;
+  - training as ordinary tasks (cycle reader removed); keep-tasks-whole option; training placed before breaks;
+  - reserved grid hours placed before other tasks; 0 grid hours = leftover time by priority; "little slack" warning removed;
+  - Settings: add/remove areas, several preferred windows, durations as hh:mm;
+  - brief uses only visible calendars; dev runs isolated from the installed app's data and vault.
 - **Settings:** selection-based heading → area map, container picker, colour swatches, strategy sliders, grid editor, planning rules, breaks.
 - **Time logging:** actual ≠ planned, written to weekly files; budget bars.
 - **Calendar:**

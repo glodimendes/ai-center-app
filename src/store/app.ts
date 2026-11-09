@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { AppState } from '@shared/api'
 import { api } from '@/lib/api'
 
-export type View = 'brief' | 'today' | 'week' | 'tasks' | 'inbox' | 'docs' | 'review' | 'settings'
+export type View = 'brief' | 'today' | 'week' | 'tasks' | 'alerts' | 'inbox' | 'docs' | 'review' | 'settings'
 
 interface Toast {
   id: number

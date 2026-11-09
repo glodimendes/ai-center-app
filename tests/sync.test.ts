@@ -28,7 +28,7 @@ const tagged = (blockId: string, start: string, end: string, extra: Partial<CalE
   start,
   end,
   allDay: false,
-  description: 'Planned by AI Center Planner',
+  description: 'Planned by AI Center',
   plannerBlockId: blockId,
   ...extra
 })
@@ -67,7 +67,7 @@ describe('buildSyncDiff', () => {
 
   it('moves an event between calendars by delete + create', () => {
     const { ops } = diff(
-      [block('t', '2026-11-09T18:00:00', '2026-11-09T19:00:00', { kind: 'training', calendarName: 'Sports', title: 'Back A + Triceps' })],
+      [block('t', '2026-11-09T18:00:00', '2026-11-09T19:00:00', { kind: 'proposed', category: 'training', calendarName: 'Sports', title: 'Back A + Triceps' })],
       [tagged('t', '2026-11-09T18:00:00+01:00', '2026-11-09T19:00:00+01:00', { title: 'Back A + Triceps' })]
     )
     expect(ops.map((o) => [o.op, o.calendarId])).toEqual([

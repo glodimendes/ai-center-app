@@ -48,6 +48,6 @@ describe('buildBriefPrompt', () => {
     const p = buildBriefPrompt('Brief for {{date}}.', { date, events: [], includeEmail: false })
     const section = p.slice(p.indexOf('Context (added by the app):'))
     expect(section).not.toContain('Date:')
-    expect(section).toContain('not provided')
+    expect(section).toContain('no events today in the calendars I chose')
   })
 })

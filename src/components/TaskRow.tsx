@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Trash2, Zap } from 'lucide-react'
+import { Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
 import type { Priority, Task } from '@shared/types'
 import { fmtDuration, isoDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { categoryOf, cx, inlineMd, parseMinutes, relDay } from '@/lib/util'
-import { Popover } from './ui'
+import { MoonZzz, Popover } from './ui'
+import { RepeatPicker } from './RepeatPicker'
+import { describeRepeat } from '@shared/repeat'
 
 const PRI_COLOR: Record<Priority, string> = { high: 'text-danger', medium: 'text-faint', low: 'text-faint/60' }
 
@@ -13,13 +15,17 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
   const state = useStore((s) => s.state)!
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
-  const [pop, setPop] = useState<'est' | 'due' | null>(null)
+  const [pop, setPop] = useState<'est' | 'due' | 'repeat' | 'postpone' | null>(null)
   const [est, setEst] = useState('')
   const cat = categoryOf(state, task.category)
   const finish = state.plan.taskFinish[task.id]
   const firstBlock = state.plan.blocks.find((b) => b.chunks.some((c) => c.taskId === task.id) && new Date(b.end) > new Date())
   const atRisk = state.plan.warnings.some((w) => w.taskId === task.id && w.kind === 'deadline')
   const overdue = task.due && task.due < isoDate(new Date())
+  // Lists with the section line (Today, Alerts) are narrow: the title gets the room, metadata shrinks.
+  const compact = Boolean(showSection)
+  const overdueDays = overdue ? Math.round((new Date(isoDate(new Date()) + 'T00:00:00').getTime() - new Date(task.due + 'T00:00:00').getTime()) / 86_400_000) : 0
+  const postponed = !task.done && task.postponed && task.postponed > isoDate(new Date()) ? task.postponed : null
 
   const patch = (p: Parameters<typeof api.patchTask>[1]) => act(api.patchTask(task.id, p))
 
@@ -41,7 +47,7 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
     >
       {draggable && <GripVertical size={12} className="text-faint opacity-0 group-hover:opacity-100 -ml-1 shrink-0 cursor-grab" />}
       <button
-        onClick={() => patch({ done: !task.done })}
+        onClick={() => (task.done ? patch({ done: false }) : act(api.completeTask(task.id)))}
         className={cx('w-4 h-4 rounded-full border grid place-items-center shrink-0 transition-colors', task.done ? 'bg-accent border-accent text-white' : 'hover:border-accent')}
         style={{ borderColor: task.done ? undefined : cat.color }}
         title={task.done ? 'Reopen' : 'Complete'}
@@ -66,7 +72,12 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
             className="w-full bg-transparent outline-none border-b border-accent text-[13px]"
           />
         ) : (
-          <div onDoubleClick={() => setEditing(true)} className={cx('truncate text-[13px]', task.done && 'line-through')} dangerouslySetInnerHTML={{ __html: inlineMd(task.title) }} />
+          <div
+            onDoubleClick={() => setEditing(true)}
+            className={cx('text-[13px]', compact ? 'line-clamp-2 break-words leading-snug' : 'truncate', task.done && 'line-through')}
+            title={compact ? task.title.replace(/\*\*|`/g, '') : undefined}
+            dangerouslySetInnerHTML={{ __html: inlineMd(task.title) }}
+          />
         )}
         {showSection && (
           <div className="text-[10.5px] text-faint truncate">
@@ -88,7 +99,7 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
             setEst(task.estimateMin ? String(task.estimateMin) : '')
             setPop(pop === 'est' ? null : 'est')
           }}
-          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px]', task.estimateMin ? 'bg-sunken text-muted' : 'text-faint hidden group-hover:flex')}
+          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px]', task.estimateMin && !compact ? 'bg-sunken text-muted' : 'text-faint hidden group-hover:flex')}
           title="Estimate"
         >
           <Clock size={11} />
@@ -122,17 +133,27 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
       </div>
 
       <div className="relative">
-        <button
-          onClick={() => setPop(pop === 'due' ? null : 'due')}
-          className={cx(
-            'flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap',
-            task.due ? (overdue && !task.done ? 'bg-danger/10 text-danger' : atRisk ? 'bg-warn-soft text-warn' : 'bg-sunken text-muted') : 'text-faint hidden group-hover:flex'
-          )}
-          title={atRisk ? 'At risk: the plan finishes after this deadline' : 'Deadline'}
-        >
-          <Calendar size={11} />
-          {task.due ? relDay(task.due) : 'Due'}
-        </button>
+        {compact && task.due ? (
+          <button
+            onClick={() => setPop(pop === 'due' ? null : 'due')}
+            className={cx('h-5 px-0.5 text-[10.5px] whitespace-nowrap', overdue && !task.done ? 'text-danger font-semibold' : atRisk ? 'text-warn' : 'text-faint')}
+            title={overdue ? `Overdue since ${task.due}` : `Due ${task.due}${atRisk ? ' (at risk: the plan finishes after it)' : ''}`}
+          >
+            {overdue && !task.done ? `${overdueDays}d` : relDay(task.due!)}
+          </button>
+        ) : (
+          <button
+            onClick={() => setPop(pop === 'due' ? null : 'due')}
+            className={cx(
+              'flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap',
+              task.due ? (overdue && !task.done ? 'bg-danger/10 text-danger' : atRisk ? 'bg-warn-soft text-warn' : 'bg-sunken text-muted') : 'text-faint hidden group-hover:flex'
+            )}
+            title={atRisk ? 'At risk: the plan finishes after this deadline' : 'Deadline'}
+          >
+            <Calendar size={11} />
+            {task.due ? relDay(task.due) : 'Due'}
+          </button>
+        )}
         {pop === 'due' && (
           <Popover onClose={() => setPop(null)} className="right-0 w-52">
             <input
@@ -159,6 +180,58 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
                 Remove deadline
               </button>
             )}
+          </Popover>
+        )}
+      </div>
+
+      <div className="relative">
+        <button
+          onClick={() => setPop(pop === 'postpone' ? null : 'postpone')}
+          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', postponed ? 'bg-indigo-500/10 text-indigo-500' : 'text-faint hidden group-hover:flex')}
+          title={postponed ? `Postponed: not planned before ${postponed}` : 'Postpone: not planned before a date'}
+        >
+          <MoonZzz size={11} />
+          {postponed && !compact && relDay(postponed)}
+        </button>
+        {pop === 'postpone' && (
+          <Popover onClose={() => setPop(null)} className="right-0 w-52">
+            <div className="text-[11px] text-muted mb-1.5">Postpone until</div>
+            <div className="grid grid-cols-2 gap-1 mb-2">
+              {postponeChoices().map(([label, days]) => (
+                <button key={label} onClick={() => (patch({ postponed: inDays(days) }), setPop(null))} className="h-6 rounded border border-line text-[11px] hover:bg-sunken">
+                  {label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="date"
+              min={inDays(1)}
+              defaultValue={task.postponed}
+              onChange={(e) => e.target.value && (patch({ postponed: e.target.value }), setPop(null))}
+              className="w-full px-2 h-7 rounded border border-line bg-bg text-[12px]"
+            />
+            {task.postponed && (
+              <button onClick={() => (patch({ postponed: null }), setPop(null))} className="w-full mt-1 h-6 rounded text-[11px] text-danger hover:bg-danger/10">
+                Stop postponing
+              </button>
+            )}
+            <p className="text-[10.5px] text-faint mt-1.5">It isn't planned before that date; from then on it's ranked as usual.</p>
+          </Popover>
+        )}
+      </div>
+
+      <div className="relative">
+        <button
+          onClick={() => setPop(pop === 'repeat' ? null : 'repeat')}
+          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', task.repeat ? 'bg-sunken text-muted' : 'text-faint hidden group-hover:flex')}
+          title={task.repeat ? describeRepeat(task.repeat) : 'Repeat'}
+        >
+          <Repeat size={11} />
+          {task.repeat && !compact && <span className="max-w-20 truncate">{describeRepeat(task.repeat).replace(/^Every /, '')}</span>}
+        </button>
+        {pop === 'repeat' && (
+          <Popover onClose={() => setPop(null)} className="right-0 w-60">
+            <RepeatPicker value={task.repeat} onPick={(rule) => (patch({ repeat: rule }), setPop(null))} />
           </Popover>
         )}
       </div>
@@ -206,3 +279,19 @@ export function TaskTree({ task, depth = 0, showDone, draggable }: { task: Task;
     </>
   )
 }
+
+export const inDays = (n: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return isoDate(d)
+}
+/** Next Monday counts from today (Monday → the following one). */
+const toMonday = () => ((8 - new Date().getDay()) % 7) || 7
+export const postponeChoices = (): [string, number][] => [
+  ['Tomorrow', 1],
+  ['In 2 days', 2],
+  ['Next Monday', toMonday()],
+  ['In 1 week', 7],
+  ['In 2 weeks', 14],
+  ['In 1 month', 30]
+]

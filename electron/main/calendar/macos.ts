@@ -44,7 +44,7 @@ export class MacCalendar implements CalendarProvider {
 
   async connect() {
     this.status = (await helper<{ status: string }>(['request'])).status
-    if (!this.connected) throw new Error(`Calendar access is "${this.status}". Allow AI Center Planner in System Settings → Privacy & Security → Calendars, then try again.`)
+    if (!this.connected) throw new Error(`Calendar access is "${this.status}". Allow AI Center in System Settings → Privacy & Security → Calendars, then try again.`)
   }
 
   disconnect() {

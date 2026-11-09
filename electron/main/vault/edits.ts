@@ -1,5 +1,6 @@
 import type { CategoryPref, TaskPatch } from '@shared/types'
 import { HEADING_RE, TASK_RE, parseInbox, parseTasks, splitLines } from './parser'
+import { nextOccurrence } from '@shared/repeat'
 import { editTokens, isoDate } from './tokens'
 
 // Pure text transforms. Each one re-parses the current file text, locates its target
@@ -25,6 +26,9 @@ export function patchTask(
   const { done: _done, ...tokenEdit } = patch
   const nextBody = Object.keys(tokenEdit).length ? editTokens(body, tokenEdit, today) : body
   lines[task.line] = `${ws}${marker} [${nextState}] ${nextBody}`
+  // Checking off a repeating task: the next occurrence goes above it, so the open task keeps its id.
+  const next = patch.done && state === ' ' && task.repeat ? nextOccurrence(task.repeat, task.due, today) : null
+  if (next) lines.splice(task.line, 0, `${ws}${marker} [ ] ${editTokens(nextBody, { due: next, postponed: null }, today)}`)
   return lines.join(eol)
 }
 

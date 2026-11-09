@@ -1,3 +1,4 @@
+import { NO_AREA, noAreaCategory } from '@shared/categories'
 import type { AppState } from '@shared/api'
 import type { CategoryPref, Task } from '@shared/types'
 
@@ -5,6 +6,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 export function categoryOf(state: AppState, key: string): CategoryPref {
   const cats = state.vault.preferences.categories
+  if (key === NO_AREA) return noAreaCategory(cats)
   return cats.find((c) => c.key === key) ?? cats.find((c) => c.key === 'other') ?? cats[0]
 }
 

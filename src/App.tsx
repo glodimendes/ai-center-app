@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, CalendarRange, Sun, FileText, Inbox, ListChecks, Settings as Cog, Sparkles, TrendingUp, Wand2 } from 'lucide-react'
+import { AlertTriangle, CalendarRange, Sun, FileText, Inbox, ListChecks, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
@@ -13,15 +13,35 @@ import { InboxView } from '@/views/Inbox'
 import { Docs } from '@/views/Docs'
 import { Review } from '@/views/Review'
 import { Settings } from '@/views/Settings'
+import { Alerts, alertItems } from '@/views/Alerts'
 
-const NAV: { view: View; label: string; icon: typeof CalendarDays; key: string }[] = [
+/** Calendar glyph with today's day of the month. */
+function TodayIcon({ size = 15 }: LucideProps) {
+  const [day, setDay] = useState(new Date().getDate())
+  useEffect(() => {
+    const t = setInterval(() => setDay(new Date().getDate()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <rect x="2.5" y="3.5" width="19" height="19" rx="3" />
+      <path d="M2.5 8h19" />
+      <text x="12" y="20" textAnchor="middle" fontSize={day > 9 ? 11.5 : 13} fontWeight="800" fill="currentColor" stroke="none" fontFamily="-apple-system, system-ui, sans-serif">
+        {day}
+      </text>
+    </svg>
+  )
+}
+
+const NAV: { view: View; label: string; icon: (p: LucideProps) => React.ReactNode; key: string }[] = [
   { view: 'brief', label: 'Brief', icon: Sun, key: '1' },
-  { view: 'today', label: 'Today', icon: CalendarDays, key: '2' },
+  { view: 'today', label: 'Today', icon: TodayIcon, key: '2' },
   { view: 'week', label: 'Week', icon: CalendarRange, key: '3' },
   { view: 'tasks', label: 'Tasks', icon: ListChecks, key: '4' },
-  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '5' },
-  { view: 'docs', label: 'Docs', icon: FileText, key: '6' },
-  { view: 'review', label: 'Review', icon: TrendingUp, key: '7' }
+  { view: 'alerts', label: 'Alerts', icon: AlertTriangle, key: '5' },
+  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '6' },
+  { view: 'docs', label: 'Docs', icon: FileText, key: '7' },
+  { view: 'review', label: 'Review', icon: TrendingUp, key: '8' }
 ]
 
 export function App() {
@@ -60,7 +80,8 @@ export function App() {
   if (!state) return <div className="h-full grid place-items-center text-muted">Loading vault…</div>
 
   const inboxCount = state.vault.inbox.length
-  const warnCount = state.plan.warnings.filter((w) => w.kind === 'deadline').length
+  const alerts = alertItems(state.plan.warnings, state.vault.tasks)
+  const urgent = alerts.some((a) => a.group === 'overdue' || a.group === 'risk')
 
   return (
     <div className="h-full flex">
@@ -82,7 +103,7 @@ export function App() {
               <Icon size={15} />
               <span className="flex-1">{label}</span>
               {v === 'inbox' && inboxCount > 0 && <span className="text-[11px] text-faint">{inboxCount}</span>}
-              {v === 'today' && warnCount > 0 && <span className="text-[11px] text-warn">{warnCount}</span>}
+              {v === 'alerts' && alerts.length > 0 && <span className={cx('text-[11px]', urgent ? 'text-danger' : 'text-warn')}>{alerts.length}</span>}
               <span className="text-[10px] text-faint opacity-0 group-hover:opacity-100">⌘{key}</span>
             </button>
           ))}
@@ -123,6 +144,7 @@ export function App() {
         {view === 'today' && <Today />}
         {view === 'week' && <Week />}
         {view === 'tasks' && <Tasks />}
+        {view === 'alerts' && <Alerts />}
         {view === 'inbox' && <InboxView />}
         {view === 'docs' && <Docs />}
         {view === 'review' && <Review />}

@@ -1,7 +1,7 @@
 import type { Block, CalEvent, CalendarInfo, Preferences, SyncOp, Task } from '@shared/types'
 import { addDays, fmtDuration, startOfDay } from '@shared/time'
 
-const SYNCED_KINDS = new Set(['proposed', 'topup', 'training', 'pinned'])
+const SYNCED_KINDS = new Set(['proposed', 'topup', 'pinned'])
 const same = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime()
 
 export function blockDescription(block: Block, tasks: Map<string, Task>): string {
@@ -9,8 +9,7 @@ export function blockDescription(block: Block, tasks: Map<string, Task>): string
     .map((c) => tasks.get(c.taskId))
     .filter((t): t is Task => Boolean(t))
     .map((t) => `• ${t.title.replace(/\*\*/g, '')}${block.chunks.find((c) => c.taskId === t.id)?.minutes ? ` (${fmtDuration(block.chunks.find((c) => c.taskId === t.id)!.minutes)})` : ''}`)
-  if (block.trainingSession) lines.unshift(`Session: ${block.trainingSession}`)
-  return [...lines, '', 'Planned by AI Center Planner'].join('\n').trim()
+  return [...lines, '', 'Planned by AI Center'].join('\n').trim()
 }
 
 /**

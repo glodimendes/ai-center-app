@@ -1,4 +1,5 @@
 import type { Priority, Timing } from '@shared/types'
+import { parseRepeat } from '@shared/repeat'
 
 // Inline task metadata. Everything is optional so plain checklist lines keep working.
 //   ~2h  ~45m  ~1h30m  ~1.5h        estimate
@@ -6,12 +7,16 @@ import type { Priority, Timing } from '@shared/types'
 //   by 31/10  by 05.11  by 1/9/2027 deadline (the user's existing style)
 //   !high  !medium  !low            priority
 //   @spread  @asap                  timing override (spread evenly until the deadline / as soon as possible)
+//   repeat:weekly  repeat:3d  repeat:mon,thu   repeating task (shared/repeat.ts)
+//   postpone:2026-11-20             not planned before that date
 
 const ESTIMATE_RE = /(^|\s)~(\d+(?:\.\d+)?h(?:\d+m)?|\d+m)(?=\s|$)/
 const DUE_ISO_RE = /(^|\s)due:(\d{4}-\d{2}-\d{2})(?=\s|$)/
 const DUE_BY_RE = /(\s[-–—]\s*|\s)by\s+(\d{1,2})([./])(\d{1,2})(?:\3(\d{2,4}))?(?=[\s,.;)]|$)/i
 const PRIORITY_RE = /(^|\s)!(high|medium|low)(?=\s|$)/i
 const TIMING_RE = /(^|\s)@(spread|asap)(?=\s|$)/i
+const REPEAT_RE = /(^|\s)repeat:([a-z0-9,:]+)(?=\s|$)/i
+const POSTPONE_RE = /(^|\s)postpone:(\d{4}-\d{2}-\d{2})(?=\s|$)/
 
 export interface ParsedTokens {
   title: string
@@ -20,6 +25,8 @@ export interface ParsedTokens {
   dueStyle?: 'iso' | 'by-slash' | 'by-dot'
   priority?: Priority
   timing?: Timing
+  repeat?: string
+  postponed?: string
 }
 
 export function parseDuration(token: string): number | undefined {
@@ -92,6 +99,18 @@ export function parseTokens(text: string, today: Date): ParsedTokens {
     title = title.replace(TIMING_RE, '$1')
   }
 
+  const rep = title.match(REPEAT_RE)
+  if (rep && parseRepeat(rep[2])) {
+    out.repeat = rep[2].toLowerCase()
+    title = title.replace(REPEAT_RE, '$1')
+  }
+
+  const post = title.match(POSTPONE_RE)
+  if (post) {
+    out.postponed = post[2]
+    title = title.replace(POSTPONE_RE, '$1')
+  }
+
   out.title = title.replace(/\s{2,}/g, ' ').trim()
   return out
 }
@@ -111,6 +130,8 @@ export interface TokenEdit {
   due?: string | null
   priority?: Priority
   timing?: Timing | null
+  repeat?: string | null
+  postponed?: string | null
 }
 
 /**
@@ -130,6 +151,10 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
     if (pri && pri !== 'medium') parts.push(`!${pri}`)
     const tim = edit.timing === undefined ? parsed.timing : edit.timing ?? undefined
     if (tim) parts.push(`@${tim}`)
+    const rep = edit.repeat === undefined ? parsed.repeat : edit.repeat ?? undefined
+    if (rep) parts.push(`repeat:${rep}`)
+    const post = edit.postponed === undefined ? parsed.postponed : edit.postponed ?? undefined
+    if (post) parts.push(`postpone:${post}`)
     return parts.join(' ')
   }
 
@@ -157,6 +182,16 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
   if (edit.timing !== undefined) {
     const token = edit.timing ? `@${edit.timing}` : ''
     if (TIMING_RE.test(out)) out = out.replace(TIMING_RE, token ? `$1${token}` : '$1')
+    else if (token) out = `${out.trimEnd()} ${token}`
+  }
+  if (edit.repeat !== undefined) {
+    const token = edit.repeat ? `repeat:${edit.repeat}` : ''
+    if (REPEAT_RE.test(out)) out = out.replace(REPEAT_RE, token ? `$1${token}` : '$1')
+    else if (token) out = `${out.trimEnd()} ${token}`
+  }
+  if (edit.postponed !== undefined) {
+    const token = edit.postponed ? `postpone:${edit.postponed}` : ''
+    if (POSTPONE_RE.test(out)) out = out.replace(POSTPONE_RE, token ? `$1${token}` : '$1')
     else if (token) out = `${out.trimEnd()} ${token}`
   }
   return out.replace(/[ \t]{2,}/g, ' ').trimEnd()

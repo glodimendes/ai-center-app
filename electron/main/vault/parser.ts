@@ -93,6 +93,8 @@ export function parseTasks(
       dueStyle: tokens.dueStyle,
       priority: tokens.priority ?? 'medium',
       timing: tokens.timing,
+      repeat: tokens.repeat,
+      postponed: tokens.postponed,
       parentId: parent?.id,
       childIds: []
     }

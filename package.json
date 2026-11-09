@@ -1,6 +1,6 @@
 {
   "name": "ai-center-planner",
-  "productName": "AI Center Planner",
+  "productName": "AI Center",
   "version": "0.1.0",
   "private": true,
   "description": "Motion-style routine organizer for the AI Center vault",
@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "package": "npm run build:helper && electron-vite build && electron-builder --mac --dir",
-    "install-app": "npm run package && rm -rf '/Applications/AI Center Planner.app' && cp -R 'dist/mac-arm64/AI Center Planner.app' /Applications/",
+    "install-app": "npm run package && rm -rf '/Applications/AI Center Planner.app' '/Applications/AI Center.app' && cp -R 'dist/mac-arm64/AI Center.app' /Applications/",
+    "build:icon": "swift scripts/make-icon.swift build/icon.png && rm -rf build/icon.iconset && mkdir build/icon.iconset && for s in 16 32 128 256 512; do sips -z $s $s build/icon.png --out build/icon.iconset/icon_${s}x${s}.png >/dev/null && sips -z $((s*2)) $((s*2)) build/icon.png --out build/icon.iconset/icon_${s}x${s}@2x.png >/dev/null; done && iconutil -c icns build/icon.iconset -o build/icon.icns && rm -rf build/icon.iconset",
     "build:helper": "mkdir -p resources && xcrun swiftc -O -o resources/calendar-helper native/calendar-helper/main.swift"
   },
   "dependencies": {

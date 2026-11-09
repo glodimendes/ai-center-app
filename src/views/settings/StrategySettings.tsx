@@ -9,7 +9,7 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
   const st = prefs.strategy
   const setSt = (patch: Partial<typeof st>) => setPrefs({ ...prefs, strategy: { ...st, ...patch } })
   const setCat = (key: string, patch: Partial<CategoryPref>) => setPrefs({ ...prefs, categories: prefs.categories.map((c) => (c.key === key ? { ...c, ...patch } : c)) })
-  const areas = prefs.categories.filter((c) => c.key !== prefs.training.category && c.key !== 'other')
+  const areas = prefs.categories.filter((c) => c.key !== 'other')
   const grid = prefs.allocation
   const hours = (key: string, d: Weekday) => grid.hours[key]?.[d] ?? 0
   const setHours = (key: string, d: Weekday, v: number) =>
@@ -63,7 +63,10 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
             </div>
           ))}
         </div>
-        <p className="text-faint mt-2">Single tasks can override timing with the ⇄ button in the task list (writes @spread / @asap on the line).</p>
+        <p className="text-faint mt-2">
+          Weights only decide which tasks go first. How many hours each area gets comes from the weekly hours grid below (and the daily caps), so to give an area more time, raise its
+          hours there. Single tasks can override timing with the ⇄ button in the task list (writes @spread / @asap on the line).
+        </p>
       </section>
 
       <section>
@@ -73,7 +76,7 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
             <input type="checkbox" checked={grid.enabled} onChange={(e) => setPrefs({ ...prefs, allocation: { ...grid, enabled: e.target.checked } })} /> use the grid
           </label>
         </div>
-        <p className="text-muted mb-3">Hours each area gets per weekday. An area never goes past its hours (except guarded deadlines); a 0 keeps that day free of it.</p>
+        <p className="text-muted mb-3">Hours set aside for each area per weekday. An area never goes past its hours (except deadlines due within the guard). A 0 sets nothing aside: that area (and Other, which has no row) only gets time left over once areas with hours that day are planned, by task priority.</p>
         <div className={cx('grid grid-cols-[150px_repeat(7,1fr)_60px] gap-1 items-center', !grid.enabled && 'opacity-40 pointer-events-none')}>
           <span />
           {DAYS.map((d) => (

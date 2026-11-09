@@ -1,3 +1,4 @@
+import { NO_AREA } from '@shared/categories'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangle, CalendarClock, CheckSquare, Dumbbell, Flag, Inbox, Loader2, Mail, Notebook, Plus, RefreshCw, Sparkles, Timer } from 'lucide-react'
 import type { BriefData, Block, CalEvent, Task } from '@shared/types'
@@ -41,12 +42,13 @@ export function Brief() {
 
   const hiddenCals = new Set(s.settings.hiddenCalendars ?? [])
   const allDay = s.events.filter((e) => e.allDay && !hiddenCals.has(e.calendarName) && e.start.slice(0, 10) <= today && e.end.slice(0, 10) > today)
-  const work = items.blocks.filter((b) => b.kind !== 'break' && b.kind !== 'training')
+  const trainingKey = s.vault.preferences.training.category
+  const work = items.blocks.filter((b) => b.kind !== 'break' && b.category !== trainingKey && b.category !== NO_AREA)
   const byArea = new Map<string, number>()
   for (const b of work) byArea.set(b.category, (byArea.get(b.category) ?? 0) + blockMinutes(b))
   const plannedMin = [...byArea.values()].reduce((a, b) => a + b, 0)
   const busyMin = items.events.reduce((a, e) => a + (new Date(e.end).getTime() - new Date(e.start).getTime()) / 60000, 0)
-  const training = items.blocks.find((b) => b.kind === 'training' || b.trainingSession)
+  const training = items.blocks.filter((b) => b.category === trainingKey)
   const toLog = s.plan.blocks.filter((b) => b.start.slice(0, 10) === today && b.kind !== 'break' && new Date(b.end) < new Date() && !logFor(s, b))
 
   const weekEnd = isoDate(addDays(new Date(), 7))
@@ -108,7 +110,7 @@ export function Brief() {
               </div>
             </Stat>
             <Stat icon={<CalendarClock size={14} />} label="In meetings / classes" value={fmtDuration(busyMin)} sub={items.events[0] ? `First at ${items.events[0].start.slice(11, 16)}` : 'No fixed events'} />
-            <Stat icon={<Dumbbell size={14} />} label="Training" value={training ? training.trainingSession ?? training.title : 'Rest'} sub={training ? `${training.start.slice(11, 16)}–${training.end.slice(11, 16)}` : undefined} />
+            <Stat icon={<Dumbbell size={14} />} label="Training" value={training.length ? training.map((b) => b.title).join(' + ') : 'Rest'} sub={training.length ? training.map((b) => `${b.start.slice(11, 16)}–${b.end.slice(11, 16)}`).join(', ') : undefined} />
             <Stat icon={<Flag size={14} />} label="Deadlines" value={`${dueToday.length} today`} sub={`${overdue.length} overdue · ${dueWeek.length} this week`} tone={overdue.length ? 'warn' : undefined} />
           </div>
 

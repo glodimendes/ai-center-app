@@ -86,7 +86,7 @@ export class GoogleCalendar implements CalendarProvider {
         const code = u.searchParams.get('code')
         const error = u.searchParams.get('error')
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(`<body style="font-family:system-ui;padding:40px">${code ? 'Connected. You can close this tab and return to AI Center Planner.' : `Sign-in failed: ${error ?? 'unknown error'}`}</body>`)
+        res.end(`<body style="font-family:system-ui;padding:40px">${code ? 'Connected. You can close this tab and return to AI Center.' : `Sign-in failed: ${error ?? 'unknown error'}`}</body>`)
         clearTimeout(timeout)
         if (code) resolve(code)
         else reject(new Error(error ?? 'Sign-in failed.'))
