@@ -71,6 +71,13 @@ describe('plan', () => {
     expect(p.taskFinish[high.id] <= p.taskFinish[late.id]).toBe(true)
   })
 
+  it('ranks urgent above high priority', () => {
+    const high = task('High', 'thesis', { estimateMin: 60, priority: 'high' })
+    const urgent = task('Urgent', 'thesis', { estimateMin: 60, priority: 'urgent' })
+    const p = plan({ tasks: [high, urgent], events: [], prefs, weeks: {}, now })
+    expect(p.taskFinish[urgent.id] < p.taskFinish[high.id]).toBe(true)
+  })
+
   it('splits a long task into chunks and never overlaps busy events', () => {
     const t = task('Big', 'thesis', { estimateMin: 600 })
     const lecture = ev('RTAI Lecture', 'ETH Classes HS26', '2026-11-09T10:00:00', '2026-11-09T12:00:00')

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowDown, ArrowUp, Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
 import type { Priority, Task } from '@shared/types'
 import { fmtDuration, isoDate } from '@shared/time'
 import { api } from '@/lib/api'
@@ -9,7 +9,9 @@ import { MoonZzz, Popover } from './ui'
 import { RepeatPicker } from './RepeatPicker'
 import { describeRepeat } from '@shared/repeat'
 
-const PRI_COLOR: Record<Priority, string> = { high: 'text-danger', medium: 'text-faint', low: 'text-faint/60' }
+const PRI_STYLE: Record<Priority, string> = { urgent: 'text-danger bg-danger/10', high: 'text-warn bg-warn-soft', medium: 'text-faint hidden group-hover:flex', low: 'text-faint bg-sunken' }
+// The flag cycles upward and wraps: low → medium → high → urgent → low.
+const PRI_NEXT: Record<Priority, Priority> = { low: 'medium', medium: 'high', high: 'urgent', urgent: 'low' }
 
 export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean }) {
   const state = useStore((s) => s.state)!
@@ -28,6 +30,9 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
   const postponed = !task.done && task.postponed && task.postponed > isoDate(new Date()) ? task.postponed : null
 
   const patch = (p: Parameters<typeof api.patchTask>[1]) => act(api.patchTask(task.id, p))
+  // Shown at once and cycled from here, so quick clicks step through levels before the vault write comes back.
+  const [pri, setPri] = useState(task.priority)
+  useEffect(() => setPri(task.priority), [task.priority])
 
   const saveTitle = () => {
     setEditing(false)
@@ -237,11 +242,12 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
       </div>
 
       <button
-        onClick={() => patch({ priority: task.priority === 'high' ? 'low' : task.priority === 'low' ? 'medium' : 'high' })}
-        className={cx('h-5 px-1 rounded', PRI_COLOR[task.priority], task.priority === 'medium' && 'hidden group-hover:block')}
-        title={`Priority: ${task.priority} (click to change)`}
+        onClick={() => (setPri(PRI_NEXT[pri]), patch({ priority: PRI_NEXT[pri] }))}
+        className={cx('h-5 px-1 rounded flex items-center gap-0.5 text-[10.5px] capitalize', PRI_STYLE[pri])}
+        title={`Priority: ${pri} (click for ${PRI_NEXT[pri]})`}
       >
-        <Flag size={11} fill={task.priority === 'high' ? 'currentColor' : 'none'} />
+        {pri === 'low' ? <ArrowDown size={11} /> : pri === 'high' ? <ArrowUp size={11} /> : <Flag size={11} fill={pri === 'urgent' ? 'currentColor' : 'none'} />}
+        {pri !== 'medium' && !compact && pri}
       </button>
 
       <button
