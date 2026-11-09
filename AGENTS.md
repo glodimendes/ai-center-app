@@ -105,17 +105,17 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 **Verified live with the user (real calendar):** Sync dry-run, syncing one block to Study Schedule, moving it in Calendar.app (became a pin). Deleting it exposed a bug (a moved-then-deleted block stayed as a pin), fixed and unit-tested; re-check it live once. Not yet confirmed: that the user's own and Codex's events stay untouched across a full Sync.
 
-**Verified in the dev app / by tests (93 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
+**Verified in the dev app / by tests (97 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
 
 **Installed later on 2026-11-09 (verified in the dev app, not yet watched live in the installed app):**
 - **Four priority levels**: `!urgent` added above `!high` (score value 2). The flag chip in `TaskRow` cycles low (↓) → medium (outline flag, hover only) → high (↑) → urgent (red flag) and updates at once in the UI, so quick clicks aren't lost while the write is in flight.
 - **Block panel checkboxes save immediately** (`BlockPanel.toggleTask`): the task is marked done/reopened, and once the block has started the log is written first (pins the block with its tasks), status done when all are checked, otherwise partial. Save/Update log is still used for time, note and remaining estimates.
 
-Both are committed on branch `ai-center-2026-11-09`, pushed to `git@github.com:glodimendes/ai-center-app.git`.
-
-**Installed 2026-11-09, committed and pushed:**
+**Also installed 2026-11-09:**
 - **Subtasks in the Tasks view**: hover buttons add a subtask, nest a task under the one above, or move it out; Tab / ⇧Tab while editing a title. `indentTask` / `addSubtask` in `vault/edits.ts` change only the moved lines and use the file's indentation (tabs). Verified in the dev app and by tests.
-- **Hand edits of calendar events** (see Hard rule 4): only typechecked and the helper compiled; **not tested against a real calendar** (dev has no calendar access). Test with the user in the packaged app on a throwaway event first.
+- **Hand edits of calendar events** (see Hard rule 4): the user confirmed editing works in the installed app with the real calendar (2026-11-09).
+
+**Git:** everything above is committed and pushed to `git@github.com:glodimendes/ai-center-app.git`; `main` and `ai-center-2026-11-09` both point at the same commit. Start new work on a new branch from `main`.
 
 **Real vault content added this session:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 
