@@ -18,6 +18,10 @@ export interface Task {
   priority: Priority
   /** Per-task timing override (`@spread` / `@asap` on the line); otherwise the category default. */
   timing?: Timing
+  /** Repeat rule (`repeat:` token, see shared/repeat.ts): checking it off adds the next occurrence. */
+  repeat?: string
+  /** Postponed (`postpone:` token): not planned before this date. */
+  postponed?: string
   parentId?: string
   childIds: string[]
 }
@@ -30,6 +34,8 @@ export interface TaskPatch {
   due?: string | null
   priority?: Priority
   timing?: Timing | null
+  repeat?: string | null
+  postponed?: string | null
   done?: boolean
 }
 
@@ -72,7 +78,9 @@ export interface CategoryPref {
   deepWork?: boolean
   /** Hard window: the category is never planned outside it. */
   window?: [string, string]
-  /** Soft window: tried first each day (e.g. thesis in the morning). */
+  /** Soft windows, tried first each day in this order (e.g. thesis in the morning, then late afternoon). */
+  preferredWindows?: [string, string][]
+  /** Older single soft window; read once and folded into `preferredWindows`. */
   preferredWindow?: [string, string]
   /** New blocks are at least this long, so small tasks batch together. */
   minBlockMinutes?: number
@@ -81,6 +89,8 @@ export interface CategoryPref {
   weight?: number
   /** Default timing for this area's tasks. */
   timing?: Timing
+  /** Never split a task: each one goes into a single block (e.g. a training session). */
+  wholeTasks?: boolean
   /** Reserve this area's unfilled daily grid hours as blocks (deep-work time even without tasks). */
   reserveQuota?: boolean
   color: string
@@ -123,6 +133,8 @@ export interface Preferences {
   deadlineSlackDays: number
   /** Overdue longer than this = stale: planned after everything else and flagged for review. */
   staleOverdueDays: number
+  /** A task checked off outside its planned block is logged as a block of this length ending now (0 = off). */
+  completedTaskMinutes: number
   breaks: BreakPref[]
   strategy: StrategyPref
   /** Hours per area per weekday. When enabled, an area gets at most its hours that day. */
@@ -133,25 +145,13 @@ export interface Preferences {
   /** Never written to, even after a confirmed sync (prefix match, e.g. "ETH Classes"). Still count as busy. */
   protectedCalendars: string[]
   categories: CategoryPref[]
+  /** The training area: a gap around its blocks, and it doesn't count toward the daily work cap. */
   training: {
     category: string
-    cycleStart: string
-    preferredWindows: [string, string][]
+    /** Older files: windows of the removed training cycle, folded into the area's preferred windows. */
+    preferredWindows?: [string, string][]
+    cycleStart?: string
   }
-}
-
-export interface TrainingSession {
-  day: number
-  session: string
-  focus: string
-  minutes: number
-  rest?: boolean
-}
-
-export interface TrainingPlan {
-  days: TrainingSession[]
-  /** Day 7 rotation, index 0 = week 1. */
-  day7Rotation: { label: string; minutes: number; rest: boolean }[]
 }
 
 export interface CalendarInfo {
@@ -184,7 +184,7 @@ export interface TaskChunk {
   minutes: number
 }
 
-export type BlockKind = 'container' | 'proposed' | 'training' | 'pinned' | 'topup' | 'break'
+export type BlockKind = 'container' | 'proposed' | 'pinned' | 'topup' | 'break'
 
 export interface Block {
   id: string
@@ -197,13 +197,18 @@ export interface Block {
   chunks: TaskChunk[]
   /** Existing calendar event backing this block (containers). */
   eventId?: string
-  trainingSession?: string
   pinned?: boolean
+  /** User-drawn block the planner fills with its area's tasks (Pin.fill). */
+  fill?: boolean
 }
 
 export interface PlanWarning {
   kind: 'deadline' | 'overload' | 'budget-behind' | 'budget-over' | 'unscheduled' | 'stale' | 'conflict'
   message: string
+  /** The problem without the task title, for lists that show the task separately. */
+  detail?: string
+  /** Deadline warnings: already overdue, or at risk of missing it. */
+  level?: 'overdue' | 'risk'
   taskId?: string
   category?: string
 }
@@ -242,6 +247,8 @@ export interface Pin {
   start: string
   end: string
   taskIds: string[]
+  /** A block the user drew: the planner also fills its free time with the area's tasks. */
+  fill?: boolean
 }
 
 /** Manual planning decisions for a week (stored in the weekly file). */
@@ -252,6 +259,8 @@ export interface WeekOverrides {
   assignments?: { blockId: string; taskIds: string[] }[]
   /** Task removed from a block: the planner won't put it in that block again. */
   exclusions?: { blockId: string; taskId: string }[]
+  /** Time left empty after the user removed a block: the planner places nothing new there until Re-plan. */
+  holds?: { start: string; end: string }[]
 }
 
 export interface WeekData {
@@ -268,7 +277,6 @@ export interface VaultState {
   inbox: InboxItem[]
   preferences: Preferences
   preferencesFileExists: boolean
-  training: TrainingPlan | null
   weeks: Record<string, WeekData>
   errors: string[]
 }

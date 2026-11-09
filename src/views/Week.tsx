@@ -10,17 +10,19 @@ import { BudgetBars } from '@/components/BudgetBars'
 import { SyncDialog } from '@/components/SyncDialog'
 import { ReplanButton } from '@/components/ReplanButton'
 import { CalendarFilter } from '@/components/CalendarFilter'
+import { AddBlockButton, NewBlockDialog, type BlockDraft } from '@/components/NewBlock'
 import { Button, Header } from '@/components/ui'
 
 export function Week() {
   const { state, day, setDay, selectedBlockId, selectBlock, go } = useStore()
   const s = state!
   const [sync, setSync] = useState(false)
+  const [draft, setDraft] = useState<BlockDraft | null>(null)
   const start = weekStart(parseDate(day))
   const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(start, i)))
   const { items, allDay } = useMemo(() => gridItems(s, days), [s, day]) // eslint-disable-line react-hooks/exhaustive-deps
   const week = isoWeek(start)
-  const warnings = s.plan.warnings.filter((w) => w.kind !== 'unscheduled')
+  const warnings = s.plan.warnings
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -28,6 +30,7 @@ export function Week() {
         title={`Week ${week.split('-W')[1]}`}
         sub={`${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(start, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
       >
+        <AddBlockButton day={days.includes(isoDate(new Date())) ? isoDate(new Date()) : days[0]} onOpen={setDraft} />
         <ReplanButton />
         <CalendarFilter />
         <Button onClick={() => setDay(isoDate(addDays(start, -7)))}>
@@ -45,13 +48,9 @@ export function Week() {
       <div className="border-b border-line px-5 py-3 flex gap-6 items-start">
         <BudgetBars week={week} />
         {warnings.length > 0 && (
-          <div className="flex-1 max-h-24 overflow-y-auto text-[11.5px] text-warn">
-            {warnings.slice(0, 20).map((w, i) => (
-              <div key={i} className="flex gap-1.5">
-                <AlertTriangle size={11} className="mt-0.5 shrink-0" /> {w.message}
-              </div>
-            ))}
-          </div>
+          <button onClick={() => go('alerts')} className="ml-auto flex items-center gap-1.5 text-[12px] text-warn hover:underline">
+            <AlertTriangle size={12} /> {warnings.length} alert{warnings.length > 1 ? 's' : ''}: view and fix
+          </button>
         )}
       </div>
 
@@ -63,6 +62,7 @@ export function Week() {
           selectedId={selectedBlockId}
           onSelect={selectBlock}
           onDayClick={(d) => (setDay(d), go('today'))}
+          onCreate={(start, end) => setDraft({ start, end })}
           onMove={async (id, st, en) => {
             const b = s.plan.blocks.find((x) => x.id === id)
             if (b) await act(api.pin(pinFromBlock(b, st, en)))
@@ -76,6 +76,7 @@ export function Week() {
         <BlockPanel />
       </div>
       {sync && <SyncDialog onClose={() => setSync(false)} />}
+      {draft && <NewBlockDialog draft={draft} onClose={() => setDraft(null)} />}
     </div>
   )
 }

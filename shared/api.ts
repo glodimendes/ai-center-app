@@ -16,11 +16,38 @@ import type {
   VaultState
 } from './types'
 
+export type PlanVariant = 'balanced' | 'deadlines' | 'deep' | 'light'
+
+export interface PlanMetrics {
+  workHours: number
+  deepHours: number
+  /** Deadline warnings (overdue, at risk, losing slack). */
+  atRisk: number
+  unscheduled: number
+  /** Work after 19:00. */
+  eveningHours: number
+  /** Task segments across blocks: each one is a switch. */
+  switches: number
+  /** Working hours with nothing in them. */
+  freeHours: number
+}
+
+export interface PlanOption {
+  key: PlanVariant
+  label: string
+  desc: string
+  seed?: number
+  plan: Plan
+  metrics: PlanMetrics
+}
+
 export interface AppState {
   vault: VaultState
   calendar: CalendarStatus
   events: CalEvent[]
   plan: Plan
+  /** Strategy of the current plan (Re-plan options); stays until another one is applied. */
+  planVariant: { key: PlanVariant; label: string; seed?: number }
   settings: Settings
   brief: { running: boolean; error?: string }
 }
@@ -32,12 +59,17 @@ export interface Api {
   patchTask(taskId: string, patch: TaskPatch): Promise<void>
   addTask(section: string[], body: string): Promise<void>
   deleteTask(taskId: string): Promise<void>
+  /** Check off now; outside a running block it's also logged as a short block ending now. */
+  completeTask(taskId: string): Promise<void>
   // inbox
   addInbox(text: string): Promise<void>
   inboxToTask(itemId: string, text: string, section: string[]): Promise<void>
   removeInbox(itemId: string): Promise<void>
   // plan
   replan(): Promise<void>
+  /** A preview of a full re-plan under one strategy (seed = Shuffle). Nothing changes until applyPlanOption. */
+  planOption(key: PlanVariant, seed?: number): Promise<PlanOption>
+  applyPlanOption(key: PlanVariant, seed?: number): Promise<void>
   pin(pin: Pin): Promise<void>
   unpin(blockId: string): Promise<void>
   logBlock(entry: LogEntry, pin?: Pin): Promise<void>
@@ -56,8 +88,12 @@ export interface Api {
   addTaskToBlock(blockId: string, taskId: string): Promise<void>
   removeTaskFromBlock(blockId: string, taskId: string): Promise<void>
   removeBlock(blockId: string): Promise<void>
+  /** Postpone all open tasks in a block until a date (null: stop postponing them). */
+  postponeBlock(blockId: string, until: string | null): Promise<void>
   /** Undo a removal: un-dismiss and, for a block that was pinned, pin it again. */
   restoreBlock(block: Block): Promise<void>
+  /** Let the planner use time that was held empty after a removal. */
+  releaseHold(start: string, end: string): Promise<void>
   // docs
   listDocs(): Promise<DocInfo[]>
   readDoc(path: string): Promise<DocContent>

@@ -1,16 +1,20 @@
-import type { Block, CalEvent, CategoryPref, Plan, PlanWarning, Preferences, Task, TrainingPlan, WeekData } from '@shared/types'
+import type { Block, CalEvent, CategoryPref, Plan, PlanWarning, Preferences, Task, WeekData } from '@shared/types'
 import { WEEKDAYS, addDays, atMinutes, isoDate, isoWeek, localISO, startOfDay, toHM } from '@shared/time'
-import { sessionFor } from '../vault/training'
+import { earliestFor } from '@shared/repeat'
+import { NO_AREA, noAreaCategory } from '@shared/categories'
 
 // Deterministic Motion-style planner. Pure: same input, same plan.
 //
 // Placement order:
 //   1. pins (dragged/logged blocks) and, when re-planning incrementally, the previous plan's blocks stay put
-//   2. training goes into the day's Sports event or a preferred window, with recovery buffers
-//   3. floating breaks (lunch, dinner) take the first free stretch of their window
-//   4. tasks, most urgent first, day by day: containers → free room in existing blocks → grow a block →
-//      new block in the category's preferred window → anywhere in its hard window
+//   2. training tasks, then floating breaks (lunch, dinner) in the first free stretch of their window,
+//      then tasks due within the deadline guard, then reserved grid hours (e.g. thesis) in their preferred windows
+//   3. other tasks, most urgent first, day by day: containers → free room in existing blocks →
+//      grow a block → new block in the category's preferred windows (in order) → anywhere in its hard window
+//   4. leftover pass: tasks still unplaced (by priority) may use days where their area has 0 grid hours
 //   5. weekly minimum budgets are topped up
+//
+// Training is an ordinary area, except: a gap around it, and it doesn't count toward the daily work cap.
 //
 // Day limits: working hours, daily work cap, deep-work cap, per-task-per-day cap, weekly caps.
 // Incremental mode never moves an existing block; it only refreshes which tasks sit in it.
@@ -19,7 +23,6 @@ export interface PlanInput {
   tasks: Task[]
   events: CalEvent[]
   prefs: Preferences
-  training: TrainingPlan | null
   weeks: Record<string, WeekData>
   now: Date
   /** Previous plan. Blocks that already started today are always kept as they were. */
@@ -27,10 +30,12 @@ export interface PlanInput {
   /** Also keep the previous plan's future blocks in place (incremental). Defaults to true when `previous` is given. */
   anchorFuture?: boolean
   fullPlannedAt?: string
-  /** Block ids the user deleted from their calendar: never recreated under that id (training: not that day). */
+  /** Block ids the user deleted from their calendar: never recreated under that id. */
   excludeIds?: string[]
   /** Per-event busy/free overrides keyed `${calendarId}:${eventId}`; win over the calendar's own setting. */
   eventAvailability?: Record<string, 'busy' | 'free'>
+  /** Shuffle: a different but still deterministic arrangement (score jitter ±15%, seeded tie-breaks). */
+  seed?: number
 }
 
 const MIN = 60_000
@@ -74,7 +79,7 @@ function subtract(spans: { s: number; e: number }[], busy: { s: number; e: numbe
 }
 
 export function plan(input: PlanInput): Plan {
-  const { tasks, events, prefs, training, weeks, now, previous } = input
+  const { tasks, events, prefs, weeks, now, previous } = input
   const anchorFuture = Boolean(previous) && input.anchorFuture !== false
   const slot = prefs.slotMinutes * MIN
   const nowMs = Math.ceil(now.getTime() / slot) * slot
@@ -83,7 +88,7 @@ export function plan(input: PlanInput): Plan {
   const days = Array.from({ length: prefs.horizonDays }, (_, i) => addDays(today, i))
   const horizonEnd = addDays(today, prefs.horizonDays).getTime()
   const cats = new Map(prefs.categories.map((c) => [c.key, c]))
-  const catOf = (key: string): CategoryPref => cats.get(key) ?? cats.get('other') ?? prefs.categories[0]
+  const catOf = (key: string): CategoryPref => (key === NO_AREA ? noAreaCategory(prefs.categories) : (cats.get(key) ?? cats.get('other') ?? prefs.categories[0]))
   const tc = catOf(prefs.training.category)
   const warnings: PlanWarning[] = []
   const blocks: Working[] = []
@@ -146,10 +151,17 @@ export function plan(input: PlanInput): Plan {
       s,
       e: en,
       // Dismissed containers stay busy but aren't filled.
-      free: loggedIds.has(id) || excluded.has(id) || c.key === tc.key ? 0 : Math.max(0, (en - Math.max(s, nowMs)) / MIN)
+      free: loggedIds.has(id) || excluded.has(id) ? 0 : Math.max(0, (en - Math.max(s, nowMs)) / MIN)
     })
     usedIds.add(id)
     busy.push({ ...span, pad: c.deepWork ? prefs.deepWorkBufferMinutes * MIN : span.pad })
+  }
+
+  // --- holds: a removed block's time stays empty until the user re-plans ---------
+  for (const h of overrides.flatMap((o) => o.holds ?? [])) {
+    const s = new Date(h.start).getTime()
+    const e = new Date(h.end).getTime()
+    if (e > nowMs && s < horizonEnd) busy.push({ s, e, pad: 0 })
   }
 
   // --- remaining work per task ----------------------------------------------
@@ -174,14 +186,20 @@ export function plan(input: PlanInput): Plan {
     taskFinish[taskId] = Math.max(taskFinish[taskId] ?? 0, b.e)
   }
 
+  // A task postponed past a block's day leaves that block (pinned or assigned).
+  const postponedTo = new Map(tasks.filter((t) => t.postponed).map((t) => [t.id, t.postponed!]))
+  const postponedPast = (taskId: string, ms: number) => (postponedTo.get(taskId) ?? '') > dayKey(ms)
+
   // --- pins -----------------------------------------------------------------
   for (const p of Object.values(weeks).flatMap((w) => w.pins)) {
     const s = new Date(p.start).getTime()
     const e = new Date(p.end).getTime()
-    if (e <= today.getTime() || s >= horizonEnd || dismissed.has(p.blockId)) continue
+    // A pin deleted in the calendar is excluded too (moved first, then deleted); its tasks go back to the pool.
+    if (e <= today.getTime() || s >= horizonEnd || excluded.has(p.blockId)) continue
     const block: Working = { id: p.blockId, kind: 'pinned', category: p.category, title: p.title, start: p.start, end: p.end, calendarName: catOf(p.category).calendar, chunks: [], pinned: true, s, e, free: 0 }
     let cap = (e - Math.max(s, nowMs)) / MIN
     for (const id of p.taskIds) {
+      if (postponedPast(id, s)) continue
       const rem = remaining.get(id)
       if (rem === undefined) {
         if (!openIds.has(id)) block.chunks.push({ taskId: id, minutes: 0 })
@@ -194,14 +212,17 @@ export function plan(input: PlanInput): Plan {
         cap -= use
       } else block.chunks.push({ taskId: id, minutes: rem })
     }
-    block.free = 0
+    // A drawn block's time left over after its own tasks is filled like a container.
+    block.free = p.fill && e > nowMs ? Math.max(0, cap) : 0
+    if (p.fill) block.fill = true
     addBlock(block)
   }
 
   // --- previous plan: frozen past, anchored future ----------------------------
   if (previous) {
     for (const b of previous.blocks) {
-      if (b.kind === 'container' || b.kind === 'pinned' || usedIds.has(b.id) || excluded.has(b.id)) continue
+      // 'training' blocks came from the old training cycle (cached plans); training is planned as tasks now.
+      if (b.kind === 'container' || b.kind === 'pinned' || (b.kind as string) === 'training' || usedIds.has(b.id) || excluded.has(b.id)) continue
       const s = new Date(b.start).getTime()
       const e = new Date(b.end).getTime()
       if (s >= horizonEnd || e <= today.getTime()) continue
@@ -216,10 +237,6 @@ export function plan(input: PlanInput): Plan {
         warnings.push({ kind: 'conflict', category: b.category, message: `“${b.title}” at ${b.start.slice(5, 16).replace('T', ' ')} now clashes with your calendar; its tasks moved.` })
         continue
       }
-      if (b.kind === 'training') {
-        const sess = training && sessionFor(training, prefs.training.cycleStart, new Date(s))
-        if (!sess || sess.rest || sess.session !== b.trainingSession) continue
-      }
       const len = (e - s) / MIN
       addBlock({ ...b, chunks: [], s, e, free: b.kind === 'proposed' || b.kind === 'topup' ? len : 0, anchored: true })
     }
@@ -231,6 +248,7 @@ export function plan(input: PlanInput): Plan {
       const b = blocks.find((x) => x.id === a.blockId)
       if (!b || b.frozen || excluded.has(b.id)) continue
       for (const id of a.taskIds) {
+        if (postponedPast(id, b.s)) continue
         const use = Math.min(remaining.get(id) ?? 0, b.free)
         if (use > 0 && !isExcluded(b.id, id)) assign(b, id, use)
       }
@@ -287,11 +305,14 @@ export function plan(input: PlanInput): Plan {
     return `${isoDate(day)}:${cat}:${n}`
   }
 
-  /** Grid hours for an area on a day, or null when the grid doesn't limit this area. */
+  /**
+   * Grid hours for an area on a day, or null when the grid doesn't limit it (grid off, or training).
+   * An area without a row (e.g. Other) has no hours set aside: 0, so it only gets leftover time.
+   */
   const quota = (c: CategoryPref, day: Date): number | null => {
-    if (!prefs.allocation.enabled) return null
+    if (!prefs.allocation.enabled || c.key === tc.key) return null
     const row = prefs.allocation.hours[c.key]
-    if (!row) return null
+    if (!row) return 0
     return (row[WEEKDAYS[day.getDay()] as keyof typeof row] ?? 0) * 60
   }
   const areaMinutes = (c: CategoryPref, day: Date) => minutesOn(day, (b) => WORK_KINDS.has(b.kind) && b.category === c.key)
@@ -300,12 +321,14 @@ export function plan(input: PlanInput): Plan {
    * Room for new time of this category on this day: daily cap, deep-work cap, weekly max and
    * grid hours. Deadline-guarded tasks may go past the grid (not past the daily caps).
    */
-  const allowance = (c: CategoryPref, day: Date, guarded = false) => {
-    let room = dailyMax(day) - minutesOn(day, (b) => WORK_KINDS.has(b.kind) && b.e > nowMs)
+  const allowance = (c: CategoryPref, day: Date, guarded = false, leftover = false) => {
+    // Training sits outside the daily work cap and doesn't use it up.
+    let room = c.key === tc.key ? Infinity : dailyMax(day) - minutesOn(day, (b) => WORK_KINDS.has(b.kind) && b.e > nowMs && b.category !== tc.key && b.category !== NO_AREA)
     if (c.deepWork) room = Math.min(room, prefs.maxDeepWorkMinutesPerDay - minutesOn(day, (b) => WORK_KINDS.has(b.kind) && catOf(b.category).deepWork === true))
     if (c.budget?.maxHours !== undefined) room = Math.min(room, c.budget.maxHours * 60 - weekMinutes(isoWeek(day), c.key))
     const q = quota(c, day)
-    if (q !== null && !guarded) room = Math.min(room, q - areaMinutes(c, day))
+    // Leftover pass: only days with no hours set aside for the area (checked by the caller), no grid limit.
+    if (q !== null && !guarded && !leftover) room = Math.min(room, q - areaMinutes(c, day))
     return Math.max(0, room)
   }
 
@@ -331,17 +354,17 @@ export function plan(input: PlanInput): Plan {
     return null
   }
 
-  /** Open a new block: preferred window first, then the hard window. */
-  const open_ = (c: CategoryPref, day: Date, want: number, kind: 'proposed' | 'topup'): Working | null => {
+  /** Open a new block: each preferred window in order, then the hard window. */
+  const open_ = (c: CategoryPref, day: Date, want: number, kind: 'proposed' | 'topup', need = 0): Working | null => {
     const hard = dayWindow(day, c.window)
     if (!hard) return null
     const minBlock = c.minBlockMinutes ?? prefs.minChunkMinutes
-    for (const win of [intersect(hard, c.preferredWindow, day), hard]) {
+    for (const win of [...(c.preferredWindows ?? []).map((w) => intersect(hard, w, day)), hard]) {
       if (!win) continue
       for (const f of freeIn(win, padFor(c.key))) {
         const fit = Math.floor(Math.min((f.e - f.s) / MIN, prefs.maxBlockMinutes) / prefs.slotMinutes) * prefs.slotMinutes
         const len = Math.min(fit, Math.max(want, minBlock))
-        if (len < minBlock) continue
+        if (len < Math.max(minBlock, need)) continue
         const e = f.s + len * MIN
         const block: Working = { id: newId(day, c.key), kind, category: c.key, title: c.containers[0] ?? c.label, start: localISO(new Date(f.s)), end: localISO(new Date(e)), calendarName: c.calendar, chunks: [], s: f.s, e, free: len }
         addBlock(block)
@@ -351,48 +374,20 @@ export function plan(input: PlanInput): Plan {
     return null
   }
 
-  // --- training ---------------------------------------------------------------
-  if (training) {
+  // --- breaks (placed after training, before other tasks) --------------------------
+  const placeBreaks = () => {
     for (const day of days) {
-      const session = sessionFor(training, prefs.training.cycleStart, day)
-      if (!session || session.rest || !session.minutes) continue
-      if (excluded.has(`train:${isoDate(day)}`)) continue
-      const dayS = day.getTime()
-      const existing = blocks.find((b) => b.category === tc.key && b.s >= dayS && b.s < dayS + DAY)
-      if (existing) {
-        existing.trainingSession = session.session
-        continue
-      }
-      if (dayS + DAY <= nowMs) continue
-      let placed = false
-      for (const w of prefs.training.preferredWindows) {
-        const win = { s: Math.max(atMinutes(day, toHM(w[0])).getTime(), nowMs), e: atMinutes(day, toHM(w[1])).getTime() }
-        if (win.e <= win.s) continue
-        const f = freeIn(win, prefs.trainingBufferMinutes * MIN).find((sp) => sp.e - sp.s >= session.minutes * MIN)
+      if (!dayWindow(day)) continue
+      for (const br of prefs.breaks) {
+        if (blocks.some((b) => b.kind === 'break' && b.title === br.label && dayKey(b.s) === isoDate(day))) continue
+        if (excluded.has(`break:${isoDate(day)}:${br.label}`)) continue
+        const win = { s: Math.max(atMinutes(day, toHM(br.window[0])).getTime(), nowMs), e: atMinutes(day, toHM(br.window[1])).getTime() }
+        if (win.e - win.s < br.minutes * MIN) continue
+        const f = freeIn(win, 0).find((sp) => sp.e - sp.s >= br.minutes * MIN)
         if (!f) continue
-        const e = f.s + session.minutes * MIN
-        addBlock({ id: `train:${isoDate(day)}`, kind: 'training', category: tc.key, title: session.session, start: localISO(new Date(f.s)), end: localISO(new Date(e)), calendarName: tc.calendar, chunks: [], trainingSession: session.session, s: f.s, e, free: 0 })
-        placed = true
-        break
+        const e = f.s + br.minutes * MIN
+        addBlock({ id: `break:${isoDate(day)}:${br.label}`, kind: 'break', category: 'break', title: br.label, start: localISO(new Date(f.s)), end: localISO(new Date(e)), calendarName: '', chunks: [], s: f.s, e, free: 0 })
       }
-      // Only worth a warning while one of the training windows is still ahead.
-      const windowsAhead = prefs.training.preferredWindows.some((w) => atMinutes(day, toHM(w[1])).getTime() > nowMs)
-      if (!placed && windowsAhead) warnings.push({ kind: 'overload', category: tc.key, message: `No free slot for ${session.session} on ${isoDate(day)}.` })
-    }
-  }
-
-  // --- breaks -----------------------------------------------------------------
-  for (const day of days) {
-    if (!dayWindow(day)) continue
-    for (const br of prefs.breaks) {
-      if (blocks.some((b) => b.kind === 'break' && b.title === br.label && dayKey(b.s) === isoDate(day))) continue
-      if (excluded.has(`break:${isoDate(day)}:${br.label}`)) continue
-      const win = { s: Math.max(atMinutes(day, toHM(br.window[0])).getTime(), nowMs), e: atMinutes(day, toHM(br.window[1])).getTime() }
-      if (win.e - win.s < br.minutes * MIN) continue
-      const f = freeIn(win, 0).find((sp) => sp.e - sp.s >= br.minutes * MIN)
-      if (!f) continue
-      const e = f.s + br.minutes * MIN
-      addBlock({ id: `break:${isoDate(day)}:${br.label}`, kind: 'break', category: 'break', title: br.label, start: localISO(new Date(f.s)), end: localISO(new Date(e)), calendarName: '', chunks: [], s: f.s, e, free: 0 })
     }
   }
 
@@ -410,20 +405,31 @@ export function plan(input: PlanInput): Plan {
     return (st.deadlineWeight * urgency + st.priorityWeight * PRI_VALUE[t.priority]) * (catOf(t.category).weight ?? 1)
   }
   const group = (t: Task) => (isGuarded(t) ? 0 : isStale(t) ? 2 : 1)
+  const seeded = (id: string) => {
+    let h = 2166136261 ^ (input.seed ?? 0)
+    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619)
+    return ((h >>> 0) % 10_000) / 10_000
+  }
+  const shuffle = input.seed !== undefined
+  const ranked = (t: Task) => score(t) * (shuffle ? 0.85 + 0.3 * seeded(t.id) : 1)
   const hasOpenChild = (t: Task) => t.childIds.some((id) => openIds.has(id))
   const queue = open
-    .filter((t) => !hasOpenChild(t) && t.category !== tc.key && (remaining.get(t.id) ?? 0) > 0)
+    .filter((t) => !hasOpenChild(t) && (remaining.get(t.id) ?? 0) > 0)
     .sort(
       (a, b) =>
         group(a) - group(b) ||
         (group(a) === 0 ? a.due!.localeCompare(b.due!) : 0) ||
-        score(b) - score(a) ||
+        ranked(b) - ranked(a) ||
+        (shuffle ? seeded(a.id) - seeded(b.id) : 0) ||
         order.get(a.id)! - order.get(b.id)!
     )
 
+  /** First plannable day: a postponed date, and for repeating tasks their period (shared/repeat.ts). */
+  const earliestOf = (t: Task) => [t.repeat ? earliestFor(t.repeat, t.due) : null, t.postponed ?? null].reduce<string | null>((a, b) => (!b ? a : !a || b > a ? b : a), null)
   /** Days a spread task may use: working days (with grid hours for its area) up to deadline − slack, or N days. */
   const spreadDaysFor = (t: Task, c: CategoryPref) => {
-    const usable = days.filter((d) => dayWindow(d, c.window) && (quota(c, d) ?? 1) > 0)
+    const from = earliestOf(t)
+    const usable = days.filter((d) => dayWindow(d, c.window) && (quota(c, d) ?? 1) > 0 && (!from || isoDate(d) >= from))
     if (t.due) {
       const last = isoDate(new Date(new Date(t.due + 'T00:00:00').getTime() - prefs.deadlineSlackDays * DAY))
       const until = usable.filter((d) => isoDate(d) <= last)
@@ -432,14 +438,20 @@ export function plan(input: PlanInput): Plan {
     return usable.slice(0, st.spreadDays)
   }
 
-  for (const t of queue) {
+  /** `leftover`: second pass, only on days where the task's area has 0 grid hours. */
+  const placeTask = (t: Task, leftover = false) => {
     const c = catOf(t.category)
     const guarded = isGuarded(t)
-    const spread = !guarded && (t.timing ?? c.timing ?? 'asap') === 'spread'
+    // Whole tasks (e.g. a training session) go into one block or not at all that day.
+    const whole = Boolean(c.wholeTasks)
+    const spread = !leftover && !whole && !guarded && (t.timing ?? c.timing ?? 'asap') === 'spread'
     const spreadSet = spread ? spreadDaysFor(t, c).map(isoDate) : []
-    const minChunk = () => Math.min(prefs.minChunkMinutes, remaining.get(t.id)!)
+    const minChunk = () => (whole ? remaining.get(t.id)! : Math.min(prefs.minChunkMinutes, remaining.get(t.id)!))
+    const earliest = earliestOf(t)
     for (const day of days) {
       const dk = isoDate(day)
+      if (earliest && dk < earliest) continue
+      if (leftover && (quota(c, day) ?? 0) > 0) continue
       const lastSpreadDay = spreadSet[spreadSet.length - 1]
       // Spread: skip days outside the set until it's over; then fall back to as-soon-as-possible for leftovers.
       if (spread && dk <= lastSpreadDay && !spreadSet.includes(dk)) continue
@@ -453,7 +465,7 @@ export function plan(input: PlanInput): Plan {
       const want = () => Math.min(remaining.get(t.id)!, dayCap())
       // 1–2: containers and free room in existing blocks, in time order.
       const roomy = blocks
-        .filter((b) => !b.frozen && b.free > 0 && b.category === c.key && dayKey(b.s) === dk && (b.kind === 'container' || b.kind === 'proposed' || b.kind === 'topup'))
+        .filter((b) => !b.frozen && b.free > 0 && b.category === c.key && dayKey(b.s) === dk && (b.kind === 'container' || b.kind === 'proposed' || b.kind === 'topup' || b.fill))
         .sort((x, y) => x.s - y.s)
       for (const b of roomy) {
         if (want() <= 0) break
@@ -462,10 +474,10 @@ export function plan(input: PlanInput): Plan {
       }
       // 3–4: grow a block or open a new one.
       while (want() > 0) {
-        const room = Math.min(want(), allowance(c, day, guarded))
+        const room = Math.min(want(), allowance(c, day, guarded, leftover))
         if (room < minChunk()) break
-        const canOpen = allowance(c, day, guarded) >= (c.minBlockMinutes ?? prefs.minChunkMinutes)
-        const b = grow(c, day, room, t.id) ?? (canOpen ? open_(c, day, room, 'proposed') : null)
+        const canOpen = allowance(c, day, guarded, leftover) >= (c.minBlockMinutes ?? prefs.minChunkMinutes)
+        const b = (whole ? null : grow(c, day, room, t.id)) ?? (canOpen ? open_(c, day, room, 'proposed', whole ? room : 0) : null)
         if (!b) break
         const use = Math.min(room, b.free)
         if (use < minChunk()) break
@@ -473,36 +485,61 @@ export function plan(input: PlanInput): Plan {
       }
       if (remaining.get(t.id)! <= 0) break
     }
+  }
 
+  /** Warnings once every pass is done (a task the leftover pass placed isn't "doesn't fit"). */
+  const warnFor = (t: Task) => {
+    const c = catOf(t.category)
     const rem = remaining.get(t.id)!
-    if (rem > 0) warnings.push({ kind: 'unscheduled', taskId: t.id, category: c.key, message: `“${t.title}” doesn't fit in the next ${prefs.horizonDays} days (${rem} min left).` })
-    if (isStale(t)) warnings.push({ kind: 'stale', taskId: t.id, category: c.key, message: `“${t.title}” is ${daysOverdue(t)} days overdue: planned last. Reschedule or drop it?` })
-    else if (t.due) {
+    if (rem > 0) {
+      const detail = `Doesn't fit in the next ${prefs.horizonDays} days: ${rem} min left unplanned.`
+      warnings.push({ kind: 'unscheduled', taskId: t.id, category: c.key, detail, message: `“${t.title}” doesn't fit in the next ${prefs.horizonDays} days (${rem} min left).` })
+    }
+    if (isStale(t)) {
+      const detail = `${daysOverdue(t)} days overdue (due ${t.due}), so it's planned last. Reschedule or drop it?`
+      warnings.push({ kind: 'stale', taskId: t.id, category: c.key, detail, message: `“${t.title}” is ${daysOverdue(t)} days overdue: planned last. Reschedule or drop it?` })
+    } else if (t.due) {
       const dueEnd = new Date(t.due + 'T00:00:00').getTime() + DAY
-      const target = dueEnd - prefs.deadlineSlackDays * DAY
-      if (dueEnd <= nowMs) warnings.push({ kind: 'deadline', taskId: t.id, category: c.key, message: `“${t.title}” is overdue (due ${t.due}).` })
-      else if (rem > 0 || (taskFinish[t.id] ?? 0) > dueEnd) warnings.push({ kind: 'deadline', taskId: t.id, category: c.key, message: `“${t.title}” won't be done before its deadline (${t.due}).` })
-      else if ((taskFinish[t.id] ?? 0) > target) warnings.push({ kind: 'deadline', taskId: t.id, category: c.key, message: `“${t.title}” finishes with less than ${prefs.deadlineSlackDays} day of slack (due ${t.due}).` })
+      const base = { kind: 'deadline' as const, taskId: t.id, category: c.key }
+      if (dueEnd <= nowMs) warnings.push({ ...base, level: 'overdue', detail: `Overdue since ${t.due}.`, message: `“${t.title}” is overdue (due ${t.due}).` })
+      else if (rem > 0 || (taskFinish[t.id] ?? 0) > dueEnd)
+        warnings.push({ ...base, level: 'risk', detail: `The plan doesn't finish it before its deadline (${t.due}).`, message: `“${t.title}” won't be done before its deadline (${t.due}).` })
     }
   }
 
   // --- reserved grid hours (e.g. thesis deep work even without concrete tasks) ----------
-  for (const c of prefs.categories) {
-    if (!c.reserveQuota) continue
-    const minBlock = c.minBlockMinutes ?? prefs.minChunkMinutes
-    for (const day of days) {
-      const q = quota(c, day)
-      if (q === null) continue
-      let need = q - areaMinutes(c, day)
-      while (need >= minBlock) {
-        const room = Math.min(need, allowance(c, day), prefs.maxBlockMinutes)
-        if (room < minBlock) break
-        const b = grow(c, day, room) ?? open_(c, day, room, 'topup')
-        if (!b) break
-        need = q - areaMinutes(c, day)
+  // Placed before other areas' tasks, so the reserve gets its preferred windows instead of the
+  // leftovers; the area's own tasks then fill these blocks.
+  const reserveGridHours = () => {
+    for (const c of prefs.categories) {
+      if (!c.reserveQuota) continue
+      const minBlock = c.minBlockMinutes ?? prefs.minChunkMinutes
+      for (const day of days) {
+        const q = quota(c, day)
+        if (q === null) continue
+        let need = q - areaMinutes(c, day)
+        while (need >= minBlock) {
+          const room = Math.min(need, allowance(c, day), prefs.maxBlockMinutes)
+          if (room < minBlock) break
+          const b = grow(c, day, room) ?? open_(c, day, room, 'topup')
+          if (!b) break
+          need = q - areaMinutes(c, day)
+        }
       }
     }
   }
+
+  // Training first, like appointments; breaks float around it; deadlines due within the guard window;
+  // then reserved hours claim their windows; then everything else.
+  for (const t of queue) if (t.category === tc.key) placeTask(t)
+  placeBreaks()
+  for (const t of queue) if (t.category !== tc.key && isGuarded(t)) placeTask(t)
+  reserveGridHours()
+  for (const t of queue) if (t.category !== tc.key && !isGuarded(t)) placeTask(t)
+  // Days with 0 grid hours for an area aren't closed to it: tasks still left (any area, and Other),
+  // in the same priority order, may use time no area with hours that day took.
+  if (prefs.allocation.enabled) for (const t of queue) if (t.category !== tc.key && remaining.get(t.id)! > 0) placeTask(t, true)
+  for (const t of queue) warnFor(t)
 
   // --- weekly budgets -----------------------------------------------------------
   const weeksInHorizon = [...new Set(days.map((d) => isoWeek(d)))]
@@ -533,6 +570,9 @@ export function plan(input: PlanInput): Plan {
 
   // --- tidy: drop empty new blocks, trim unused tails ------------------------------
   const out = blocks.filter((b) => !(b.kind === 'proposed' && !b.frozen && b.chunks.length === 0 && b.e > nowMs))
+  // A new training block with one session is named after it ("Back A + Triceps", not "Sport").
+  const titleOf = new Map(tasks.map((t) => [t.id, t.title.replace(/\*\*|`/g, '')]))
+  for (const b of out) if (b.category === tc.key && b.kind === 'proposed' && !b.anchored && b.chunks.length === 1) b.title = titleOf.get(b.chunks[0].taskId) ?? b.title
   for (const b of out) {
     if (b.kind !== 'proposed' || b.frozen || b.free <= 0) continue
     const used = b.chunks.reduce((s, c) => s + c.minutes, 0)

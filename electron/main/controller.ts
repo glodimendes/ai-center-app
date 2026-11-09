@@ -1,15 +1,16 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Api, AppState } from '@shared/api'
+import type { Api, AppState, PlanOption, PlanVariant } from '@shared/api'
 import type { CalEvent, CalendarStatus, ContextChange, ContextResult, Plan, Settings, SyncOp, VaultState } from '@shared/types'
-import { addDays, isoDate, localISO, startOfDay, weekStart } from '@shared/time'
+import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
 import { VaultService } from './vault/service'
 import { GoogleCalendar } from './calendar/google'
 import { MacCalendar } from './calendar/macos'
 import type { CalendarProvider } from './calendar/provider'
 import { buildSyncDiff } from './calendar/sync'
 import { plan } from './scheduler/plan'
+import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { runContextAgent, snapshotVault, type AgentRun } from './context/agent'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
@@ -35,6 +36,8 @@ export class Controller implements Api {
   private lastFullDay = ''
   private lastPrefsHash = ''
   private forceFull = false
+  /** Strategy picked in Re-plan options; full re-plans keep using it until another is applied. */
+  private variant: { key: PlanVariant; seed?: number } = { key: 'balanced' }
   // Calendar edits win: what was last synced, so moves/deletions made in the calendar can be detected.
   private synced: Record<string, { eventId?: string; calendarId: string; start: string; end: string }> = {}
   private dismissed: string[] = []
@@ -65,7 +68,7 @@ export class Controller implements Api {
       if (!existsSync(this.planCacheFile())) return
       const c = JSON.parse(readFileSync(this.planCacheFile(), 'utf8'))
       if (c.vaultPath !== this.settings.vaultPath) return
-      Object.assign(this, { lastPlan: c.plan, lastFullDay: c.fullDay, lastPrefsHash: c.prefsHash })
+      Object.assign(this, { lastPlan: c.plan, lastFullDay: c.fullDay, lastPrefsHash: c.prefsHash, variant: c.variant ?? { key: 'balanced' } })
     } catch {
       /* start fresh */
     }
@@ -107,7 +110,13 @@ export class Controller implements Api {
       if (new Date(s.start) < from) continue
       const ev = this.events.find((e) => e.plannerBlockId === blockId)
       if (!ev) {
-        if (new Date(s.end).getTime() > Date.now()) this.dismissed.push(blockId)
+        if (new Date(s.end).getTime() > Date.now()) {
+          this.dismissed.push(blockId)
+          // Like removing it in the app: its time stays empty until Re-plan.
+          const start = localISO(new Date(s.start))
+          this.vault.dismissBlock(blockId, start, `${blockId} (deleted in calendar)`, localISO(new Date(s.end)))
+          this.vault.unpin(blockId)
+        }
         delete this.synced[blockId]
         changed = true
         continue
@@ -137,19 +146,7 @@ export class Controller implements Api {
     const day = this.planningDay()
     const prefsHash = JSON.stringify(v.preferences)
     const full = this.forceFull || !this.lastPlan || this.lastFullDay !== day || this.lastPrefsHash !== prefsHash
-    const p = plan({
-      tasks: v.tasks,
-      events: this.events,
-      prefs: v.preferences,
-      training: v.training,
-      weeks: v.weeks,
-      now,
-      previous: this.lastPlan,
-      anchorFuture: !full,
-      excludeIds: this.dismissed,
-      eventAvailability: this.settings.eventAvailability,
-      fullPlannedAt: full ? undefined : this.lastPlan!.fullPlannedAt
-    })
+    const p = this.runPlan(v, this.variant, now, full)
     if (full) {
       this.lastFullDay = day
       this.lastPrefsHash = prefsHash
@@ -157,11 +154,42 @@ export class Controller implements Api {
     }
     this.lastPlan = p
     try {
-      writeFileSync(this.planCacheFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, plan: p, fullDay: this.lastFullDay, prefsHash: this.lastPrefsHash }))
+      writeFileSync(this.planCacheFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, plan: p, fullDay: this.lastFullDay, prefsHash: this.lastPrefsHash, variant: this.variant }))
     } catch {
       /* cache is best effort */
     }
     return p
+  }
+
+  private runPlan(v: VaultState, variant: { key: PlanVariant; seed?: number }, now: Date, full: boolean): Plan {
+    return plan({
+      tasks: v.tasks,
+      events: this.events,
+      prefs: applyVariant(v.preferences, variant.key),
+      weeks: v.weeks,
+      now,
+      previous: this.lastPlan,
+      anchorFuture: !full,
+      excludeIds: this.dismissed,
+      eventAvailability: this.settings.eventAvailability,
+      fullPlannedAt: full ? undefined : this.lastPlan!.fullPlannedAt,
+      seed: variant.seed
+    })
+  }
+
+  async planOption(key: PlanVariant, seed?: number): Promise<PlanOption> {
+    const v = this.vault.state()
+    const now = new Date()
+    // Previewed as Re-plan would do it: held time is released.
+    const weeks = Object.fromEntries(Object.entries(v.weeks).map(([k, w]) => [k, { ...w, overrides: w.overrides && { ...w.overrides, holds: [] } }]))
+    const p = this.runPlan({ ...v, weeks }, { key, seed }, now, true)
+    const meta = PLAN_VARIANTS.find((x) => x.key === key)!
+    return { ...meta, seed, plan: p, metrics: planMetrics(p, v.preferences, this.events, now) }
+  }
+
+  async applyPlanOption(key: PlanVariant, seed?: number) {
+    this.variant = { key, seed }
+    await this.replan()
   }
 
   private currentPlan(): Plan {
@@ -171,7 +199,12 @@ export class Controller implements Api {
   /** Full re-plan on demand: everything not pinned or already started may move. */
   async replan() {
     this.forceFull = true
+    this.vault.clearHolds(new Date())
     this.push()
+  }
+
+  async releaseHold(start: string, end: string) {
+    this.mutate(() => this.vault.releaseHold(start, end))
   }
 
   async getState(): Promise<AppState> {
@@ -180,6 +213,7 @@ export class Controller implements Api {
     return {
       vault,
       plan: p,
+      planVariant: { ...this.variant, label: PLAN_VARIANTS.find((x) => x.key === this.variant.key)?.label ?? 'Balanced' },
       events: this.events,
       calendar: { ...this.calendar, provider: this.cal.kind, connected: this.cal.connected, configured: this.cal.configured },
       settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined },
@@ -206,7 +240,56 @@ export class Controller implements Api {
     const title = this.taskTitle(taskId)
     const what =
       patch.done === true ? 'complete' : patch.done === false ? 'reopen' : patch.title !== undefined ? 'rename' : 'update'
-    this.mutate(() => this.vault.patchTask(taskId, patch, `${what} "${title}"`))
+    this.mutate(() => {
+      this.vault.patchTask(taskId, patch, `${what} "${title}"`)
+      if (patch.done === false) this.untrackCompletion(title)
+    })
+  }
+
+  /**
+   * Check a task off now. Unless it sits in a block running right now, a short block ending now
+   * records when it was done (logged, pinned, and synced like any planner block).
+   */
+  async completeTask(taskId: string) {
+    const task = this.vault.state().tasks.find((t) => t.id === taskId)
+    if (!task) throw new Error('That task changed or was removed. Try again.')
+    const now = new Date()
+    const minutes = this.vault.preferences.completedTaskMinutes
+    const running = this.currentPlan().blocks.some((b) => b.chunks.some((c) => c.taskId === taskId) && new Date(b.start) <= now && now < new Date(b.end))
+    this.mutate(() => {
+      this.vault.patchTask(taskId, { done: true }, `complete "${task.title}"`)
+      if (!minutes || running) return
+      const end = new Date(Math.floor(now.getTime() / 300_000) * 300_000)
+      const start = localISO(new Date(end.getTime() - minutes * 60_000))
+      const blockId = `done:${isoDate(now)}:${taskId}`
+      const title = doneTitle(task.title)
+      // A repeating task's open copy keeps this id, so the block must not pull it in.
+      const taskIds = task.repeat ? [] : [taskId]
+      const pin = { blockId, category: task.category, title, start, end: localISO(end), taskIds }
+      this.vault.logBlock({ blockId, date: isoDate(now), category: task.category, title, start, plannedMin: minutes, actualMin: minutes, status: 'done', taskIds }, pin)
+    })
+  }
+
+  /** Postpone every open task in a block (null: stop postponing them). */
+  async postponeBlock(blockId: string, until: string | null) {
+    const b = this.blockById(blockId)
+    const open = new Set(this.vault.state().tasks.filter((t) => !t.done).map((t) => t.id))
+    const ids = b.chunks.map((c) => c.taskId).filter((id) => open.has(id))
+    if (!ids.length) throw new Error('No open tasks in this block.')
+    this.mutate(() => {
+      for (const id of ids) this.vault.patchTask(id, { postponed: until }, `${until ? `postpone to ${until}` : 'stop postponing'} "${this.taskTitle(id)}"`)
+    })
+  }
+
+  /** Reopening a task drops today's check-off block for it. */
+  private untrackCompletion(title: string) {
+    const today = isoDate(new Date())
+    const week = this.vault.state().weeks[isoWeek(new Date())]
+    for (const p of week?.pins ?? []) {
+      if (!p.blockId.startsWith(`done:${today}:`) || p.title !== doneTitle(title)) continue
+      this.vault.unpin(p.blockId)
+      this.vault.unlog(p.blockId, p.start)
+    }
   }
   async addTask(section: string[], body: string) {
     this.mutate(() => this.vault.addTask(section, body))
@@ -260,7 +343,9 @@ export class Controller implements Api {
     this.push()
     const date = isoDate(new Date())
     try {
-      const today = this.events.filter((e) => e.start.slice(0, 10) <= date && e.end.slice(0, 10) >= date && !e.plannerBlockId)
+      // Only the calendars shown in the app (Calendars menu); hidden ones never reach the brief.
+      const hidden = new Set(this.settings.hiddenCalendars ?? [])
+      const today = this.events.filter((e) => e.start.slice(0, 10) <= date && e.end.slice(0, 10) >= date && !e.plannerBlockId && !hidden.has(e.calendarName))
       const template = this.vault.readBriefPrompt() ?? DEFAULT_BRIEF_TEMPLATE
       const md = await runBrief(this.vault.root, template, date, today, this.settings.briefEmail, (line) => this.emit('brief-progress', line))
       this.vault.writeBrief(date, md)
@@ -291,6 +376,7 @@ export class Controller implements Api {
   async saveSettings(patch: Partial<Settings>) {
     const next = { ...this.settings, ...patch }
     if (patch.googleClientSecret === '••••••') next.googleClientSecret = this.settings.googleClientSecret
+    if (!app.isPackaged) next.vaultPath = this.settings.vaultPath
     const vaultChanged = next.vaultPath !== this.settings.vaultPath
     const googleChanged = next.googleClientId !== this.settings.googleClientId || next.googleClientSecret !== this.settings.googleClientSecret
     this.settings = next
@@ -483,7 +569,7 @@ export class Controller implements Api {
 
   /** Same shape as the renderer's pinFromBlock: the block keeps its id and time. */
   private pinBlock(b: Plan['blocks'][number], taskIds: string[]) {
-    this.vault.pin({ blockId: b.id, category: b.category, title: b.title, start: b.start, end: b.end, taskIds })
+    this.vault.pin({ blockId: b.id, category: b.category, title: b.title, start: b.start, end: b.end, taskIds, ...(b.fill ? { fill: true } : {}) })
   }
 
   async addTaskToBlock(blockId: string, taskId: string) {
@@ -505,7 +591,8 @@ export class Controller implements Api {
     this.mutate(() => {
       this.vault.removeAssignment(b.id, b.start, taskId, label)
       if (b.kind === 'pinned') this.pinBlock(b, b.chunks.map((c) => c.taskId).filter((id) => id !== taskId))
-      else this.vault.addExclusion(b.id, b.start, taskId, label)
+      // A drawn block is also filled automatically: keep the planner from putting the task back.
+      if (b.kind !== 'pinned' || b.fill) this.vault.addExclusion(b.id, b.start, taskId, label)
     })
   }
 
@@ -515,15 +602,16 @@ export class Controller implements Api {
     const label = `${b.title} ${b.start.slice(0, 16).replace('T', ' ')}`
     this.mutate(() => {
       if (b.kind === 'pinned') this.vault.unpin(b.id)
-      this.vault.dismissBlock(b.id, b.start, label)
+      // Its time stays empty until Re-plan, so the user can put something else there first.
+      this.vault.dismissBlock(b.id, b.start, label, b.kind === 'container' ? undefined : b.end)
     })
   }
 
   async restoreBlock(block: Parameters<Api['restoreBlock']>[0]) {
     this.mutate(() => {
-      this.vault.restoreBlock(block.id, block.start, `"${block.title}"`)
+      this.vault.restoreBlock(block.id, block.start, `"${block.title}"`, block.end)
       if (block.kind === 'pinned')
-        this.vault.pin({ blockId: block.id, category: block.category, title: block.title, start: block.start, end: block.end, taskIds: block.chunks.map((c) => c.taskId) })
+        this.vault.pin({ blockId: block.id, category: block.category, title: block.title, start: block.start, end: block.end, taskIds: block.chunks.map((c) => c.taskId), ...(block.fill ? { fill: true } : {}) })
     })
   }
 
@@ -539,3 +627,5 @@ export class Controller implements Api {
     await this.vault.close()
   }
 }
+
+const doneTitle = (title: string) => `✓ ${title.replace(/\*\*|`/g, '')}`

@@ -7,7 +7,7 @@ import { calendarColor, categoryOf, plainTitle } from './util'
 /** Block kinds a task can be dropped into (not breaks, training or plain calendar events). */
 export const ACCEPTS_TASKS = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned'])
 /** Kinds the user can remove from the plan (Remove block / Delete key). */
-export const REMOVABLE = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned', 'training'])
+export const REMOVABLE = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned'])
 
 export const eventKey =(e: CalEvent) => `ev:${e.calendarId}:${e.id}`
 
@@ -29,7 +29,6 @@ export function isSynced(state: AppState, b: Block) {
 }
 
 export function blockTitle(b: Block) {
-  if (b.kind === 'container' && b.trainingSession) return `${b.title} · ${b.trainingSession}`
   return b.title
 }
 
@@ -76,11 +75,19 @@ export function gridItems(state: AppState, days: string[]): { items: GridItem[];
       badge: logged ? <span className="text-[10px] text-ok font-semibold">{logged.status === 'skipped' ? 'skip' : '✓'}</span> : undefined
     })
   }
+  // Time kept empty after a removal, so the user sees why nothing is planned there.
+  for (const h of heldSlots(state)) {
+    if (!inDays(h.start, h.end) || new Date(h.end).getTime() <= Date.now()) continue
+    items.push({ id: holdKey(h), start: h.start, end: h.end, title: 'Kept free', subtitle: 'Until you Re-plan', color: '#94a3b8', look: 'dashed', dim: true })
+  }
   return { items, allDay }
 }
 
+export const holdKey = (h: { start: string; end: string }) => `hold:${h.start}|${h.end}`
+export const heldSlots = (state: AppState) => Object.values(state.vault.weeks).flatMap((w) => w.overrides?.holds ?? [])
+
 export function pinFromBlock(b: Block, start: string, end: string): Pin {
-  return { blockId: b.id, category: b.category, title: b.title, start, end, taskIds: b.chunks.map((c) => c.taskId) }
+  return { blockId: b.id, category: b.category, title: b.title, start, end, taskIds: b.chunks.map((c) => c.taskId), ...(b.fill ? { fill: true } : {}) }
 }
 
 export function pinForTask(state: AppState, taskId: string, start: string): Pin | null {

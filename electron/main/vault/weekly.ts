@@ -24,6 +24,7 @@ export function cleanOverrides(o: WeekOverrides | undefined): WeekOverrides | un
   const assignments = (o.assignments ?? []).filter((a) => a.taskIds?.length)
   if (assignments.length) out.assignments = assignments
   if (o.exclusions?.length) out.exclusions = o.exclusions
+  if (o.holds?.length) out.holds = o.holds
   return Object.keys(out).length ? out : undefined
 }
 
@@ -55,7 +56,7 @@ export function serializeWeekly(data: WeekData, categories: CategoryPref[]): str
   return [
     `# Week ${data.week}`,
     '',
-    'Written by the AI Center Planner app: planned vs actual time per logged block. The YAML block at the end is what the app reads; edit it carefully.',
+    'Written by the AI Center app: planned vs actual time per logged block. The YAML block at the end is what the app reads; edit it carefully.',
     '',
     '## Totals',
     '',

@@ -9,7 +9,7 @@ import { cx } from '@/lib/util'
  */
 export function HeadingMap({ prefs, setPrefs }: { prefs: Preferences; setPrefs: (p: Preferences) => void }) {
   const sections = useStore((s) => s.state!.vault.sections)
-  const areas = prefs.categories.filter((c) => c.key !== prefs.training.category && c.key !== 'other')
+  const areas = prefs.categories.filter((c) => c.key !== 'other')
   const names = [...new Set(sections.map((s) => s.path[s.path.length - 1]))]
 
   const assign = (heading: string, key: string | null) => {

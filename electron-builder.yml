@@ -1,5 +1,5 @@
 appId: local.aicenter.planner
-productName: AI Center Planner
+productName: AI Center
 directories:
   output: dist
   buildResources: build
@@ -14,5 +14,5 @@ mac:
   category: public.app-category.productivity
   identity: null
   extendInfo:
-    NSCalendarsFullAccessUsageDescription: AI Center Planner reads your calendars to plan around your events and adds the blocks you approve.
-    NSCalendarsUsageDescription: AI Center Planner reads your calendars to plan around your events and adds the blocks you approve.
+    NSCalendarsFullAccessUsageDescription: AI Center reads your calendars to plan around your events and adds the blocks you approve.
+    NSCalendarsUsageDescription: AI Center reads your calendars to plan around your events and adds the blocks you approve.

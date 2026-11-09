@@ -91,3 +91,13 @@ export function Dot({ color, className }: { color: string; className?: string })
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="text-muted text-[12.5px] py-10 text-center">{children}</div>
 }
+
+/** Crescent moon with "z"s, like Apple's sleep symbol: a postponed task. */
+export function MoonZzz({ size = 12, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M11 4a7.5 7.5 0 1 0 9 9 6 6 0 0 1-9-9Z" />
+      <path d="M15 2.5h4l-4 4h4" strokeWidth={1.7} />
+    </svg>
+  )
+}

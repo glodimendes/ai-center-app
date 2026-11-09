@@ -3,8 +3,9 @@ import type { CalEvent } from '@shared/types'
 import { CONTEXT_MODELS, resolveBinary } from './agent'
 
 // In-app daily brief. Runs Claude Code headlessly (cheapest model) inside the vault with read-only
-// tools: vault files and Gmail/Google Calendar reads. It cannot write files or touch email; the app
-// saves the returned Markdown itself, and suggested todo items wait for the user's click.
+// tools: vault files and Gmail reads. Calendar events come only from the app (the calendars shown in
+// it), so it has no calendar tools. It cannot write files or touch email; the app saves the returned
+// Markdown itself, and suggested todo items wait for the user's click.
 
 const READ_TOOLS = [
   'Read',
@@ -13,11 +14,9 @@ const READ_TOOLS = [
   'mcp__claude_ai_Gmail__search_threads',
   'mcp__claude_ai_Gmail__get_thread',
   'mcp__claude_ai_Gmail__get_message',
-  'mcp__claude_ai_Google_Calendar__list_events',
-  'mcp__claude_ai_Google_Calendar__get_event',
   'ToolSearch'
 ]
-const BLOCKED = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent']
+const BLOCKED = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent', 'mcp__claude_ai_Google_Calendar']
 
 // The user may edit the instructions (stored in the vault at 06_Prompts/daily-brief.md), but the
 // output format is always appended: the app parses those exact headings.
@@ -35,6 +34,8 @@ Today's calendar (from my calendars):
 
 export const BRIEF_FORMAT = `You can only read. Do not draft, send, label or delete anything.
 
+Under "Calendar", use only the events given above: they are the calendars I chose.
+
 Reply with ONLY the brief in Markdown, using exactly these level-2 headings, in this order:
 ## Calendar
 ## Emails / Attention
@@ -51,7 +52,7 @@ Under "AI Preparation Opportunities": at most three safe, high-value preparation
 export function formatCalendar(events: CalEvent[]) {
   return events.length
     ? events.map((e) => `- ${e.allDay ? 'all day' : `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`} ${e.title} (${e.calendarName})`).join('\n')
-    : '(not provided: use the Google Calendar list_events tool for today if available)'
+    : '(no events today in the calendars I chose; there are no other calendars to check)'
 }
 
 export function emailLine(includeEmail: boolean) {

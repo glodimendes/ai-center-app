@@ -17,7 +17,9 @@ export function loadSettings(): Settings {
   const base = defaults()
   if (!existsSync(file())) return base
   try {
-    return { ...base, ...JSON.parse(readFileSync(file(), 'utf8')) }
+    const stored = { ...base, ...JSON.parse(readFileSync(file(), 'utf8')) }
+    // Development never opens the real vault, whatever a settings file says.
+    return app.isPackaged ? stored : { ...stored, vaultPath: base.vaultPath }
   } catch {
     return base
   }

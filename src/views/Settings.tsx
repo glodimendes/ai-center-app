@@ -1,18 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ExternalLink, FolderOpen } from 'lucide-react'
-import type { CategoryPref, Preferences, Weekday } from '@shared/types'
+import type { Preferences, Weekday } from '@shared/types'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { Button, Dot, Header } from '@/components/ui'
-import { ContainerPicker, HeadingMap } from './settings/HeadingMap'
+import { Button, Header } from '@/components/ui'
+import { HeadingMap } from './settings/HeadingMap'
+import { AreaSettings, DurationInput, input } from './settings/AreaSettings'
 import { StrategySettings } from './settings/StrategySettings'
 import { BriefPromptEditor } from './settings/BriefPrompt'
 
-const SWATCHES = ['#6366f1', '#0ea5e9', '#14b8a6', '#10b981', '#84cc16', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#a855f7', '#64748b']
-const ESTIMATES = [15, 30, 45, 60, 90, 120, 180]
-
 const DAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-const input = 'h-7 px-2 rounded-md border border-line bg-bg text-[12.5px] outline-none focus:border-accent'
 
 export function Settings() {
   const s = useStore((st) => st.state)!
@@ -27,7 +24,6 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.vault.preferences])
 
-  const setCat = (key: string, patch: Partial<CategoryPref>) => setPrefs({ ...prefs, categories: prefs.categories.map((c) => (c.key === key ? { ...c, ...patch } : c)) })
   const calendars = s.calendar.calendars
 
   const connect = async () => {
@@ -131,7 +127,7 @@ export function Settings() {
                     <a className="text-accent underline" href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer">
                       Google Cloud Console <ExternalLink size={10} className="inline" />
                     </a>{' '}
-                    and create a project (e.g. "AI Center Planner").
+                    and create a project (e.g. "AI Center").
                   </li>
                   <li>
                     Enable the{' '}
@@ -181,92 +177,13 @@ export function Settings() {
             <HeadingMap prefs={prefs} setPrefs={setPrefs} />
           </Card>
 
-          <Card title="Areas" desc="Colour, calendar, and which of your existing calendar events (e.g. “Thesis Deep Work”) the planner fills with tasks.">
+          <Card title="Areas" desc="Add or remove areas; set colour, calendar, which of your calendar events (e.g. “Thesis Deep Work”) get filled, and the windows each area is planned in. Training is an area like the others, with a gap around it.">
             {!s.vault.preferencesFileExists && (
               <div className="mb-3 text-[12px] bg-warn-soft text-warn px-3 py-2 rounded-md">
                 Using built-in defaults. Click “Create preferences file” to save them as 05_Tasks/planner/preferences.md in your vault (readable by Claude and Codex too).
               </div>
             )}
-            <div className="flex flex-col gap-3">
-              {prefs.categories.map((c) => (
-                <div key={c.key} className="rounded-lg border border-line p-3">
-                  <div className="flex items-center gap-2">
-                    <input className={`${input} w-36 font-medium`} value={c.label} onChange={(e) => setCat(c.key, { label: e.target.value })} />
-                    <div className="flex gap-1">
-                      {SWATCHES.map((col) => (
-                        <button
-                          key={col}
-                          onClick={() => setCat(c.key, { color: col })}
-                          className="w-4 h-4 rounded-full"
-                          style={{ background: col, outline: c.color === col ? `2px solid ${col}` : undefined, outlineOffset: 2 }}
-                          title={col}
-                        />
-                      ))}
-                    </div>
-                    <span className="flex-1" />
-                    <span className="text-[11.5px] text-muted">Calendar</span>
-                    {calendars.length ? (
-                      <select className={input} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })}>
-                        {!calendars.some((k) => k.name === c.calendar) && <option>{c.calendar}</option>}
-                        {calendars
-                          .filter((k) => k.writable && !prefs.protectedCalendars.some((p) => k.name.toLowerCase().startsWith(p.toLowerCase())))
-                          .map((k) => (
-                            <option key={k.id}>{k.name}</option>
-                          ))}
-                      </select>
-                    ) : (
-                      <input className={`${input} w-40`} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })} />
-                    )}
-                  </div>
-                  <div className="grid grid-cols-[130px_1fr_130px_1fr] gap-x-3 gap-y-2 mt-3 items-center text-[12px]">
-                    <span className="text-muted">Fill these events</span>
-                    <div className="col-span-3">
-                      <ContainerPicker cat={c} onChange={(containers) => setCat(c.key, { containers })} />
-                    </div>
-                    <span className="text-muted">Default estimate</span>
-                    <select className={input} value={c.defaultEstimateMinutes} onChange={(e) => setCat(c.key, { defaultEstimateMinutes: Number(e.target.value) })}>
-                      {[...new Set([...ESTIMATES, c.defaultEstimateMinutes])].sort((a, b) => a - b).map((m) => (
-                        <option key={m} value={m}>
-                          {m < 60 ? `${m} min` : `${m / 60} h`}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-muted">Time window</span>
-                    <div className="flex gap-1 items-center">
-                      <input type="time" className={input} value={c.window?.[0] ?? ''} onChange={(e) => setCat(c.key, { window: e.target.value ? [e.target.value, c.window?.[1] ?? '21:00'] : undefined })} />
-                      –
-                      <input type="time" className={input} value={c.window?.[1] ?? ''} onChange={(e) => setCat(c.key, { window: e.target.value ? [c.window?.[0] ?? '08:00', e.target.value] : undefined })} />
-                    </div>
-                    <span className="text-muted">Weekly target (h)</span>
-                    <input
-                      className={input}
-                      type="number"
-                      value={c.budget?.minHours ?? ''}
-                      onChange={(e) => setCat(c.key, { budget: { ...c.budget, minHours: e.target.value ? Number(e.target.value) : undefined } })}
-                    />
-                    <span className="text-muted">Weekly cap (h)</span>
-                    <input
-                      className={input}
-                      type="number"
-                      value={c.budget?.maxHours ?? ''}
-                      onChange={(e) => setCat(c.key, { budget: { ...c.budget, maxHours: e.target.value ? Number(e.target.value) : undefined } })}
-                    />
-                    <span className="text-muted">Preferred window</span>
-                    <div className="flex gap-1 items-center">
-                      <input type="time" className={input} value={c.preferredWindow?.[0] ?? ''} onChange={(e) => setCat(c.key, { preferredWindow: e.target.value ? [e.target.value, c.preferredWindow?.[1] ?? '18:00'] : undefined })} />
-                      –
-                      <input type="time" className={input} value={c.preferredWindow?.[1] ?? ''} onChange={(e) => setCat(c.key, { preferredWindow: e.target.value ? [c.preferredWindow?.[0] ?? '08:00', e.target.value] : undefined })} />
-                    </div>
-                    <span className="text-muted">Shortest new block (min)</span>
-                    <input className={input} type="number" value={c.minBlockMinutes ?? ''} onChange={(e) => setCat(c.key, { minBlockMinutes: e.target.value ? Number(e.target.value) : undefined })} />
-                    <span className="text-muted">Deep work</span>
-                    <label className="flex items-center gap-1.5">
-                      <input type="checkbox" checked={Boolean(c.deepWork)} onChange={(e) => setCat(c.key, { deepWork: e.target.checked })} /> counts toward the daily deep-work cap
-                    </label>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AreaSettings prefs={prefs} setPrefs={setPrefs} calendars={calendars} />
           </Card>
 
           <Card title="Working hours & rules" desc="The scheduler only places work inside these hours (training uses its own windows).">
@@ -294,9 +211,9 @@ export function Settings() {
               })}
             </div>
             <div className="grid grid-cols-4 gap-3 mt-4 text-[12px]">
-              <Num label="Buffer between blocks (min)" value={prefs.bufferMinutes} onChange={(v) => setPrefs({ ...prefs, bufferMinutes: v })} />
-              <Num label="Shortest chunk (min)" value={prefs.minChunkMinutes} onChange={(v) => setPrefs({ ...prefs, minChunkMinutes: v })} />
-              <Num label="Max deep work / day (min)" value={prefs.maxDeepWorkMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxDeepWorkMinutesPerDay: v })} />
+              <Dur label="Buffer between blocks" value={prefs.bufferMinutes} onChange={(v) => setPrefs({ ...prefs, bufferMinutes: v })} />
+              <Dur label="Shortest chunk" value={prefs.minChunkMinutes} onChange={(v) => setPrefs({ ...prefs, minChunkMinutes: v })} />
+              <Dur label="Max deep work / day" value={prefs.maxDeepWorkMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxDeepWorkMinutesPerDay: v })} />
               <Num label="Days synced to calendar" value={prefs.syncDays} onChange={(v) => setPrefs({ ...prefs, syncDays: v })} />
             </div>
           </Card>
@@ -307,14 +224,14 @@ export function Settings() {
 
           <Card title="Planning rules" desc="How the planner fills your days. The plan stays put during the day; it's fully re-planned each morning (from 04:00), when these settings change, or when you click Re-plan.">
             <div className="grid grid-cols-4 gap-3 text-[12px]">
-              <Num label="Max work / weekday (min)" value={prefs.dailyMaxMinutes.weekday} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekday: v } })} />
-              <Num label="Max work / weekend day (min)" value={prefs.dailyMaxMinutes.weekend} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekend: v } })} />
-              <Num label="Max on one task / day (min)" value={prefs.maxTaskMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxTaskMinutesPerDay: v })} />
-              <Num label="Longest block (min)" value={prefs.maxBlockMinutes} onChange={(v) => setPrefs({ ...prefs, maxBlockMinutes: v })} />
-              <Num label="Gap after deep work (min)" value={prefs.deepWorkBufferMinutes} onChange={(v) => setPrefs({ ...prefs, deepWorkBufferMinutes: v })} />
-              <Num label="Gap around training (min)" value={prefs.trainingBufferMinutes} onChange={(v) => setPrefs({ ...prefs, trainingBufferMinutes: v })} />
+              <Dur label="Max work / weekday" value={prefs.dailyMaxMinutes.weekday} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekday: v } })} />
+              <Dur label="Max work / weekend day" value={prefs.dailyMaxMinutes.weekend} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekend: v } })} />
+              <Dur label="Max on one task / day" value={prefs.maxTaskMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxTaskMinutesPerDay: v })} />
+              <Dur label="Longest block" value={prefs.maxBlockMinutes} onChange={(v) => setPrefs({ ...prefs, maxBlockMinutes: v })} />
+              <Dur label="Gap after deep work" value={prefs.deepWorkBufferMinutes} onChange={(v) => setPrefs({ ...prefs, deepWorkBufferMinutes: v })} />
               <Num label="Finish deadlines early by (days)" value={prefs.deadlineSlackDays} onChange={(v) => setPrefs({ ...prefs, deadlineSlackDays: v })} />
               <Num label="Overdue becomes stale after (days)" value={prefs.staleOverdueDays} onChange={(v) => setPrefs({ ...prefs, staleOverdueDays: v })} />
+              <Dur label="Checked-off task block, 0 = off" value={prefs.completedTaskMinutes} onChange={(v) => setPrefs({ ...prefs, completedTaskMinutes: v })} />
             </div>
             <div className="mt-4 text-[12px]">
               <div className="text-muted mb-1.5">Protected breaks (each floats to the first free stretch in its window)</div>
@@ -325,8 +242,8 @@ export function Settings() {
                     <input className={`${input} w-28`} value={b.label} onChange={(e) => setBreak({ label: e.target.value })} />
                     <input type="time" className={input} value={b.window[0]} onChange={(e) => setBreak({ window: [e.target.value, b.window[1]] })} />–
                     <input type="time" className={input} value={b.window[1]} onChange={(e) => setBreak({ window: [b.window[0], e.target.value] })} />
-                    <input type="number" className={`${input} w-20`} value={b.minutes} onChange={(e) => setBreak({ minutes: Number(e.target.value) || 30 })} />
-                    <span className="text-faint">min</span>
+                    <DurationInput value={b.minutes} onChange={(v) => setBreak({ minutes: v || 30 })} />
+                    <span className="text-faint">hh:mm</span>
                     <Button kind="danger" onClick={() => setPrefs({ ...prefs, breaks: prefs.breaks.filter((_, j) => j !== i) })}>Remove</Button>
                   </div>
                 )
@@ -335,48 +252,6 @@ export function Settings() {
             </div>
           </Card>
 
-          <Card title="Training" desc="Sessions come from 02_Projects/hybrid-training.md. They go into an existing Sports event that day, or into a free slot in the windows below.">
-            <div className="flex items-center gap-3 text-[12.5px]">
-              <span className="text-muted">A date that was Day 1 (and week 1 of the Day 7 rotation)</span>
-              <input type="date" className={input} value={prefs.training.cycleStart} onChange={(e) => setPrefs({ ...prefs, training: { ...prefs.training, cycleStart: e.target.value } })} />
-            </div>
-            <div className="flex items-center gap-2 mt-3 text-[12.5px]">
-              <span className="text-muted">Preferred windows</span>
-              {prefs.training.preferredWindows.map((w, i) => (
-                <span key={i} className="flex items-center gap-1">
-                  <input
-                    type="time"
-                    className={input}
-                    value={w[0]}
-                    onChange={(e) => {
-                      const ws = prefs.training.preferredWindows.map((x, j) => (j === i ? ([e.target.value, x[1]] as [string, string]) : x))
-                      setPrefs({ ...prefs, training: { ...prefs.training, preferredWindows: ws } })
-                    }}
-                  />
-                  –
-                  <input
-                    type="time"
-                    className={input}
-                    value={w[1]}
-                    onChange={(e) => {
-                      const ws = prefs.training.preferredWindows.map((x, j) => (j === i ? ([x[0], e.target.value] as [string, string]) : x))
-                      setPrefs({ ...prefs, training: { ...prefs.training, preferredWindows: ws } })
-                    }}
-                  />
-                </span>
-              ))}
-            </div>
-            {s.vault.training && (
-              <div className="mt-3 text-[11.5px] text-muted flex flex-wrap gap-x-4">
-                {s.vault.training.days.map((d) => (
-                  <span key={d.day}>
-                    <Dot color="#ef4444" className="mr-1" />
-                    Day {d.day}: {d.session}
-                  </span>
-                ))}
-              </div>
-            )}
-          </Card>
         </div>
       </div>
     </div>
@@ -390,6 +265,16 @@ function Card({ title, desc, children }: { title: string; desc?: string; childre
       {desc && <p className="text-[12px] text-muted mt-0.5 mb-3">{desc}</p>}
       <div className="rounded-xl border border-line bg-panel p-4">{children}</div>
     </section>
+  )
+}
+
+/** Minutes shown and typed as hh:mm. */
+function Dur({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-muted">{label} (hh:mm)</span>
+      <DurationInput className="w-full" value={value} onChange={(v) => onChange(v ?? 0)} />
+    </label>
   )
 }
 

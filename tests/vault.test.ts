@@ -6,6 +6,7 @@ import { addInboxItem, deleteTask, insertTask, patchTask } from '../electron/mai
 import { editTokens, inferYear, parseTokens } from '../electron/main/vault/tokens'
 import { DEFAULT_PREFERENCES, parsePreferences, serializePreferences } from '../electron/main/vault/preferences'
 import { parseWeekly, serializeWeekly } from '../electron/main/vault/weekly'
+import { describeRepeat, earliestFor, nextOccurrence, parseRepeat } from '../shared/repeat'
 
 const today = new Date(2026, 10, 8)
 const cats = DEFAULT_PREFERENCES.categories
@@ -135,6 +136,77 @@ describe('preferences', () => {
   it('round-trips through the frontmatter', () => {
     const text = serializePreferences(DEFAULT_PREFERENCES)
     expect(parsePreferences(text)).toEqual(DEFAULT_PREFERENCES)
+  })
+})
+
+describe('repeating tasks', () => {
+  const mon = new Date(2026, 10, 9) // Monday
+
+  it('parses common and custom rules', () => {
+    expect(parseRepeat('weekly')).toEqual({ every: 1, unit: 'w' })
+    expect(parseRepeat('3d')).toEqual({ every: 3, unit: 'd' })
+    expect(parseRepeat('thu,mon')).toEqual({ weekdays: [1, 4], weeks: 1 })
+    expect(parseRepeat('3w:sun')).toEqual({ weekdays: [0], weeks: 3 })
+    expect(describeRepeat('3w:sun')).toBe('Every 3 weeks on Sun')
+    expect(parseRepeat('fortnightly')).toBeNull()
+    expect(describeRepeat('2w')).toBe('Every 2 weeks')
+    expect(describeRepeat('mon,thu')).toBe('Every Mon, Thu')
+  })
+
+  it('computes the next due date after today', () => {
+    expect(nextOccurrence('weekly', '2026-11-09', mon)).toBe('2026-11-16')
+    expect(nextOccurrence('daily', '2026-11-01', mon)).toBe('2026-11-10') // late: no overdue copy
+    expect(nextOccurrence('monthly', '2026-10-31', mon)).toBe('2026-11-30') // month end clamps
+    expect(nextOccurrence('mon,thu', '2026-11-09', mon)).toBe('2026-11-12')
+    expect(nextOccurrence('weekdays', undefined, new Date(2026, 10, 13))).toBe('2026-11-16') // Fri → Mon
+    expect(nextOccurrence('2w', '2026-11-20', mon)).toBe('2026-12-04') // done early: counts from the due date
+    expect(nextOccurrence('3w:sun', '2026-11-08', mon)).toBe('2026-11-29')
+    expect(nextOccurrence('3w:sun', '2026-10-18', mon)).toBe('2026-11-29') // late: keeps the 3-week rhythm
+    expect(nextOccurrence('2w:tue,thu', '2026-11-10', mon)).toBe('2026-11-12') // same week: no skip
+    expect(earliestFor('mon', '2026-11-16')).toBe('2026-11-16')
+    expect(earliestFor('weekly', '2026-11-15')).toBe('2026-11-09')
+  })
+
+  it('reads and edits the repeat token', () => {
+    expect(parseTokens('Weekly review ~30m repeat:weekly', mon)).toMatchObject({ title: 'Weekly review', estimateMin: 30, repeat: 'weekly' })
+    expect(parseTokens('Pay repeat:soon', mon).repeat).toBeUndefined()
+    expect(editTokens('Weekly review repeat:weekly', { repeat: '2w' }, mon)).toBe('Weekly review repeat:2w')
+    expect(editTokens('Weekly review repeat:weekly', { repeat: null }, mon)).toBe('Weekly review')
+  })
+
+  it('checking one off adds the next occurrence above it, keeping the open task id', () => {
+    const text = '## Personal\n\n- [ ] Water plants ~15m due:2026-11-09 repeat:3d\n- [ ] Other\n'
+    const before = parseTasks(text, FILE, cats, mon).tasks[0]
+    const out = patchTask(text, FILE, before.id, { done: true }, cats, mon)
+    const lines = out.split('\n')
+    expect(lines[2]).toBe('- [ ] Water plants ~15m due:2026-11-12 repeat:3d')
+    expect(lines[3]).toBe('- [x] Water plants ~15m due:2026-11-09 repeat:3d')
+    expect(lines[4]).toBe('- [ ] Other')
+    const after = parseTasks(out, FILE, cats, mon).tasks
+    expect(after.find((t) => t.id === before.id)).toMatchObject({ done: false, due: '2026-11-12' })
+  })
+
+  it('postpone: parsed, edited in place, and dropped from the next occurrence', () => {
+    expect(parseTokens('Call bank postpone:2026-11-20 ~15m', mon)).toMatchObject({ title: 'Call bank', postponed: '2026-11-20', estimateMin: 15 })
+    expect(editTokens('Call bank postpone:2026-11-20', { postponed: '2026-11-25' }, mon)).toBe('Call bank postpone:2026-11-25')
+    expect(editTokens('Call bank postpone:2026-11-20', { postponed: null }, mon)).toBe('Call bank')
+    const text = '## Personal\n\n- [ ] Review budget due:2026-11-09 repeat:weekly postpone:2026-11-09\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    expect(patchTask(text, FILE, t.id, { done: true }, cats, mon).split('\n')[2]).toBe('- [ ] Review budget due:2026-11-16 repeat:weekly')
+  })
+
+  it('reopening a repeating task adds nothing', () => {
+    const text = '## Personal\n\n- [x] Water plants repeat:daily\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    expect(patchTask(text, FILE, t.id, { done: false }, cats, mon).split('\n').length).toBe(text.split('\n').length)
+  })
+})
+
+describe('preferences migration', () => {
+  it('folds an old single preferredWindow into preferredWindows', () => {
+    const p = parsePreferences('---\ncategories:\n  - key: thesis\n    label: Thesis\n    headings: []\n    calendar: X\n    containers: []\n    defaultEstimateMinutes: 60\n    color: "#000"\n    preferredWindow: ["08:00", "12:00"]\n---\n')
+    expect(p.categories[0].preferredWindows).toEqual([['08:00', '12:00']])
+    expect(p.categories[0].preferredWindow).toBeUndefined()
   })
 })
 

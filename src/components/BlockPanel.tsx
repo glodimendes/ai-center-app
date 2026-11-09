@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Minus, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
 import type { Block, CalEvent, LogStatus, Task } from '@shared/types'
-import { fmtDuration, fmtHM, minutesOfDay } from '@shared/time'
+import { fmtDuration, fmtHM, localISO, minutesOfDay } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { ACCEPTS_TASKS, REMOVABLE, blockMinutes, blockTitle, eventAvailability, eventKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
+import { ACCEPTS_TASKS, REMOVABLE, blockMinutes, blockTitle, eventAvailability, eventKey, heldSlots, holdKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
 import { categoryOf, cx, inlineMd, parseMinutes } from '@/lib/util'
-import { Button, Dot } from './ui'
+import { Button, Dot, MoonZzz, Popover } from './ui'
+import { inDays, postponeChoices } from './TaskRow'
 
 const timeRange = (s: string, e: string) => `${fmtHM(minutesOfDay(new Date(s)))}–${fmtHM(minutesOfDay(new Date(e)))}`
 
@@ -28,6 +29,22 @@ export function BlockPanel() {
       </Shell>
     )
   if (block) return <BlockDetail key={block.id} block={block} onClose={() => selectBlock(null)} />
+  const hold = heldSlots(state).find((h) => holdKey(h) === selectedBlockId)
+  if (hold)
+    return (
+      <Shell onClose={() => selectBlock(null)}>
+        <div className="text-[15px] font-semibold">Kept free</div>
+        <div className="text-muted text-[12px] mt-1">
+          {new Date(hold.start).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })} · {timeRange(hold.start, hold.end)}
+        </div>
+        <p className="mt-4 text-[11.5px] text-faint">
+          You removed a block here. The planner leaves this time empty until you Re-plan, so you can drag a task or another block into it first.
+        </p>
+        <div className="mt-3">
+          <Button onClick={() => void act(api.releaseHold(hold.start, hold.end), 'The planner may use this time again').then(() => selectBlock(null))}>Let the planner use it</Button>
+        </div>
+      </Shell>
+    )
   const ev = state.events.find((e) => eventKey(e) === selectedBlockId)
   if (!ev) return null
   return (
@@ -151,7 +168,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
     const ok = await act(api.removeBlock(block.id).then(() => true))
     if (!ok) return
     onClose()
-    useStore.getState().toast(block.kind === 'container' ? 'Calendar event no longer used for tasks' : 'Block removed; its tasks are planned elsewhere', 'info', {
+    useStore.getState().toast(block.kind === 'container' ? 'Calendar event no longer used for tasks' : 'Block removed; its time stays free until you Re-plan', 'info', {
       label: 'Undo',
       run: () => void act(api.restoreBlock(snapshot), 'Block restored')
     })
@@ -194,17 +211,18 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
         {block.kind === 'container' && 'Existing calendar block, filled by the planner'}
         {block.kind === 'proposed' && (isSynced(state, block) ? 'Planned · synced to calendar' : 'Planned · not yet synced')}
         {block.kind === 'topup' && 'Reserved to reach the weekly budget'}
-        {block.kind === 'training' && `Training session from your plan${isSynced(state, block) ? ' · synced' : ''}`}
-        {block.kind === 'pinned' && 'Pinned: stays where you put it'}
+        {block.kind === 'pinned' && (block.fill ? `Your block: stays where you put it, filled with ${cat.label} tasks` : 'Pinned: stays where you put it')}
       </div>
 
       {block.kind !== 'container' && (
-        <div className="mt-3">
+        <div className="mt-3 flex items-center gap-2">
           <Button onClick={togglePin}>
             {block.pinned ? <PinOff size={13} /> : <Pin size={13} />} {block.pinned ? 'Unpin' : 'Pin here'}
           </Button>
+          {!existing && !ended && <Duration block={block} />}
         </div>
       )}
+      {!existing && !ended && tasks.some(({ task }) => !task.done) && <PostponeBlock block={block} />}
 
       {(tasks.length > 0 || accepts) && (
         <section className="mt-5">
@@ -256,7 +274,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
           <p className="mt-1.5 text-[11px] text-faint">
             {block.kind === 'container'
               ? 'Stop using this calendar event for tasks (the event itself stays).'
-              : 'Remove this block; its tasks are planned elsewhere. If it was synced, the next Sync removes it from your calendar.'}
+              : 'Remove this block. Its time stays free until you Re-plan, and its tasks are planned elsewhere. If it was synced, the next Sync removes it from your calendar.'}
           </p>
         </section>
       )}
@@ -324,6 +342,67 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
         </div>
       </section>
     </Shell>
+  )
+}
+
+/** Postpone every open task in the block; the planner moves them out until that date. */
+function PostponeBlock({ block }: { block: Block }) {
+  const [open, setOpen] = useState(false)
+  const go = (until: string | null) => {
+    setOpen(false)
+    void act(api.postponeBlock(block.id, until), until ? `Tasks postponed to ${until}` : 'No longer postponed')
+  }
+  return (
+    <div className="relative mt-2">
+      <Button onClick={() => setOpen(!open)} title="Postpone all tasks in this block">
+        <MoonZzz size={13} /> Postpone tasks
+      </Button>
+      {open && (
+        <Popover onClose={() => setOpen(false)} className="left-0 w-52">
+          <div className="text-[11px] text-muted mb-1.5">Postpone every task here until</div>
+          <div className="grid grid-cols-2 gap-1 mb-2">
+            {postponeChoices().map(([label, days]) => (
+              <button key={label} onClick={() => go(inDays(days))} className="h-6 rounded border border-line text-[11px] hover:bg-sunken">
+                {label}
+              </button>
+            ))}
+          </div>
+          <input type="date" min={inDays(1)} onChange={(e) => e.target.value && go(e.target.value)} className="w-full px-2 h-7 rounded border border-line bg-bg text-[12px]" />
+          <p className="text-[10.5px] text-faint mt-1.5">They leave this block and aren't planned before that date.</p>
+        </Popover>
+      )}
+    </div>
+  )
+}
+
+/** Change the block's length (end moves; the block is pinned like after a drag). Also: drag its bottom edge. */
+function Duration({ block }: { block: Block }) {
+  const minutes = blockMinutes(block)
+  const [text, setText] = useState(fmtHM(minutes))
+  useEffect(() => setText(fmtHM(minutes)), [minutes])
+  const set = (m: number | null) => {
+    if (m === null || m < 15) return setText(fmtHM(minutes))
+    const len = Math.round(m / 15) * 15
+    if (len === minutes) return setText(fmtHM(minutes))
+    const end = localISO(new Date(new Date(block.start).getTime() + len * 60_000))
+    void act(api.pin(pinFromBlock(block, block.start, end)), `Now ${fmtDuration(len)}`)
+  }
+  return (
+    <div className="flex items-center gap-1" title="Duration (hh:mm)">
+      <Button onClick={() => set(minutes - 15)} title="−15 min">
+        <Minus size={13} />
+      </Button>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => set(parseMinutes(text))}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        className="w-14 h-7 text-center rounded-md border border-line bg-bg text-[12.5px] font-medium"
+      />
+      <Button onClick={() => set(minutes + 15)} title="+15 min">
+        <Plus size={13} />
+      </Button>
+    </div>
   )
 }
 

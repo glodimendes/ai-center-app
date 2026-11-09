@@ -1,5 +1,5 @@
 import { dump, load } from 'js-yaml'
-import type { Preferences } from '@shared/types'
+import type { CategoryPref, Preferences } from '@shared/types'
 
 export const PREFERENCES_FILE = '05_Tasks/planner/preferences.md'
 
@@ -24,6 +24,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   trainingBufferMinutes: 30,
   deadlineSlackDays: 1,
   staleOverdueDays: 14,
+  completedTaskMinutes: 15,
   strategy: { deadlineWeight: 2, priorityWeight: 1, deadlineGuardDays: 2, spreadDays: 5 },
   allocation: {
     enabled: true,
@@ -53,7 +54,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       deepWork: true,
       window: ['08:00', '19:00'],
       budget: { minHours: 18, maxHours: 22 },
-      preferredWindow: ['08:00', '12:30'],
+      preferredWindows: [['08:00', '12:30']],
       minBlockMinutes: 60,
       weight: 1.5,
       timing: 'asap',
@@ -69,7 +70,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       defaultEstimateMinutes: 60,
       deepWork: true,
       window: ['08:00', '20:00'],
-      preferredWindow: ['13:30', '17:30'],
+      preferredWindows: [['13:30', '17:30']],
       minBlockMinutes: 45,
       weight: 1.2,
       timing: 'asap',
@@ -85,7 +86,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       defaultEstimateMinutes: 30,
       window: ['08:00', '21:00'],
       budget: { maxHours: 12 },
-      preferredWindow: ['14:00', '19:00'],
+      preferredWindows: [['14:00', '19:00']],
       minBlockMinutes: 30,
       weight: 1,
       timing: 'asap',
@@ -100,7 +101,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       containers: [],
       defaultEstimateMinutes: 15,
       window: ['09:00', '20:00'],
-      preferredWindow: ['17:00', '20:00'],
+      preferredWindows: [['17:00', '20:00']],
       minBlockMinutes: 30,
       weight: 0.8,
       timing: 'asap',
@@ -114,6 +115,15 @@ export const DEFAULT_PREFERENCES: Preferences = {
       calendar: 'Sports',
       containers: ['Sport', 'Running'],
       defaultEstimateMinutes: 60,
+      window: ['07:00', '21:30'],
+      preferredWindows: [
+        ['18:00', '21:00'],
+        ['07:00', '09:00']
+      ],
+      minBlockMinutes: 30,
+      weight: 1,
+      timing: 'asap',
+      wholeTasks: true,
       color: '#ef4444'
     },
     {
@@ -126,14 +136,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       color: '#94a3b8'
     }
   ],
-  training: {
-    category: 'training',
-    cycleStart: '2026-11-02',
-    preferredWindows: [
-      ['18:00', '21:00'],
-      ['07:00', '09:00']
-    ]
-  }
+  training: { category: 'training' }
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
@@ -149,19 +152,33 @@ export function parsePreferences(text: string): Preferences {
     dailyMaxMinutes: { ...DEFAULT_PREFERENCES.dailyMaxMinutes, ...(data.dailyMaxMinutes ?? {}) },
     strategy: { ...DEFAULT_PREFERENCES.strategy, ...(data.strategy ?? {}) },
     allocation: { ...DEFAULT_PREFERENCES.allocation, ...(data.allocation ?? {}) },
-    training: { ...DEFAULT_PREFERENCES.training, ...(data.training ?? {}) },
-    categories: data.categories?.length ? data.categories : DEFAULT_PREFERENCES.categories
+    training: { category: data.training?.category ?? DEFAULT_PREFERENCES.training.category },
+    categories: data.categories?.length ? data.categories.map((c) => migrateTraining(migrateCategory(c), data.training)) : DEFAULT_PREFERENCES.categories
   }
+}
+
+/** Older files planned training from a cycle with its own windows; it's an ordinary area now. */
+function migrateTraining(c: CategoryPref, old: Partial<Preferences['training']> | undefined): CategoryPref {
+  if (c.key !== (old?.category ?? DEFAULT_PREFERENCES.training.category) || c.window) return c
+  const d = DEFAULT_PREFERENCES.categories.find((x) => x.key === 'training')!
+  return { ...d, ...c, window: d.window, preferredWindows: c.preferredWindows ?? old?.preferredWindows ?? d.preferredWindows, minBlockMinutes: c.minBlockMinutes ?? d.minBlockMinutes, wholeTasks: c.wholeTasks ?? true }
+}
+
+/** Older files have one `preferredWindow`; the planner reads `preferredWindows`. */
+function migrateCategory(c: CategoryPref): CategoryPref {
+  const { preferredWindow, ...rest } = c
+  if (rest.preferredWindows || !preferredWindow) return rest
+  return { ...rest, preferredWindows: [preferredWindow] }
 }
 
 const BODY = `
 # Planner Preferences
 
-Read by the AI Center Planner app to auto-schedule tasks. Edit here or in the app's Settings.
+Read by the AI Center app to auto-schedule tasks. Edit here or in the app's Settings.
 
 - \`workingHours\`: per weekday window the scheduler may use (\`null\` = day off).
 - \`categories\`: how todo headings in \`05_Tasks/daily-todos.md\` map to categories. \`headings\` are case-insensitive substrings (deepest heading wins). \`calendar\` is the Google calendar blocks are written to; \`containers\` are existing event titles in that calendar that the planner fills with tasks instead of creating new blocks. \`budget\` sets weekly min/max hours.
-- \`training\`: \`cycleStart\` is a date that was Day 1 of the 7-day cycle in \`02_Projects/hybrid-training.md\` and week 1 of the Day 7 rotation.
+- \`training.category\`: the training area. Its tasks (e.g. under a Training heading, with \`repeat:\` rules) are planned like any other area's, with a gap around them and outside the daily work cap.
 - Task lines may carry optional metadata: \`~2h\` estimate, \`due:2026-11-12\` or \`by 12/11\` deadline, \`!high\` / \`!low\` priority.
 - Weekly logs (planned vs actual time) live in \`05_Tasks/weekly/\`.
 `
