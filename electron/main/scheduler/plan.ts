@@ -40,7 +40,7 @@ export interface PlanInput {
 
 const MIN = 60_000
 const DAY = 86_400_000
-const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const
+const PRIORITY_RANK = { urgent: 0, high: 1, medium: 2, low: 3 } as const
 const WORK_KINDS = new Set(['container', 'proposed', 'topup', 'pinned'])
 
 interface Span {
@@ -398,7 +398,7 @@ export function plan(input: PlanInput): Plan {
   const st = prefs.strategy
   // Guarded: due within N days (or recently overdue) → first, earliest deadline first, may exceed grid hours.
   const isGuarded = (t: Task) => Boolean(t.due) && !isStale(t) && -daysOverdue(t) <= st.deadlineGuardDays
-  const PRI_VALUE = { high: 1, medium: 0.5, low: 0 } as const
+  const PRI_VALUE = { urgent: 2, high: 1, medium: 0.5, low: 0 } as const
   /** Weighted score: (deadline weight × urgency + priority weight × priority) × area weight. */
   const score = (t: Task) => {
     const urgency = t.due && !isStale(t) ? 1 / (1 + Math.max(0, -daysOverdue(t))) : 0

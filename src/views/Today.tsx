@@ -183,7 +183,7 @@ export function Today() {
   )
 }
 
-const PRI = { high: 0, medium: 1, low: 2 } as const
+const PRI = { urgent: 0, high: 1, medium: 2, low: 3 } as const
 const finish = (s: AppState, t: Task) => s.plan.taskFinish[t.id] ?? '9999'
 const byDue = (a: Task, b: Task) => (a.due ?? '9999').localeCompare(b.due ?? '9999')
 
@@ -216,7 +216,7 @@ const SHOW: { key: string; label: string; test: (t: Task, s: AppState) => boolea
   { key: 'unplanned', label: 'Not planned', test: (t, s) => !s.plan.taskFinish[t.id] },
   { key: 'overdue', label: 'Overdue', test: (t) => Boolean(t.due && t.due < isoDate(new Date())) },
   { key: 'due', label: 'With deadline', test: (t) => Boolean(t.due) },
-  { key: 'high', label: 'High priority', test: (t) => t.priority === 'high' },
+  { key: 'high', label: 'High or urgent', test: (t) => t.priority === 'high' || t.priority === 'urgent' },
   { key: 'repeat', label: 'Repeating', test: (t) => Boolean(t.repeat) },
   { key: 'postponed', label: 'Postponed', test: (t) => Boolean(t.postponed && t.postponed > isoDate(new Date())) },
   { key: 'alerts', label: 'With alerts', test: (t, s) => s.plan.warnings.some((w) => w.taskId === t.id) }

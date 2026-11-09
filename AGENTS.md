@@ -87,7 +87,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 92 tests; must stay green
+npm test              # 93 tests; must stay green
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
@@ -104,7 +104,13 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 **Verified live with the user (real calendar):** Sync dry-run, syncing one block to Study Schedule, moving it in Calendar.app (became a pin). Deleting it exposed a bug (a moved-then-deleted block stayed as a pin), fixed and unit-tested; re-check it live once. Not yet confirmed: that the user's own and Codex's events stay untouched across a full Sync.
 
-**Verified in the dev app / by tests (92 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
+**Verified in the dev app / by tests (93 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
+
+**Installed later on 2026-11-09 (verified in the dev app, not yet watched live in the installed app):**
+- **Four priority levels**: `!urgent` added above `!high` (score value 2). The flag chip in `TaskRow` cycles low (↓) → medium (outline flag, hover only) → high (↑) → urgent (red flag) and updates at once in the UI, so quick clicks aren't lost while the write is in flight.
+- **Block panel checkboxes save immediately** (`BlockPanel.toggleTask`): the task is marked done/reopened, and once the block has started the log is written first (pins the block with its tasks), status done when all are checked, otherwise partial. Save/Update log is still used for time, note and remaining estimates.
+
+**Uncommitted** on branch `ai-center-2026-11-09`: the two changes above (the user hasn't asked for a commit).
 
 **Real vault content added this session:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 

@@ -1,4 +1,4 @@
-export type Priority = 'high' | 'medium' | 'low'
+export type Priority = 'urgent' | 'high' | 'medium' | 'low'
 
 export interface Task {
   /** Stable across line shifts: derived from file, heading path, title and occurrence. */

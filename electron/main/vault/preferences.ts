@@ -179,7 +179,7 @@ Read by the AI Center app to auto-schedule tasks. Edit here or in the app's Sett
 - \`workingHours\`: per weekday window the scheduler may use (\`null\` = day off).
 - \`categories\`: how todo headings in \`05_Tasks/daily-todos.md\` map to categories. \`headings\` are case-insensitive substrings (deepest heading wins). \`calendar\` is the Google calendar blocks are written to; \`containers\` are existing event titles in that calendar that the planner fills with tasks instead of creating new blocks. \`budget\` sets weekly min/max hours.
 - \`training.category\`: the training area. Its tasks (e.g. under a Training heading, with \`repeat:\` rules) are planned like any other area's, with a gap around them and outside the daily work cap.
-- Task lines may carry optional metadata: \`~2h\` estimate, \`due:2026-11-12\` or \`by 12/11\` deadline, \`!high\` / \`!low\` priority.
+- Task lines may carry optional metadata: \`~2h\` estimate, \`due:2026-11-12\` or \`by 12/11\` deadline, \`!urgent\` / \`!high\` / \`!low\` priority.
 - Weekly logs (planned vs actual time) live in \`05_Tasks/weekly/\`.
 `
 

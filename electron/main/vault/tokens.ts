@@ -5,7 +5,7 @@ import { parseRepeat } from '@shared/repeat'
 //   ~2h  ~45m  ~1h30m  ~1.5h        estimate
 //   due:2026-11-12                  deadline (canonical)
 //   by 31/10  by 05.11  by 1/9/2027 deadline (the user's existing style)
-//   !high  !medium  !low            priority
+//   !urgent  !high  !medium  !low   priority
 //   @spread  @asap                  timing override (spread evenly until the deadline / as soon as possible)
 //   repeat:weekly  repeat:3d  repeat:mon,thu   repeating task (shared/repeat.ts)
 //   postpone:2026-11-20             not planned before that date
@@ -13,7 +13,7 @@ import { parseRepeat } from '@shared/repeat'
 const ESTIMATE_RE = /(^|\s)~(\d+(?:\.\d+)?h(?:\d+m)?|\d+m)(?=\s|$)/
 const DUE_ISO_RE = /(^|\s)due:(\d{4}-\d{2}-\d{2})(?=\s|$)/
 const DUE_BY_RE = /(\s[-–—]\s*|\s)by\s+(\d{1,2})([./])(\d{1,2})(?:\3(\d{2,4}))?(?=[\s,.;)]|$)/i
-const PRIORITY_RE = /(^|\s)!(high|medium|low)(?=\s|$)/i
+const PRIORITY_RE = /(^|\s)!(urgent|high|medium|low)(?=\s|$)/i
 const TIMING_RE = /(^|\s)@(spread|asap)(?=\s|$)/i
 const REPEAT_RE = /(^|\s)repeat:([a-z0-9,:]+)(?=\s|$)/i
 const POSTPONE_RE = /(^|\s)postpone:(\d{4}-\d{2}-\d{2})(?=\s|$)/

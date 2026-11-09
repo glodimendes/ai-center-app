@@ -49,6 +49,9 @@ describe('tokens', () => {
     expect(editTokens('Do thing', { estimateMin: 120 }, today)).toBe('Do thing ~2h')
     expect(editTokens('Do thing ~2h !high', { estimateMin: 45, priority: 'medium' }, today)).toBe('Do thing ~45m')
     expect(editTokens('Do thing ~2h', { estimateMin: null }, today)).toBe('Do thing')
+    expect(parseTokens('Submit form !urgent', today)).toEqual({ title: 'Submit form', priority: 'urgent' })
+    expect(editTokens('Do thing ~2h !high', { priority: 'urgent' }, today)).toBe('Do thing ~2h !urgent')
+    expect(editTokens('Do thing ~2h !urgent', { priority: 'low' }, today)).toBe('Do thing ~2h !low')
   })
 })
 

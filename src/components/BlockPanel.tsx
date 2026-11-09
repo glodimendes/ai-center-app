@@ -132,8 +132,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
   const actualMin = parseMinutes(actual)
   const step = (d: number) => setActual(String(Math.max(0, (actualMin ?? planned) + d)))
 
-  const save = async () => {
-    if (actualMin === null && status !== 'skipped') return useStore.getState().toast('Enter the time you spent, e.g. 1h20 or 80.', 'error')
+  const writeLog = async (status: LogStatus) => {
     const entry = {
       blockId: block.id,
       date: block.start.slice(0, 10),
@@ -149,6 +148,12 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
     // Planner-generated blocks are pinned once logged so the record keeps its slot.
     const pin = block.kind === 'container' ? undefined : pinFromBlock(block, block.start, block.end)
     await act(api.logBlock(entry, pin))
+    return entry
+  }
+
+  const save = async () => {
+    if (actualMin === null && status !== 'skipped') return useStore.getState().toast('Enter the time you spent, e.g. 1h20 or 80.', 'error')
+    const entry = await writeLog(status)
     for (const { task } of tasks) {
       const st = taskState[task.id]
       if (!st) continue
@@ -159,6 +164,21 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
       }
     }
     useStore.getState().toast(`Logged ${fmtDuration(entry.actualMin)} on ${entry.title}`)
+  }
+
+  /** Checking a task saves at once: the task is marked done and, once the block has started, the log is written too. */
+  const toggleTask = async (task: Task) => {
+    const st = taskState[task.id] ?? { done: task.done, remaining: '' }
+    const next = { ...taskState, [task.id]: { ...st, done: !st.done } }
+    setTaskState(next)
+    if (started && actualMin !== null) {
+      // Status follows the checkboxes; time spent is whatever the field below says (planned by default).
+      const auto: LogStatus = tasks.every(({ task: t }) => next[t.id]?.done ?? t.done) ? 'done' : 'partial'
+      setStatus(auto)
+      // Logged first: that pins the block with its tasks, so a checked task stays listed here.
+      await writeLog(auto)
+    }
+    await act(api.patchTask(task.id, { done: !st.done }))
   }
 
   const accepts = ACCEPTS_TASKS.has(block.kind) && !existing && !ended
@@ -233,7 +253,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
               return (
                 <div key={task.id} className="flex items-start gap-2">
                   <button
-                    onClick={() => setTaskState({ ...taskState, [task.id]: { ...st, done: !st.done } })}
+                    onClick={() => void toggleTask(task)}
                     className={cx('mt-0.5 w-4 h-4 rounded border grid place-items-center shrink-0', st.done ? 'bg-accent border-accent text-white' : 'border-faint')}
                   >
                     {st.done && <Check size={11} strokeWidth={3} />}
