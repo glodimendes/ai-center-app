@@ -2,6 +2,8 @@ import type { AppState } from '@shared/api'
 import type { Block, CalEvent, LogEntry, Pin } from '@shared/types'
 import { diffMin, isoWeek, localISO } from '@shared/time'
 import type { GridItem } from '@/components/TimeGrid'
+import { api } from '@/lib/api'
+import { act, useStore } from '@/store/app'
 import { calendarColor, categoryOf, plainTitle } from './util'
 
 /** Block kinds a task can be dropped into (not breaks, training or plain calendar events). */
@@ -10,6 +12,14 @@ export const ACCEPTS_TASKS = new Set<Block['kind']>(['container', 'proposed', 't
 export const REMOVABLE = new Set<Block['kind']>(['container', 'proposed', 'topup', 'pinned'])
 
 export const eventKey =(e: CalEvent) => `ev:${e.calendarId}:${e.id}`
+
+/** Why the user can't edit this event in the app, or null if they can (mirrors Controller.editableEvent). */
+export function eventLock(state: AppState, e: CalEvent): string | null {
+  if (e.plannerBlockId) return 'Planner event: change it through its block.'
+  if (state.vault.preferences.protectedCalendars.some((p) => e.calendarName.toLowerCase().startsWith(p.toLowerCase()))) return `${e.calendarName} is protected: the app never changes it.`
+  if (state.calendar.calendars.find((c) => c.id === e.calendarId)?.writable === false) return `${e.calendarName} is read-only.`
+  return null
+}
 
 /** Effective busy/free for the planner: per-event override, else the calendar's own flag or a "free" (ignored) calendar. Mirrors scheduler/plan.ts. */
 export function eventAvailability(state: AppState, e: CalEvent): { value: 'busy' | 'free'; overridden: boolean } {
@@ -49,7 +59,8 @@ export function gridItems(state: AppState, days: string[]): { items: GridItem[];
     }
     if (!inDays(e.start, e.end)) continue
     const free = eventAvailability(state, e).value === 'free'
-    items.push({ id: eventKey(e), start: e.start, end: e.end, title: e.title, subtitle: free ? `${e.calendarName} · free` : e.calendarName, color, look: free ? 'dashed' : 'outline', dim: free })
+    // Draggable only by hand (TimeGrid onMove → editEvent); nothing else moves the user's events.
+    items.push({ id: eventKey(e), start: e.start, end: e.end, title: e.title, subtitle: free ? `${e.calendarName} · free` : e.calendarName, color, look: free ? 'dashed' : 'outline', dim: free, draggable: !eventLock(state, e) })
   }
 
   for (const b of state.plan.blocks) {
@@ -100,3 +111,16 @@ export function pinForTask(state: AppState, taskId: string, start: string): Pin 
 }
 
 export const blockMinutes = (b: { start: string; end: string }) => diffMin(b.start, b.end)
+
+/** A hand drag of a calendar event on the grid: moved in the calendar itself, with Undo. Returns false if the id isn't an event. */
+export async function moveEvent(state: AppState, id: string, start: string, end: string): Promise<boolean> {
+  const ev = state.events.find((e) => eventKey(e) === id)
+  if (!ev) return false
+  const newId = await act(api.editEvent(ev.calendarId, ev.id, { start, end }))
+  if (typeof newId !== 'string') return true
+  useStore.getState().toast(`Moved “${ev.title}” in ${ev.calendarName}`, 'info', {
+    label: 'Undo',
+    run: () => void act(api.editEvent(ev.calendarId, newId, { start: ev.start, end: ev.end }), 'Move undone')
+  })
+  return true
+}

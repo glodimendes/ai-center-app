@@ -5,7 +5,7 @@ import { watch, type FSWatcher } from 'chokidar'
 import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides } from '@shared/types'
 import { isoWeek } from '@shared/time'
 import { parseInbox, parseTasks } from './parser'
-import { addInboxItem, deleteTask, insertTask, patchTask, removeInboxItem, stampLastUpdated } from './edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, stampLastUpdated } from './edits'
 import { DEFAULT_PREFERENCES, PREFERENCES_FILE, parsePreferences, serializePreferences } from './preferences'
 import { WEEKLY_DIR, parseWeekly, serializeWeekly, weeklyFile } from './weekly'
 import { VaultGit } from './git'
@@ -118,6 +118,16 @@ export class VaultService {
 
   addTask(section: string[], body: string) {
     this.update(TODOS_FILE, (t) => insertTask(t, section, body), `add "${body}"`)
+  }
+
+  indentTask(taskId: string, dir: 'in' | 'out', title: string) {
+    const prefs = this.preferences
+    this.update(TODOS_FILE, (t) => indentTask(t, TODOS_FILE, taskId, dir, prefs.categories, new Date()), `${dir === 'in' ? 'nest' : 'un-nest'} "${title}"`)
+  }
+
+  addSubtask(parentId: string, body: string, parentTitle: string) {
+    const prefs = this.preferences
+    this.update(TODOS_FILE, (t) => addSubtask(t, TODOS_FILE, parentId, body, prefs.categories, new Date()), `add "${body}" under "${parentTitle}"`)
   }
 
   deleteTask(taskId: string, title: string) {

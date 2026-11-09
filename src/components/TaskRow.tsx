@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Calendar, Check, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, Calendar, Check, IndentDecrease, IndentIncrease, ListPlus, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
 import type { Priority, Task } from '@shared/types'
 import { fmtDuration, isoDate } from '@shared/time'
 import { api } from '@/lib/api'
@@ -13,7 +13,7 @@ const PRI_STYLE: Record<Priority, string> = { urgent: 'text-danger bg-danger/10'
 // The flag cycles upward and wraps: low → medium → high → urgent → low.
 const PRI_NEXT: Record<Priority, Priority> = { low: 'medium', medium: 'high', high: 'urgent', urgent: 'low' }
 
-export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean }) {
+export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean; onAddSubtask?: () => void }) {
   const state = useStore((s) => s.state)!
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
@@ -33,6 +33,11 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
   // Shown at once and cycled from here, so quick clicks step through levels before the vault write comes back.
   const [pri, setPri] = useState(task.priority)
   useEffect(() => setPri(task.priority), [task.priority])
+
+  // Nesting lives in the Tasks tree (onAddSubtask is only passed there).
+  // Nesting needs a task above at the same level (same parent, same section); the first one has none.
+  const canNest = state.vault.tasks.some((t) => t.parentId === task.parentId && t.line < task.line && t.section.join('>') === task.section.join('>'))
+  const nest = (dir: 'in' | 'out') => act(api.indentTask(task.id, dir), dir === 'in' ? 'Now a subtask of the task above' : 'Moved out one level')
 
   const saveTitle = () => {
     setEditing(false)
@@ -69,6 +74,11 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
             onBlur={saveTitle}
             onKeyDown={(e) => {
               if (e.key === 'Enter') saveTitle()
+              if (e.key === 'Tab' && onAddSubtask) {
+                e.preventDefault()
+                saveTitle()
+                if (e.shiftKey ? task.parentId : canNest) void nest(e.shiftKey ? 'out' : 'in')
+              }
               if (e.key === 'Escape') {
                 setTitle(task.title)
                 setEditing(false)
@@ -265,6 +275,22 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
         {task.timing === 'spread' ? 'spread' : task.timing === 'asap' ? 'asap' : ''}
       </button>
 
+      {onAddSubtask && !task.done && (
+        <>
+          <button onClick={onAddSubtask} className="h-5 px-1 rounded text-faint hover:text-ink hidden group-hover:block" title="Add subtask">
+            <ListPlus size={12} />
+          </button>
+          {canNest && <button onClick={() => nest('in')} className="h-5 px-1 rounded text-faint hover:text-ink hidden group-hover:block" title="Make it a subtask of the task above (Tab while editing)">
+            <IndentIncrease size={12} />
+          </button>}
+          {task.parentId && (
+            <button onClick={() => nest('out')} className="h-5 px-1 rounded text-faint hover:text-ink hidden group-hover:block" title="Move out one level (⇧Tab while editing)">
+              <IndentDecrease size={12} />
+            </button>
+          )}
+        </>
+      )}
+
       <button onClick={() => act(api.deleteTask(task.id), 'Task deleted (recoverable from git)')} className="h-5 px-1 rounded text-faint hover:text-danger hidden group-hover:block" title="Delete">
         <Trash2 size={11} />
       </button>
@@ -276,13 +302,42 @@ export function TaskRow({ task, depth = 0, draggable, showSection }: { task: Tas
 export function TaskTree({ task, depth = 0, showDone, draggable }: { task: Task; depth?: number; showDone: boolean; draggable?: boolean }) {
   const tasks = useStore((s) => s.state!.vault.tasks)
   const children = task.childIds.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t) && (showDone || !t!.done))
+  const [adding, setAdding] = useState(false)
   return (
     <>
-      <TaskRow task={task} depth={depth} draggable={draggable} />
+      <TaskRow task={task} depth={depth} draggable={draggable} onAddSubtask={() => setAdding(true)} />
       {children.map((c) => (
         <TaskTree key={c.id} task={c} depth={depth + 1} showDone={showDone} draggable={draggable} />
       ))}
+      {adding && <SubtaskInput parent={task} depth={depth + 1} onDone={() => setAdding(false)} />}
     </>
+  )
+}
+
+/** Inline "new subtask" line, written as-is (tokens like ~1h work) at the end of the parent's subtasks. */
+function SubtaskInput({ parent, depth, onDone }: { parent: Task; depth: number; onDone: () => void }) {
+  const [text, setText] = useState('')
+  const submit = async () => {
+    if (!text.trim()) return onDone()
+    await act(api.addSubtask(parent.id, text.trim()))
+    setText('')
+  }
+  return (
+    <div className="flex items-center gap-2 py-1 pr-2 rounded-md bg-sunken/70" style={{ paddingLeft: 8 + depth * 22 }}>
+      <ListPlus size={13} className="text-faint shrink-0" />
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => !text.trim() && onDone()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void submit()
+          if (e.key === 'Escape') onDone()
+        }}
+        placeholder={`Subtask of “${parent.title}” (Enter adds another, Esc closes)`}
+        className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-faint"
+      />
+    </div>
   )
 }
 

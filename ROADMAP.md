@@ -39,6 +39,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Re-plan options can look alike:** when the weekly hours grid is what limits each area (the usual case), strategies mostly reorder tasks inside the same blocks; the dialog says "same plan as Balanced right now" when nothing differs.
 - **Weights vs hours:** area weights only order tasks; hours per area come from the grid (and caps). Users expect weights to move hours; Settings explains it.
 - **Docs editor** may normalize Markdown (e.g. `-` → `*` bullets); it shows a diff and asks first.
+- **Event hand edits:** container events (calendar blocks the planner fills, e.g. "Thesis Deep Work") are still not draggable or editable in the app; deleting an event has no Undo (it asks first); editing a repeating event changes only that occurrence.
 - **Urgent is a score, not a rule:** `!urgent` weighs 2 (high 1) in the weighted score, so it usually beats high-priority tasks and far deadlines but still comes after guarded deadlines. Making it a hard "first" rule was offered to the user, not decided.
 - **Block panel auto-log** uses the "Time actually spent" field as it stands (planned length by default), so checking a task mid-block logs the full planned time until the user edits it. A checked task shows "0m planned here" (also true after Save log before).
 - **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses.
@@ -76,7 +77,9 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
   - Settings: add/remove areas, several preferred windows, durations as hh:mm;
   - brief uses only visible calendars; dev runs isolated from the installed app's data and vault;
   - priority levels low / medium / high / urgent (`!urgent`, flag chip cycles with distinct icons);
-  - checking a task in the block panel saves at once (task done + block log, no Save click).
+  - checking a task in the block panel saves at once (task done + block log, no Save click);
+  - subtasks in the Tasks view (add, nest, un-nest; Tab / ⇧Tab);
+  - hand edits of the user's own calendar events (panel edit/delete, drag/resize with Undo; one occurrence; protected/read-only locked).
 - **Settings:** selection-based heading → area map, container picker, colour swatches, strategy sliders, grid editor, planning rules, breaks.
 - **Time logging:** actual ≠ planned, written to weekly files; budget bars.
 - **Calendar:**

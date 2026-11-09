@@ -59,6 +59,9 @@ export interface Api {
   patchTask(taskId: string, patch: TaskPatch): Promise<void>
   addTask(section: string[], body: string): Promise<void>
   deleteTask(taskId: string): Promise<void>
+  /** 'in': becomes a subtask of the task above it; 'out': back to its parent's level. Subtasks move along. */
+  indentTask(taskId: string, dir: 'in' | 'out'): Promise<void>
+  addSubtask(parentId: string, body: string): Promise<void>
   /** Check off now; outside a running block it's also logged as a short block ending now. */
   completeTask(taskId: string): Promise<void>
   // inbox
@@ -84,6 +87,10 @@ export interface Api {
   setCalendarVisible(calendarName: string, visible: boolean): Promise<void>
   setCalendarBusy(calendarName: string, busy: boolean): Promise<void>
   setEventAvailability(eventKey: string, value: 'busy' | 'free' | null): Promise<void>
+  /** The user's own hand edit of one of their events (one occurrence). Never planner, protected or read-only calendars. */
+  /** Returns the event's id afterwards (it can change when a macOS event moves). */
+  editEvent(calendarId: string, eventId: string, change: { title?: string; start?: string; end?: string }): Promise<string>
+  deleteEvent(calendarId: string, eventId: string): Promise<void>
   // block editing
   addTaskToBlock(blockId: string, taskId: string): Promise<void>
   removeTaskFromBlock(blockId: string, taskId: string): Promise<void>

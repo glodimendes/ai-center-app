@@ -294,6 +294,14 @@ export class Controller implements Api {
   async addTask(section: string[], body: string) {
     this.mutate(() => this.vault.addTask(section, body))
   }
+  async indentTask(taskId: string, dir: 'in' | 'out') {
+    const title = this.taskTitle(taskId)
+    this.mutate(() => this.vault.indentTask(taskId, dir, title))
+  }
+  async addSubtask(parentId: string, body: string) {
+    const title = this.taskTitle(parentId)
+    this.mutate(() => this.vault.addSubtask(parentId, body, title))
+  }
   async deleteTask(taskId: string) {
     const title = this.taskTitle(taskId)
     this.mutate(() => this.vault.deleteTask(taskId, title))
@@ -553,6 +561,39 @@ export class Controller implements Api {
     const ignoreCalendars = prefs.ignoreCalendars.filter((n) => n !== calendarName)
     if (!busy) ignoreCalendars.push(calendarName)
     this.mutate(() => this.vault.savePreferences({ ...prefs, ignoreCalendars }))
+  }
+  /** Checks for a hand edit of a calendar event; the edit itself goes through the provider's user* methods only. */
+  private editableEvent(calendarId: string, eventId: string): CalEvent {
+    const ev = this.events.find((e) => e.calendarId === calendarId && e.id === eventId)
+    if (!ev) throw new Error('That event changed in your calendar. Refresh and try again.')
+    if (ev.plannerBlockId) throw new Error('Planner events are changed through their block.')
+    const prefs = this.vault.preferences
+    if (prefs.protectedCalendars.some((p) => ev.calendarName.toLowerCase().startsWith(p.toLowerCase()))) throw new Error(`"${ev.calendarName}" is protected; the app never changes it.`)
+    if (this.calendar.calendars.find((c) => c.id === calendarId)?.writable === false) throw new Error(`"${ev.calendarName}" is read-only.`)
+    return ev
+  }
+  async editEvent(calendarId: string, eventId: string, change: { title?: string; start?: string; end?: string }): Promise<string> {
+    const ev = this.editableEvent(calendarId, eventId)
+    if ((change.start || change.end) && ev.allDay) throw new Error('All-day events can only be renamed here.')
+    const start = new Date(change.start ?? ev.start).getTime()
+    const end = new Date(change.end ?? ev.end).getTime()
+    if (!(end > start)) throw new Error('The end must be after the start.')
+    if (change.title !== undefined && !change.title.trim()) throw new Error('The title can’t be empty.')
+    const id = await this.cal.userUpdate(calendarId, eventId, change)
+    // Its busy/free override follows it to the new id.
+    const overrides = this.settings.eventAvailability ?? {}
+    const old = overrides[`${calendarId}:${eventId}`]
+    if (old && id !== eventId) {
+      const { [`${calendarId}:${eventId}`]: _drop, ...rest } = overrides
+      await this.saveSettings({ eventAvailability: { ...rest, [`${calendarId}:${id}`]: old } })
+    }
+    await this.refreshCalendar()
+    return id
+  }
+  async deleteEvent(calendarId: string, eventId: string): Promise<void> {
+    this.editableEvent(calendarId, eventId)
+    await this.cal.userRemove(calendarId, eventId)
+    await this.refreshCalendar()
   }
   async setEventAvailability(eventKey: string, value: 'busy' | 'free' | null): Promise<void> {
     const eventAvailability = { ...(this.settings.eventAvailability ?? {}) }

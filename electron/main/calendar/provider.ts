@@ -1,5 +1,12 @@
 import type { CalEvent, CalendarInfo } from '@shared/types'
 
+/** A change the user made by hand in the app to one of their own events (one occurrence). */
+export interface UserEventChange {
+  title?: string
+  start?: string
+  end?: string
+}
+
 export interface EventInput {
   title: string
   start: string
@@ -21,4 +28,11 @@ export interface CalendarProvider {
   /** Only planner-tagged events may be patched or removed. */
   patch(calendarId: string, eventId: string, ev: EventInput, blockId?: string): Promise<void>
   remove(calendarId: string, eventId: string): Promise<void>
+  /**
+   * The only way to change events the planner didn't create. Called solely from an explicit edit in the
+   * app (Controller.editEvent / deleteEvent), never from Sync. Refuses planner events.
+   */
+  /** Returns the event's id afterwards (macOS ids include the occurrence start, so a move changes it). */
+  userUpdate(calendarId: string, eventId: string, change: UserEventChange): Promise<string>
+  userRemove(calendarId: string, eventId: string): Promise<void>
 }

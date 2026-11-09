@@ -2,8 +2,11 @@
 // Google, iCloud and Exchange calendars added in System Settings → Internet Accounts all appear here,
 // and changes sync back through macOS. Events the planner creates carry "[planner:<blockId>]" in
 // their notes; update/delete refuse any event without that tag.
+// user-update/user-delete are the only way to touch other events: the app calls them solely for an
+// edit the user made by hand in the app (never from Sync), on one occurrence, and they refuse planner events.
 //
 //   status | request | calendars | events <fromISO> <toISO> | create (stdin) | update (stdin) | delete <eventId>
+//   user-update (stdin) | user-delete <eventId>
 import EventKit
 import Foundation
 
@@ -68,6 +71,22 @@ func event(_ id: String) -> EKEvent {
   let ident = String(id.split(separator: "|").first ?? "")
   guard let ev = store.event(withIdentifier: ident) else { fail("Event not found", code: 4) }
   return ev
+}
+
+/// The exact occurrence an id names (a repeating event has one identifier for all of them).
+func occurrence(_ id: String) -> EKEvent {
+  let parts = id.split(separator: "|")
+  guard parts.count == 2, let ts = Double(parts[1]) else { return event(id) }
+  let at = Date(timeIntervalSince1970: ts)
+  let pred = store.predicateForEvents(withStart: at.addingTimeInterval(-86400), end: at.addingTimeInterval(86400), calendars: nil)
+  let ident = String(parts[0])
+  if let ev = store.events(matching: pred).first(where: { $0.eventIdentifier == ident && Int($0.startDate.timeIntervalSince1970) == Int(ts) }) { return ev }
+  fail("Event not found (it may have changed in Calendar). Refresh and try again.", code: 4)
+}
+
+func editableByUser(_ ev: EKEvent) {
+  if (ev.notes ?? "").contains(TAG) { fail("Planner events are changed through their block, not here.", code: 5) }
+  if !ev.calendar.allowsContentModifications { fail("\"\(ev.calendar.title)\" is read-only.", code: 5) }
 }
 
 func owned(_ ev: EKEvent) {
@@ -146,6 +165,26 @@ case "delete":
   do { try store.remove(ev, span: .thisEvent, commit: true) } catch { fail("Delete failed: \(error.localizedDescription)") }
   out(["ok": true])
 
+case "user-update":
+  requireAccess()
+  let o = readStdin()
+  let ev = occurrence(o["id"] as? String ?? "")
+  editableByUser(ev)
+  if let t = o["title"] as? String { ev.title = t }
+  if let s = o["start"] as? String { ev.startDate = parseDate(s) }
+  if let e = o["end"] as? String { ev.endDate = parseDate(e) }
+  do { try store.save(ev, span: .thisEvent, commit: true) } catch { fail("Save failed: \(error.localizedDescription)") }
+  out(["id": "\(ev.eventIdentifier ?? "")|\(Int(ev.startDate.timeIntervalSince1970))"])
+
+case "user-delete":
+  requireAccess()
+  let a = Array(args)
+  guard a.count >= 2 else { fail("usage: user-delete <id>") }
+  let ev = occurrence(a[1])
+  editableByUser(ev)
+  do { try store.remove(ev, span: .thisEvent, commit: true) } catch { fail("Delete failed: \(error.localizedDescription)") }
+  out(["ok": true])
+
 default:
-  fail("usage: calendar-helper status|request|calendars|events|create|update|delete")
+  fail("usage: calendar-helper status|request|calendars|events|create|update|delete|user-update|user-delete")
 }
