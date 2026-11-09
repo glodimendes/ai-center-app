@@ -4,3 +4,15 @@ dist/
 .dev-vault/
 tests/fixtures/
 resources/calendar-helper
+
+# Personal data and secrets: never commit (the repo is pushed to GitHub)
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.bin
+settings.json
+plan-cache.json
+sync-state.json
+google-tokens*
