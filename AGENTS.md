@@ -21,7 +21,7 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
    - Sync only after the user confirms the diff dialog.
    - The user's calendar edits win: a moved planner event becomes a pin, a deleted one is dismissed (`Controller.adoptCalendarEdits`).
 5. **Git commits never mention Claude**: no `Co-Authored-By: Claude` trailer and no "Claude" in messages. This applies to this repo, to the vault, and to the app's own `planner: …` commits, which use the user's identity. The user asked for this explicitly.
-6. **Commit or push only when the user asks.**
+6. **Commit or push only when the user asks.** The repo is pushed to GitHub: never commit vault content, real task data, settings, tokens or calendar data (`.gitignore` covers the known paths; check `git status` before committing).
 7. **AI must use the cheapest models**: `gpt-5.6-luna` (Codex) and `claude-haiku-5-5` (Claude), medium effort (`CONTEXT_MODELS` in `electron/main/context/agent.ts`). Don't change them without the user asking.
 8. **AI never acts without the user.** The brief is read-only. Update context edits are reviewed (Keep/Undo). Suggested todos need a click.
 9. The vault's own rules apply to any vault content change: `03_Workflows/assistant-file-update-rules.md` and `03_Workflows/context-maintenance.md`.
@@ -110,7 +110,7 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Four priority levels**: `!urgent` added above `!high` (score value 2). The flag chip in `TaskRow` cycles low (↓) → medium (outline flag, hover only) → high (↑) → urgent (red flag) and updates at once in the UI, so quick clicks aren't lost while the write is in flight.
 - **Block panel checkboxes save immediately** (`BlockPanel.toggleTask`): the task is marked done/reopened, and once the block has started the log is written first (pins the block with its tasks), status done when all are checked, otherwise partial. Save/Update log is still used for time, note and remaining estimates.
 
-**Uncommitted** on branch `ai-center-2026-11-09`: the two changes above (the user hasn't asked for a commit).
+Both are committed on branch `ai-center-2026-11-09`, pushed to `git@github.com:glodimendes/ai-center-app.git`.
 
 **Real vault content added this session:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 
