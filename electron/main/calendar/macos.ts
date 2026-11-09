@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import type { CalEvent, CalendarInfo } from '@shared/types'
-import type { CalendarProvider, EventInput } from './provider'
+import type { CalendarProvider, EventInput, UserEventChange } from './provider'
 
 const TAG_RE = /\n?\[planner:([^\]]+)\]\s*$/
 
@@ -93,5 +93,13 @@ export class MacCalendar implements CalendarProvider {
 
   async remove(_calendarId: string, eventId: string) {
     await helper(['delete', eventId])
+  }
+
+  async userUpdate(_calendarId: string, eventId: string, change: UserEventChange) {
+    return (await helper<{ id: string }>(['user-update'], { id: eventId, ...change })).id
+  }
+
+  async userRemove(_calendarId: string, eventId: string) {
+    await helper(['user-delete', eventId])
   }
 }

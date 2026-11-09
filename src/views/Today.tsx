@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-reac
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { blockMinutes, gridItems, logFor, pinForTask, pinFromBlock } from '@/lib/plan'
+import { blockMinutes, gridItems, logFor, moveEvent, pinForTask, pinFromBlock } from '@/lib/plan'
 import { categoryOf, cx } from '@/lib/util'
 import type { AppState } from '@shared/api'
 import type { Task } from '@shared/types'
@@ -49,6 +49,7 @@ export function Today() {
   const alertCount = s.plan.warnings.length
 
   const onMove = async (id: string, start: string, end: string) => {
+    if (await moveEvent(s, id, start, end)) return
     const b = s.plan.blocks.find((x) => x.id === id)
     if (b) await act(api.pin(pinFromBlock(b, start, end)))
   }

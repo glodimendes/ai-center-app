@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseInbox, parseTasks } from '../electron/main/vault/parser'
-import { addInboxItem, deleteTask, insertTask, patchTask } from '../electron/main/vault/edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask } from '../electron/main/vault/edits'
 import { editTokens, inferYear, parseTokens } from '../electron/main/vault/tokens'
 import { DEFAULT_PREFERENCES, parsePreferences, serializePreferences } from '../electron/main/vault/preferences'
 import { parseWeekly, serializeWeekly } from '../electron/main/vault/weekly'
@@ -117,6 +117,40 @@ describe('edits are line-local', () => {
     const parent = tasks.find((t) => t.title.includes('Train for general coding interviews'))!
     const out = deleteTask(todos, FILE, parent.id, cats, today)
     expect(out.split('\n').length).toBe(todos.split('\n').length - 3)
+  })
+})
+
+describe('subtasks', () => {
+  const md = ['# Todos', '', '## ETH', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
+  const parse = (t: string) => parseTasks(t, FILE, cats, today).tasks
+  const byTitle = (t: string, title: string) => parse(t).find((x) => x.title === title)!
+
+  it('nests a task under the one above, with its own subtasks, keeping its id', () => {
+    const b = byTitle(md, 'B')
+    const out = indentTask(md, FILE, b.id, 'in', cats, today)
+    expect(out.split('\n').slice(5, 9)).toEqual(['- [ ] A', '\t- [ ] B ~1h', '\t\t- [ ] B1', '- [ ] C'])
+    expect(byTitle(out, 'B')).toMatchObject({ id: b.id, parentId: byTitle(out, 'A').id })
+    expect(diffLines(md, out)).toEqual([6, 7])
+  })
+
+  it('un-nests after the parent subtree, so later siblings keep their parent', () => {
+    const two = ['## ETH', '- [ ] P', '\t- [ ] X', '\t- [ ] Y', '- [ ] Q'].join('\n')
+    const out = indentTask(two, FILE, byTitle(two, 'X').id, 'out', cats, today)
+    expect(out.split('\n')).toEqual(['## ETH', '- [ ] P', '\t- [ ] Y', '- [ ] X', '- [ ] Q'])
+    expect(byTitle(out, 'Y').parentId).toBe(byTitle(out, 'P').id)
+  })
+
+  it('refuses without a task above at the same level, or across sections', () => {
+    expect(() => indentTask(md, FILE, byTitle(md, 'A').id, 'in', cats, today)).toThrow()
+    expect(() => indentTask(md, FILE, byTitle(md, 'D').id, 'in', cats, today)).toThrow()
+    expect(() => indentTask(md, FILE, byTitle(md, 'A').id, 'out', cats, today)).toThrow()
+  })
+
+  it('adds a subtask at the end of the existing ones, in the file\'s indentation', () => {
+    const out = addSubtask(md, FILE, byTitle(md, 'B').id, 'B2 ~30m', cats, today)
+    expect(out.split('\n').slice(6, 10)).toEqual(['- [ ] B ~1h', '\t- [ ] B1', '\t- [ ] B2 ~30m', '- [ ] C'])
+    const out2 = addSubtask(md, FILE, byTitle(md, 'C').id, 'C1', cats, today)
+    expect(byTitle(out2, 'C1').parentId).toBe(byTitle(out2, 'C').id)
   })
 })
 

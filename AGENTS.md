@@ -16,7 +16,8 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
    - `05_Tasks/briefs/YYYY-MM-DD.md`: the daily brief.
    - `06_Prompts/daily-brief.md`: the brief prompt, written only from Settings.
 4. **Calendar safety:**
-   - Only planner-tagged events may be changed or deleted. macOS: `[planner:<id>]` in the notes, enforced inside the Swift helper too. Google: `extendedProperties.private.aiCenterPlanner`.
+   - Only planner-tagged events may be changed or deleted by the planner/Sync. macOS: `[planner:<id>]` in the notes, enforced inside the Swift helper too. Google: `extendedProperties.private.aiCenterPlanner`.
+   - **Exception, user-approved 2026-11-09: the user's own hand edits.** The event panel (edit title/time, delete with confirm) and dragging an event on the grid call `Controller.editEvent` / `deleteEvent` → provider `userUpdate` / `userRemove` → helper `user-update` / `user-delete` (one occurrence; refuses planner events and read-only calendars). Never call these from Sync, the planner or any AI path.
    - Never write to `protectedCalendars` (Birthdays, ETH Classes…, ETH Tests, Family).
    - Sync only after the user confirms the diff dialog.
    - The user's calendar edits win: a moved planner event becomes a pin, a deleted one is dismissed (`Controller.adoptCalendarEdits`).
@@ -87,7 +88,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 93 tests; must stay green
+npm test              # 97 tests; must stay green
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
@@ -111,6 +112,10 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Block panel checkboxes save immediately** (`BlockPanel.toggleTask`): the task is marked done/reopened, and once the block has started the log is written first (pins the block with its tasks), status done when all are checked, otherwise partial. Save/Update log is still used for time, note and remaining estimates.
 
 Both are committed on branch `ai-center-2026-11-09`, pushed to `git@github.com:glodimendes/ai-center-app.git`.
+
+**Installed 2026-11-09, committed and pushed:**
+- **Subtasks in the Tasks view**: hover buttons add a subtask, nest a task under the one above, or move it out; Tab / ⇧Tab while editing a title. `indentTask` / `addSubtask` in `vault/edits.ts` change only the moved lines and use the file's indentation (tabs). Verified in the dev app and by tests.
+- **Hand edits of calendar events** (see Hard rule 4): only typechecked and the helper compiled; **not tested against a real calendar** (dev has no calendar access). Test with the user in the packaged app on a throwaway event first.
 
 **Real vault content added this session:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 

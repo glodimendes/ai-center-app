@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { google, type calendar_v3 } from 'googleapis'
 import type { Auth } from 'googleapis'
 import type { CalEvent, CalendarInfo } from '@shared/types'
-import type { CalendarProvider } from './provider'
+import type { CalendarProvider, UserEventChange } from './provider'
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.calendarlist.readonly']
 export const PLANNER_TAG = 'aiCenterPlanner'
@@ -197,6 +197,30 @@ export class GoogleCalendar implements CalendarProvider {
 
   async remove(calendarId: string, eventId: string) {
     await this.assertOwned(calendarId, eventId)
+    await this.need().events.delete({ calendarId, eventId })
+  }
+
+  private async assertNotPlanner(calendarId: string, eventId: string) {
+    const res = await this.need().events.get({ calendarId, eventId })
+    if (res.data.extendedProperties?.private?.[PLANNER_TAG]) throw new Error('Planner events are changed through their block, not here.')
+  }
+
+  async userUpdate(calendarId: string, eventId: string, change: UserEventChange) {
+    await this.assertNotPlanner(calendarId, eventId)
+    await this.need().events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        ...(change.title !== undefined ? { summary: change.title } : {}),
+        ...(change.start ? { start: { dateTime: change.start, timeZone: TIME_ZONE } } : {}),
+        ...(change.end ? { end: { dateTime: change.end, timeZone: TIME_ZONE } } : {})
+      }
+    })
+    return eventId
+  }
+
+  async userRemove(calendarId: string, eventId: string) {
+    await this.assertNotPlanner(calendarId, eventId)
     await this.need().events.delete({ calendarId, eventId })
   }
 }

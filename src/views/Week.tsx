@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload } from 'lucide-re
 import { addDays, isoDate, isoWeek, parseDate, weekStart } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { gridItems, pinForTask, pinFromBlock } from '@/lib/plan'
+import { gridItems, moveEvent, pinForTask, pinFromBlock } from '@/lib/plan'
 import { TimeGrid } from '@/components/TimeGrid'
 import { BlockPanel } from '@/components/BlockPanel'
 import { BudgetBars } from '@/components/BudgetBars'
@@ -64,6 +64,7 @@ export function Week() {
           onDayClick={(d) => (setDay(d), go('today'))}
           onCreate={(start, end) => setDraft({ start, end })}
           onMove={async (id, st, en) => {
+            if (await moveEvent(s, id, st, en)) return
             const b = s.plan.blocks.find((x) => x.id === id)
             if (b) await act(api.pin(pinFromBlock(b, st, en)))
           }}
