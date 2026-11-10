@@ -1,6 +1,6 @@
 # Roadmap
 
-Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-09.
+Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-10.
 
 ## Open decisions (waiting for the user)
 
@@ -23,6 +23,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 ## Next (agreed or obvious)
 
 - **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
+- **Verify single-day sync live** (built and installed 2026-11-10, never run against the real calendar). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
 - **Lighter half-day rule.** The user's planning routine asks for one per week; the planner has no such rule yet (e.g. "no work after 13:00 on a chosen day").
 - **The user's Codex `daily-brief` automation** still runs alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
@@ -91,4 +92,5 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
 - **Block editing:** drop a task into a block, add or remove tasks in the panel, remove a block (Delete key) with Undo.
 - **Daily brief:** in-app, on first open per day, Claude Haiku read-only with Gmail; editable prompt in `06_Prompts/daily-brief.md`; Run daily brief button; TEMPORARY INBOX suggestions behind an Add click.
 - **Update context (⌘U):** Codex Luna (default) or Claude Haiku, with diff review and Keep/Undo.
+- **2026-11-10:** single-day sync — **Sync day** in Today's header syncs only the day on screen, through the same approval dialog (`buildSyncDiff(..., day?)` → `syncPreview(day?)` → `SyncDialog day`). The week's Sync still covers the whole window. Other days are never touched by a day sync. Unit-tested (104 tests) and checked in the dev app; not yet run against the real calendar.
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.

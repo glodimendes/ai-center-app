@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, RefreshCw } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -13,6 +13,7 @@ import { TaskRow } from '@/components/TaskRow'
 import { QuickAdd } from '@/components/QuickAdd'
 import { ReplanButton } from '@/components/ReplanButton'
 import { CalendarFilter } from '@/components/CalendarFilter'
+import { SyncDialog } from '@/components/SyncDialog'
 import { AddBlockButton, NewBlockDialog, type BlockDraft } from '@/components/NewBlock'
 import { Button, Dot, Header } from '@/components/ui'
 
@@ -21,6 +22,7 @@ export function Today() {
   const s = state!
   const [view, setView] = useTaskView()
   const [draft, setDraft] = useState<BlockDraft | null>(null)
+  const [sync, setSync] = useState(false)
   const filter = view.q
   const { items, allDay } = useMemo(() => gridItems(s, [day]), [s, day])
   const date = parseDate(day)
@@ -83,6 +85,14 @@ export function Today() {
         </Button>
         <Button onClick={() => setDay(isoDate(addDays(date, 1)))}>
           <ChevronRight size={14} />
+        </Button>
+        <Button
+          kind="primary"
+          onClick={() => setSync(true)}
+          disabled={!s.calendar.connected}
+          title={s.calendar.connected ? 'Review and push this day\'s blocks' : 'Connect your calendar in Settings'}
+        >
+          <CloudUpload size={13} /> Sync day
         </Button>
       </Header>
 
@@ -180,6 +190,7 @@ export function Today() {
         <BlockPanel />
       </div>
       {draft && <NewBlockDialog draft={draft} onClose={() => setDraft(null)} />}
+      {sync && <SyncDialog day={day} onClose={() => setSync(false)} />}
     </div>
   )
 }
