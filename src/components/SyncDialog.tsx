@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import type { SyncOp } from '@shared/types'
-import { fmtHM, minutesOfDay } from '@shared/time'
+import { fmtHM, minutesOfDay, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Button, Modal } from './ui'
 
+const dayLabel = (d: string) => parseDate(d).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })
+
 const when = (s: string, e: string) =>
   `${new Date(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtHM(minutesOfDay(new Date(s)))}–${fmtHM(minutesOfDay(new Date(e)))}`
 
-/** Shows exactly what will change in Google Calendar; nothing is sent until confirmed. */
-export function SyncDialog({ onClose }: { onClose: () => void }) {
+/**
+ * Shows exactly what will change in the calendar; nothing is sent until confirmed.
+ * With `day` set only that day's blocks are diffed, so other days stay untouched.
+ */
+export function SyncDialog({ onClose, day }: { onClose: () => void; day?: string }) {
   const toast = useStore((s) => s.toast)
   const [ops, setOps] = useState<SyncOp[] | null>(null)
   const [problems, setProblems] = useState<string[]>([])
@@ -20,7 +25,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.syncPreview().then(
+    api.syncPreview(day).then(
       (r) => {
         setOps(r.ops)
         setProblems(r.problems)
@@ -28,7 +33,7 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
       },
       (e) => setError(e.message)
     )
-  }, [])
+  }, [day])
 
   const apply = async () => {
     if (!ops) return
@@ -52,8 +57,9 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal onClose={onClose} width="max-w-2xl">
       <div className="p-5 border-b border-line">
-        <h2 className="text-[15px] font-semibold">Sync to calendar</h2>
+        <h2 className="text-[15px] font-semibold">{day ? `Sync ${dayLabel(day)}` : 'Sync to calendar'}</h2>
         <p className="text-[12px] text-muted mt-0.5">
+          {day ? 'Only this day is compared; blocks on other days stay as they are. ' : ''}
           Only events created by the planner are changed. Your own and Codex's events are never touched. Untick anything you don't want sent.
         </p>
       </div>
@@ -69,7 +75,9 @@ export function SyncDialog({ onClose }: { onClose: () => void }) {
             {p}
           </div>
         ))}
-        {ops && ops.length === 0 && <div className="text-muted text-[12.5px]">Everything is already in sync.</div>}
+        {ops && ops.length === 0 && (
+          <div className="text-muted text-[12.5px]">{day ? `${dayLabel(day)} is already in sync.` : 'Everything is already in sync.'}</div>
+        )}
         {[...byCal].map(([cal, idx]) => (
           <div key={cal} className="mb-4">
             <h3 className="text-[11px] uppercase tracking-wide text-faint mb-1.5">{cal}</h3>

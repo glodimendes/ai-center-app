@@ -1,5 +1,5 @@
 import type { Block, CalEvent, CalendarInfo, Preferences, SyncOp, Task } from '@shared/types'
-import { addDays, fmtDuration, startOfDay } from '@shared/time'
+import { addDays, fmtDuration, parseDate, startOfDay } from '@shared/time'
 
 const SYNCED_KINDS = new Set(['proposed', 'topup', 'pinned'])
 const same = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime()
@@ -15,6 +15,8 @@ export function blockDescription(block: Block, tasks: Map<string, Task>): string
 /**
  * Diff between the planner's blocks and the planner-tagged events in Google Calendar,
  * from the start of today to `syncDays` ahead. Untagged events never appear here.
+ * With `day` (YYYY-MM-DD) the window is that one local day, so only its blocks are
+ * touched and leftover planner events on other days are left alone.
  */
 export function buildSyncDiff(
   blocks: Block[],
@@ -22,10 +24,13 @@ export function buildSyncDiff(
   calendars: CalendarInfo[],
   prefs: Preferences,
   tasks: Task[],
-  now: Date
+  now: Date,
+  day?: string
 ): { ops: SyncOp[]; problems: string[] } {
-  const from = startOfDay(now).getTime()
-  const to = addDays(startOfDay(now), prefs.syncDays).getTime()
+  // parseDate, not new Date(day): a bare YYYY-MM-DD parses as UTC and would shift the window.
+  const first = day ? parseDate(day) : startOfDay(now)
+  const from = first.getTime()
+  const to = addDays(first, day ? 1 : prefs.syncDays).getTime()
   const inWindow = (s: string) => {
     const t = new Date(s).getTime()
     return t >= from && t < to

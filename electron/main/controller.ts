@@ -441,10 +441,10 @@ export class Controller implements Api {
     this.push()
   }
 
-  async syncPreview() {
+  async syncPreview(day?: string) {
     await this.refreshCalendar()
     const v = this.vault.state()
-    return buildSyncDiff(this.currentPlan().blocks, this.events, this.calendar.calendars, v.preferences, v.tasks, new Date())
+    return buildSyncDiff(this.currentPlan().blocks, this.events, this.calendar.calendars, v.preferences, v.tasks, new Date(), day)
   }
 
   async syncApply(ops: SyncOp[]) {

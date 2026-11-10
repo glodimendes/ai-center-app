@@ -99,13 +99,20 @@ npm run install-app   # build helper + package + copy to /Applications (real vau
 
 macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The calendar permission prompt needs the user's click: test calendar features in the packaged app with the user.
 
-## Status (2026-11-09)
+## Status (2026-11-10)
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
+**Added 2026-11-10 — single-day sync (installed, NOT yet watched live):**
+- **What:** Today's header has a **Sync day** button that syncs only the day the view is showing. The week's **Sync to calendar** is unchanged and still covers the whole `syncDays` window.
+- **How:** one optional argument threaded through, no parallel code path — `buildSyncDiff(..., day?)` narrows the window to that one local day, `Controller.syncPreview(day?)` passes it, `SyncDialog` takes an optional `day` prop and titles itself with it. `syncApply` is untouched: the ops already carry everything, so there is deliberately no day-specific apply.
+- **Semantics:** a single-day diff only creates/moves/deletes planner events **inside that day**. Leftover planner events on other days are intentionally left alone, so syncing one day never cleans up another.
+- **Watch out:** the window must be built with `parseDate(day)` from `shared/time.ts`, never `new Date(day)` — a bare `YYYY-MM-DD` parses as **UTC**, which in CET shifted the window to 01:00 and silently dropped blocks between midnight and 01:00. `tests/sync.test.ts` → "covers the whole local day, midnight included" fails if anyone reintroduces this.
+- **Verified:** 7 new unit tests (104 total) and live in the dev app over CDP — day-scoped previews are a strict subset of the full window (full 29 / Nov 10 → 6 / Nov 11 → 4 / unplanned day → 0), and the dialog renders "Sync Tuesday, Nov 10". The dev app has no calendar access, so **the real write path for a single day has not been exercised yet**: confirm on the installed app that syncing one day leaves the other days' planner events in place.
+
 **Verified live with the user (real calendar):** Sync dry-run, syncing one block to Study Schedule, moving it in Calendar.app (became a pin). Deleting it exposed a bug (a moved-then-deleted block stayed as a pin), fixed and unit-tested; re-check it live once. Not yet confirmed: that the user's own and Codex's events stay untouched across a full Sync.
 
-**Verified in the dev app / by tests (97 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
+**Verified in the dev app / by tests (104 tests):** everything in README, including (2026-11-09) block resize and drawing, kept-free slots, 24 h grid, Re-plan options + Shuffle, Alerts page, Today sort/filter, repeating tasks, postpone (task and block), check-off tracking blocks, training as ordinary tasks (whole sessions, before breaks, outside the daily cap), reserved hours before other tasks, the leftover pass for 0-hour days, no-area blocks, brief limited to visible calendars.
 
 **Installed later on 2026-11-09 (verified in the dev app, not yet watched live in the installed app):**
 - **Four priority levels**: `!urgent` added above `!high` (score value 2). The flag chip in `TaskRow` cycles low (↓) → medium (outline flag, hover only) → high (↑) → urgent (red flag) and updates at once in the UI, so quick clicks aren't lost while the write is in flight.
@@ -115,8 +122,8 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Subtasks in the Tasks view**: hover buttons add a subtask, nest a task under the one above, or move it out; Tab / ⇧Tab while editing a title. `indentTask` / `addSubtask` in `vault/edits.ts` change only the moved lines and use the file's indentation (tabs). Verified in the dev app and by tests.
 - **Hand edits of calendar events** (see Hard rule 4): the user confirmed editing works in the installed app with the real calendar (2026-11-09).
 
-**Git:** everything above is committed and pushed to `git@github.com:glodimendes/ai-center-app.git`; `main` and `ai-center-2026-11-09` both point at the same commit. Start new work on a new branch from `main`.
+**Git:** everything up to 2026-11-09 is committed and pushed to `git@github.com:glodimendes/ai-center-app.git`. The 2026-11-10 single-day sync is **committed on `main` but not pushed** — the user chose to hold the push until they have run Sync day against the real calendar. Push once they confirm; if it turns out wrong, it is the tip commit on `main` and nothing downstream depends on it.
 
-**Real vault content added this session:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
+**Real vault content added 2026-11-09:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 
 **Open user decisions:** see ROADMAP "Open decisions". Deferred redesign: ROADMAP "Later".

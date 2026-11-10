@@ -94,3 +94,50 @@ describe('buildSyncDiff', () => {
     expect(ops).toEqual([])
   })
 })
+
+describe('buildSyncDiff for a single day', () => {
+  const dayDiff = (day: string, blocks: Block[], events: CalEvent[] = []) =>
+    buildSyncDiff(blocks, events, calendars, DEFAULT_PREFERENCES, [], now, day)
+
+  it('syncs only the blocks of that day', () => {
+    const { ops } = dayDiff('2026-11-10', [
+      block('today', '2026-11-09T09:00:00', '2026-11-09T10:00:00'),
+      block('target', '2026-11-10T09:00:00', '2026-11-10T10:00:00'),
+      block('after', '2026-11-11T09:00:00', '2026-11-11T10:00:00')
+    ])
+    expect(ops).toMatchObject([{ op: 'create', blockId: 'target' }])
+  })
+
+  // A bare YYYY-MM-DD parsed as UTC shifts the window by the local offset, which drops or
+  // steals the blocks either side of midnight; these three pin the window to the local day.
+  it('covers the whole local day, midnight included', () => {
+    const { ops } = dayDiff('2026-11-10', [block('early', '2026-11-10T00:30:00', '2026-11-10T01:30:00')])
+    expect(ops).toMatchObject([{ op: 'create', blockId: 'early' }])
+  })
+
+  it('leaves the late evening before it alone', () => {
+    const { ops } = dayDiff('2026-11-10', [block('prev', '2026-11-09T23:00:00', '2026-11-09T23:30:00')])
+    expect(ops).toEqual([])
+  })
+
+  it('leaves the small hours after it alone', () => {
+    const { ops } = dayDiff('2026-11-10', [block('next', '2026-11-11T00:30:00', '2026-11-11T01:00:00')])
+    expect(ops).toEqual([])
+  })
+
+  it('removes a leftover planner event on that day', () => {
+    const { ops } = dayDiff('2026-11-10', [], [tagged('gone', '2026-11-10T14:00:00', '2026-11-10T15:00:00')])
+    expect(ops).toMatchObject([{ op: 'delete', blockId: 'gone' }])
+  })
+
+  it('keeps leftover planner events on other days', () => {
+    const { ops } = dayDiff('2026-11-10', [], [tagged('other', '2026-11-11T14:00:00', '2026-11-11T15:00:00')])
+    expect(ops).toEqual([])
+  })
+
+  it('still ignores untagged events', () => {
+    const own = { ...tagged('x', '2026-11-10T09:00:00', '2026-11-10T10:00:00'), plannerBlockId: undefined, title: 'Dentist' }
+    const { ops } = dayDiff('2026-11-10', [], [own])
+    expect(ops).toEqual([])
+  })
+})

@@ -114,7 +114,8 @@ export interface Api {
   connectCalendar(): Promise<void>
   disconnectCalendar(): Promise<void>
   refreshCalendar(): Promise<void>
-  syncPreview(): Promise<{ ops: SyncOp[]; problems: string[] }>
+  /** With `day` (YYYY-MM-DD) the diff covers that one day only; otherwise the whole syncDays window. */
+  syncPreview(day?: string): Promise<{ ops: SyncOp[]; problems: string[] }>
   syncApply(ops: SyncOp[]): Promise<{ done: number; failed: string[] }>
   closeCapture(): Promise<void>
   // context updates (agent edits the vault; user keeps or undoes)
