@@ -47,6 +47,9 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 
 ## Ideas (proposed, not approved)
 
+- **Repeat counted from the completion date.** Today every rule is a *catch-up* repeater (org-mode `++`): the next due date is stepped from the current due date until it is past today, so the rhythm is anchored to the calendar. Org-mode's `.+` and Obsidian Tasks' `when done` instead count from when you actually did it, which suits "change the batteries" or a gym session where the *gap* matters more than the slot. Org's rationale for it: "if you forgot to call your father for 3 weeks, it does not make sense to call him 3 times in a single day to make up for it." Would need a token (e.g. `repeat:2w!`), a `nextOccurrence` branch and a RepeatPicker control. Offered to the user 2026-11-10; they chose not to do it then.
+- **An end to a repeat** (`until:` / a count). Series currently run forever; "delete the series" from the Tasks view is the only way to stop one.
+- **Skip history.** A skip leaves no trace, so a task skipped every week looks identical to one being done on time. A counter or a log line would surface repeats that are not working — worth it only if the user wants the Review screen to show it.
 - "No estimate" filter in Today, to add `~` estimates quickly.
 - Skip the auto daily brief in dev runs.
 - Docs editor: keep the file's bullet style.
@@ -92,5 +95,6 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
 - **Block editing:** drop a task into a block, add or remove tasks in the panel, remove a block (Delete key) with Undo.
 - **Daily brief:** in-app, on first open per day, Claude Haiku read-only with Gmail; editable prompt in `06_Prompts/daily-brief.md`; Run daily brief button; TEMPORARY INBOX suggestions behind an Add click.
 - **Update context (⌘U):** Codex Luna (default) or Claude Haiku, with diff review and Keep/Undo.
+- **2026-11-10:** skip one occurrence of a repeating task — Today's trash moves a repeating task's `due:` on (`Controller.skipOccurrence`) instead of deleting the line; the Tasks view still deletes the series. Prior art checked: org-mode repeaters (`+` / `++` / `.+`), Obsidian Tasks (`every week` vs `when done`), iCalendar `EXDATE` / `RECURRENCE-ID`.
 - **2026-11-10:** single-day sync — **Sync day** in Today's header syncs only the day on screen, through the same approval dialog (`buildSyncDiff(..., day?)` → `syncPreview(day?)` → `SyncDialog day`). The week's Sync still covers the whole window. Other days are never touched by a day sync. Unit-tested (104 tests) and checked in the dev app; not yet run against the real calendar.
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.

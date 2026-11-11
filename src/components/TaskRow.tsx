@@ -13,7 +13,7 @@ const PRI_STYLE: Record<Priority, string> = { urgent: 'text-danger bg-danger/10'
 // The flag cycles upward and wraps: low → medium → high → urgent → low.
 const PRI_NEXT: Record<Priority, Priority> = { low: 'medium', medium: 'high', high: 'urgent', urgent: 'low' }
 
-export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean; onAddSubtask?: () => void }) {
+export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask, skipRepeats }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean; onAddSubtask?: () => void; skipRepeats?: boolean }) {
   const state = useStore((s) => s.state)!
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
@@ -38,6 +38,19 @@ export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask 
   // Nesting needs a task above at the same level (same parent, same section); the first one has none.
   const canNest = state.vault.tasks.some((t) => t.parentId === task.parentId && t.line < task.line && t.section.join('>') === task.section.join('>'))
   const nest = (dir: 'in' | 'out') => act(api.indentTask(task.id, dir), dir === 'in' ? 'Now a subtask of the task above' : 'Moved out one level')
+
+  // Today works on the day in view, so there the trash drops this occurrence of a repeating task
+  // and leaves the series; the Tasks view edits the task itself and still deletes the whole line.
+  const skipsOccurrence = Boolean(skipRepeats && task.repeat && !task.done)
+  const skipOne = async () => {
+    const prev = task.due ?? null
+    const next = await act(api.skipOccurrence(task.id))
+    if (!next) return
+    useStore.getState().toast(`Skipped to ${relDay(next)}; the repeat stays`, 'info', {
+      label: 'Undo',
+      run: () => void act(api.patchTask(task.id, { due: prev }), 'Occurrence back')
+    })
+  }
 
   const saveTitle = () => {
     setEditing(false)
@@ -291,7 +304,11 @@ export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask 
         </>
       )}
 
-      <button onClick={() => act(api.deleteTask(task.id), 'Task deleted (recoverable from git)')} className="h-5 px-1 rounded text-faint hover:text-danger hidden group-hover:block" title="Delete">
+      <button
+        onClick={() => (skipsOccurrence ? void skipOne() : act(api.deleteTask(task.id), 'Task deleted (recoverable from git)'))}
+        className="h-5 px-1 rounded text-faint hover:text-danger hidden group-hover:block"
+        title={skipsOccurrence ? `Skip this one (${describeRepeat(task.repeat!).toLowerCase()} — the series stays)` : 'Delete'}
+      >
         <Trash2 size={11} />
       </button>
     </div>

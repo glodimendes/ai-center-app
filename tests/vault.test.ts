@@ -232,6 +232,36 @@ describe('repeating tasks', () => {
     expect(patchTask(text, FILE, t.id, { done: true }, cats, mon).split('\n')[2]).toBe('- [ ] Review budget due:2026-11-16 repeat:weekly')
   })
 
+  // Today's trash skips one occurrence instead of deleting the line (Controller.skipOccurrence).
+  it('skipping one occurrence moves the due date on and keeps the series', () => {
+    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
+    const before = parseTasks(text, FILE, cats, mon).tasks[0]
+    const next = nextOccurrence(before.repeat!, before.due, mon)!
+    const out = patchTask(text, FILE, before.id, { due: next, postponed: null }, cats, mon)
+    expect(out.split('\n')[2]).toBe('- [ ] Treino Push A due:2026-11-12 repeat:mon,thu')
+    // Same number of lines: nothing deleted, no second copy of the task.
+    expect(out.split('\n').length).toBe(text.split('\n').length)
+    const after = parseTasks(out, FILE, cats, mon).tasks
+    expect(after).toHaveLength(2)
+    expect(after[0]).toMatchObject({ done: false, due: '2026-11-12', repeat: 'mon,thu' })
+  })
+
+  it('a skip is not a completion', () => {
+    const text = '## Personal\n\n- [ ] Weekly review due:2026-11-09 repeat:weekly\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    const out = patchTask(text, FILE, t.id, { due: '2026-11-16', postponed: null }, cats, mon)
+    expect(out).not.toContain('[x]')
+  })
+
+  // Why Today must not call deleteTask on a repeating task: it takes the whole series with it.
+  it('deleting a repeating task removes the series', () => {
+    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    const out = deleteTask(text, FILE, t.id, cats, mon)
+    expect(out).not.toContain('Treino Push A')
+    expect(parseTasks(out, FILE, cats, mon).tasks).toHaveLength(1)
+  })
+
   it('reopening a repeating task adds nothing', () => {
     const text = '## Personal\n\n- [x] Water plants repeat:daily\n'
     const t = parseTasks(text, FILE, cats, mon).tasks[0]

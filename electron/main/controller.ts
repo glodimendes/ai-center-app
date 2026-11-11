@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Api, AppState, PlanOption, PlanVariant } from '@shared/api'
 import type { CalEvent, CalendarStatus, ContextChange, ContextResult, Plan, Settings, SyncOp, VaultState } from '@shared/types'
 import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
+import { nextOccurrence } from '@shared/repeat'
 import { VaultService } from './vault/service'
 import { GoogleCalendar } from './calendar/google'
 import { MacCalendar } from './calendar/macos'
@@ -268,6 +269,21 @@ export class Controller implements Api {
       const pin = { blockId, category: task.category, title, start, end: localISO(end), taskIds }
       this.vault.logBlock({ blockId, date: isoDate(now), category: task.category, title, start, plannedMin: minutes, actualMin: minutes, status: 'done', taskIds }, pin)
     })
+  }
+
+  /**
+   * Skip one occurrence of a repeating task. The line stays and keeps its `repeat:` rule; only
+   * `due:` moves to the next occurrence, so the series survives. Nothing is marked done, so a
+   * skipped occurrence never counts as completed work.
+   */
+  async skipOccurrence(taskId: string) {
+    const task = this.vault.state().tasks.find((t) => t.id === taskId)
+    if (!task) throw new Error('That task changed or was removed. Try again.')
+    if (!task.repeat) throw new Error('That task does not repeat, so there is no occurrence to skip.')
+    const next = nextOccurrence(task.repeat, task.due, new Date())
+    if (!next) throw new Error(`Can't read the repeat rule "${task.repeat}".`)
+    this.mutate(() => this.vault.patchTask(taskId, { due: next, postponed: null }, `skip one "${task.title}"`))
+    return next
   }
 
   /** Postpone every open task in a block (null: stop postponing them). */

@@ -166,12 +166,12 @@ export function Today() {
             <QuickAdd />
             {todays.length > 0 && <h3 className="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-faint">On this day</h3>}
             {todays.map((t) => (
-              <TaskRow key={t.id} task={t} draggable showSection />
+              <TaskRow key={t.id} task={t} draggable showSection skipRepeats />
             ))}
             <h3 className="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-faint">{todays.length ? 'Other tasks' : 'Tasks'} · drag onto the timeline</h3>
             {!ordered.length && <div className="px-2 py-2 text-[12px] text-faint">No tasks match.</div>}
             {later.map((t) => (
-              <TaskRow key={t.id} task={t} draggable showSection />
+              <TaskRow key={t.id} task={t} draggable showSection skipRepeats />
             ))}
           </div>
         </section>
