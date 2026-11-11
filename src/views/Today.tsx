@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, Moon, RefreshCw } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -14,6 +14,7 @@ import { QuickAdd } from '@/components/QuickAdd'
 import { ReplanButton } from '@/components/ReplanButton'
 import { CalendarFilter } from '@/components/CalendarFilter'
 import { SyncDialog } from '@/components/SyncDialog'
+import { Shutdown } from '@/components/Shutdown'
 import { AddBlockButton, NewBlockDialog, type BlockDraft } from '@/components/NewBlock'
 import { Button, Dot, Header, useEscape } from '@/components/ui'
 
@@ -23,6 +24,7 @@ export function Today() {
   const [view, setView] = useTaskView()
   const [draft, setDraft] = useState<BlockDraft | null>(null)
   const [sync, setSync] = useState(false)
+  const [wrapUp, setWrapUp] = useState(false)
   // Narrow windows: the task list is a drawer over the timeline, hidden while a task is dragged out of it.
   const [listOpen, setListOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -76,6 +78,11 @@ export function Today() {
         {alertCount > 0 && (
           <Button kind="ghost" onClick={() => go('alerts')} className="text-warn" title="Open Alerts">
             <AlertTriangle size={13} /> {alertCount}
+          </Button>
+        )}
+        {isToday && (
+          <Button kind="ghost" onClick={() => setWrapUp(true)} label="Wrap up" title="Wrap up the day: log blocks, deal with what's left, see tomorrow">
+            <Moon size={13} />
           </Button>
         )}
         <AddBlockButton day={day} onOpen={setDraft} />
@@ -209,6 +216,7 @@ export function Today() {
       </div>
       {draft && <NewBlockDialog draft={draft} onClose={() => setDraft(null)} />}
       {sync && <SyncDialog day={day} onClose={() => setSync(false)} />}
+      {wrapUp && <Shutdown onClose={() => setWrapUp(false)} />}
     </div>
   )
 }
