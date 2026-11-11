@@ -115,6 +115,25 @@ export interface StrategyPref {
   spreadDays: number
 }
 
+/**
+ * A rule for some days, set in Settings: keep areas out of part of the day, or cap them.
+ * E.g. a lighter half-day: one weekday per week (planner picks the lightest), no work after 13:00.
+ */
+export interface DayRule {
+  id: string
+  label: string
+  enabled: boolean
+  /** 'weekdays': every listed weekday. 'pick': one of them per week, the one with the least calendar time (changeable per week in the weekly review). */
+  when: 'weekdays' | 'pick'
+  weekdays: Weekday[]
+  /** Areas it applies to; empty = every work area (training and No area excluded). */
+  areas: string[]
+  /** 0 = none of those areas between `from` and `to` (whole day when both are empty); above 0 = at most this many minutes of them that day. */
+  maxMinutes: number
+  from?: string
+  to?: string
+}
+
 export interface Preferences {
   workingHours: Record<Weekday, [string, string] | null>
   slotMinutes: number
@@ -145,6 +164,8 @@ export interface Preferences {
   /** Never written to, even after a confirmed sync (prefix match, e.g. "ETH Classes"). Still count as busy. */
   protectedCalendars: string[]
   categories: CategoryPref[]
+  /** Rules for some days (lighter half-day, no evening work, …). */
+  dayRules: DayRule[]
   /** The training area: a gap around its blocks, and it doesn't count toward the daily work cap. */
   training: {
     category: string
@@ -223,6 +244,8 @@ export interface Plan {
   warnings: PlanWarning[]
   /** taskId -> end of its last scheduled chunk */
   taskFinish: Record<string, string>
+  /** Days a day rule applies to in the planning horizon (for the Week view). */
+  ruleDays?: { day: string; ruleId: string; label: string; picked?: boolean }[]
 }
 
 export type LogStatus = 'done' | 'partial' | 'skipped'
@@ -261,10 +284,16 @@ export interface WeekOverrides {
   exclusions?: { blockId: string; taskId: string }[]
   /** Time left empty after the user removed a block: the planner places nothing new there until Re-plan. */
   holds?: { start: string; end: string }[]
+  /** Day picked for a "pick one day per week" rule this week: ruleId → YYYY-MM-DD. */
+  dayPicks?: Record<string, string>
+  /** This week's hours per area per weekday, replacing the Settings grid for this week only. */
+  grid?: Record<string, Partial<Record<Weekday, number>>>
 }
 
 export interface WeekData {
   week: string
+  /** The week's focus, written in the weekly review. */
+  notes?: string
   log: LogEntry[]
   pins: Pin[]
   overrides?: WeekOverrides

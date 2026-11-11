@@ -11,7 +11,8 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
 1. **Never write to the real vault while developing.** `npm run dev` and `npx electron .` use `.dev-vault/` (a scratch copy with its own git, gitignored) and their own app data (`ai-center-planner-dev/`); both are forced in code, so a dev run can't open the real vault even if a settings file says so. Only the packaged app in `/Applications/AI Center.app` uses the real vault. The user runs it daily: never start a second instance against the real vault. Dev runs never auto-run the daily brief (`app.isPackaged` check in `maybeRunBrief`); the "Run daily brief" button still does, against `.dev-vault`.
 2. **Vault edits are line-local.** Re-parse the file, find the target by stable id, and change only that line (`electron/main/vault/edits.ts`). Never re-serialize a vault file the app doesn't own: Obsidian, Claude, Codex and a meeting-review automation edit the same files.
 3. **Files the app owns** (may rewrite whole):
-   - `05_Tasks/weekly/YYYY-Www.md`: log, pins, overrides.
+   - `05_Tasks/weekly/YYYY-Www.md`: log, pins, overrides, the week's focus notes, its own grid hours and day-rule picks.
+   - `05_Tasks/archive/done-YYYY.md`: checked tasks moved out by the weekly review; the app only appends.
    - `05_Tasks/planner/preferences.md`: frontmatter only; the body is kept.
    - `05_Tasks/briefs/YYYY-MM-DD.md`: the daily brief.
    - `06_Prompts/daily-brief.md`: the brief prompt, written only from Settings.

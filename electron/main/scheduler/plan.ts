@@ -1,5 +1,5 @@
-import type { Block, CalEvent, CategoryPref, Plan, PlanWarning, Preferences, Task, WeekData } from '@shared/types'
-import { WEEKDAYS, addDays, atMinutes, isoDate, isoWeek, localISO, startOfDay, toHM } from '@shared/time'
+import type { Block, CalEvent, CategoryPref, DayRule, Plan, PlanWarning, Preferences, Task, WeekData, Weekday } from '@shared/types'
+import { WEEKDAYS, addDays, atMinutes, isoDate, isoWeek, localISO, startOfDay, toHM, weekStart } from '@shared/time'
 import { earliestFor } from '@shared/repeat'
 import { NO_AREA, noAreaCategory } from '@shared/categories'
 
@@ -305,13 +305,57 @@ export function plan(input: PlanInput): Plan {
     return `${isoDate(day)}:${cat}:${n}`
   }
 
+  // --- day rules (Settings → Day rules) ---------------------------------------------
+  // They shape where the planner may put new time; your own calendar events and pins are untouched.
+  const calendarLoad = (date: Date) => {
+    const s = date.getTime()
+    const e = s + DAY
+    return events
+      .filter((x) => !x.allDay && !isFree(x) && !x.plannerBlockId)
+      .reduce((sum, x) => sum + Math.max(0, Math.min(new Date(x.end).getTime(), e) - Math.max(new Date(x.start).getTime(), s)) / MIN, 0)
+  }
+  const picks = new Map<string, string | null>()
+  /** "One day per week": the week's pick, else the candidate weekday with the least calendar time (later day on a tie). */
+  const pickedDay = (r: DayRule, day: Date) => {
+    const week = isoWeek(day)
+    const key = `${r.id}\n${week}`
+    if (!picks.has(key)) {
+      const chosen = weeks[week]?.overrides?.dayPicks?.[r.id]
+      if (chosen) picks.set(key, chosen)
+      else {
+        const start = weekStart(day)
+        const candidates = Array.from({ length: 7 }, (_, i) => addDays(start, i)).filter((d) => r.weekdays.includes(WEEKDAYS[d.getDay()] as Weekday) && prefs.workingHours[WEEKDAYS[d.getDay()] as Weekday])
+        const best = candidates.reduce<{ d: Date; load: number } | null>((b, d) => {
+          const load = calendarLoad(d)
+          return !b || load <= b.load ? { d, load } : b
+        }, null)
+        picks.set(key, best ? isoDate(best.d) : null)
+      }
+    }
+    return picks.get(key)
+  }
+  const rulesOn = (day: Date) =>
+    (prefs.dayRules ?? []).filter((r) => r.enabled && (r.when === 'pick' ? pickedDay(r, day) === isoDate(day) : r.weekdays.includes(WEEKDAYS[day.getDay()] as Weekday)))
+  const ruleAffects = (r: DayRule, key: string) => (r.areas.length ? r.areas.includes(key) : key !== tc.key && key !== NO_AREA && key !== 'break')
+  /** Time this area must stay out of on this day. */
+  const ruleSpans = (c: CategoryPref, day: Date) =>
+    rulesOn(day)
+      .filter((r) => r.maxMinutes <= 0 && ruleAffects(r, c.key))
+      .map((r) => ({ s: r.from ? atMinutes(day, toHM(r.from)).getTime() : day.getTime(), e: r.to ? atMinutes(day, toHM(r.to)).getTime() : day.getTime() + DAY }))
+  /** Minutes this area may still get on this day under capping rules (Infinity when none applies). */
+  const ruleRoom = (c: CategoryPref, day: Date) =>
+    rulesOn(day)
+      .filter((r) => r.maxMinutes > 0 && ruleAffects(r, c.key))
+      .reduce((room, r) => Math.min(room, r.maxMinutes - minutesOn(day, (b) => WORK_KINDS.has(b.kind) && ruleAffects(r, b.category))), Infinity)
+
   /**
    * Grid hours for an area on a day, or null when the grid doesn't limit it (grid off, or training).
    * An area without a row (e.g. Other) has no hours set aside: 0, so it only gets leftover time.
    */
   const quota = (c: CategoryPref, day: Date): number | null => {
     if (!prefs.allocation.enabled || c.key === tc.key) return null
-    const row = prefs.allocation.hours[c.key]
+    // A week can carry its own grid (set in the weekly review); otherwise the one from Settings.
+    const row = weeks[isoWeek(day)]?.overrides?.grid?.[c.key] ?? prefs.allocation.hours[c.key]
     if (!row) return 0
     return (row[WEEKDAYS[day.getDay()] as keyof typeof row] ?? 0) * 60
   }
@@ -329,6 +373,7 @@ export function plan(input: PlanInput): Plan {
     const q = quota(c, day)
     // Leftover pass: only days with no hours set aside for the area (checked by the caller), no grid limit.
     if (q !== null && !guarded && !leftover) room = Math.min(room, q - areaMinutes(c, day))
+    room = Math.min(room, ruleRoom(c, day))
     return Math.max(0, room)
   }
 
@@ -342,7 +387,9 @@ export function plan(input: PlanInput): Plan {
       if (len >= prefs.maxBlockMinutes) continue
       const pad = padFor(c.key)
       const nextBusy = busy.filter((x) => x.s >= b.e && !(x.s === b.s && x.e === b.e)).reduce((m, x) => Math.min(m, x.s - Math.max(x.pad, pad)), win.e)
-      const ext = Math.floor(Math.min((Math.min(nextBusy, win.e) - b.e) / MIN, prefs.maxBlockMinutes - len, want) / prefs.slotMinutes) * prefs.slotMinutes
+      // A day rule's span stops growth at its start (and a block ending inside one can't grow).
+      const ruleStop = ruleSpans(c, day).filter((sp) => sp.e > b.e).reduce((m, sp) => Math.min(m, sp.s), Infinity)
+      const ext = Math.floor(Math.min((Math.min(nextBusy, win.e, ruleStop) - b.e) / MIN, prefs.maxBlockMinutes - len, want) / prefs.slotMinutes) * prefs.slotMinutes
       if (ext <= 0) continue
       const span = busy.find((x) => x.s === b.s && x.e === b.e)
       b.e += ext * MIN
@@ -361,7 +408,10 @@ export function plan(input: PlanInput): Plan {
     const minBlock = c.minBlockMinutes ?? prefs.minChunkMinutes
     for (const win of [...(c.preferredWindows ?? []).map((w) => intersect(hard, w, day)), hard]) {
       if (!win) continue
-      for (const f of freeIn(win, padFor(c.key))) {
+      const free = subtract(freeIn(win, padFor(c.key)), ruleSpans(c, day))
+        .map((sp) => ({ s: Math.ceil(sp.s / slot) * slot, e: Math.floor(sp.e / slot) * slot }))
+        .filter((sp) => sp.e > sp.s)
+      for (const f of free) {
         const fit = Math.floor(Math.min((f.e - f.s) / MIN, prefs.maxBlockMinutes) / prefs.slotMinutes) * prefs.slotMinutes
         const len = Math.min(fit, Math.max(want, minBlock))
         if (len < Math.max(minBlock, need)) continue
@@ -590,6 +640,7 @@ export function plan(input: PlanInput): Plan {
     fullPlannedAt: input.fullPlannedAt ?? now.toISOString(),
     blocks: out.sort((a, b) => a.s - b.s).map(({ s: _s, e: _e, free: _f, anchored: _a, frozen: _z, ...b }) => b),
     warnings,
-    taskFinish: Object.fromEntries(Object.entries(taskFinish).map(([k, v]) => [k, localISO(new Date(v))]))
+    taskFinish: Object.fromEntries(Object.entries(taskFinish).map(([k, v]) => [k, localISO(new Date(v))])),
+    ruleDays: days.flatMap((d) => rulesOn(d).map((r) => ({ day: isoDate(d), ruleId: r.id, label: r.label, ...(r.when === 'pick' ? { picked: true } : {}) })))
   }
 }

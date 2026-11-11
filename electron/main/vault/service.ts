@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
-import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides } from '@shared/types'
-import { isoWeek } from '@shared/time'
+import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides, Weekday } from '@shared/types'
+import { isoDate, isoWeek } from '@shared/time'
 import { parseInbox, parseTasks } from './parser'
-import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, reorderTask, stampLastUpdated } from './edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, reorderTask, stampLastUpdated, takeDone } from './edits'
 import { DEFAULT_PREFERENCES, PREFERENCES_FILE, parsePreferences, serializePreferences } from './preferences'
 import { WEEKLY_DIR, parseWeekly, serializeWeekly, weeklyFile } from './weekly'
 import { VaultGit } from './git'
@@ -13,6 +13,7 @@ import { VaultGit } from './git'
 export const TODOS_FILE = '05_Tasks/daily-todos.md'
 export const INBOX_FILE = '05_Tasks/braindump-inbox.md'
 export const BRIEF_PROMPT_FILE = '06_Prompts/daily-brief.md'
+export const archiveFile = (year: string) => `05_Tasks/archive/done-${year}.md`
 
 const DOC_GROUPS: [string, string][] = [
   ['04_Context_Docs', 'Context'],
@@ -281,6 +282,46 @@ export class VaultService {
   }
 
   /** Re-plan: held time that hasn't passed yet becomes plannable again. */
+  /** "One day per week" rule: this week's day (null: let the planner pick again). */
+  setDayPick(week: string, ruleId: string, day: string | null) {
+    this.updateWeek(
+      week,
+      (w) => {
+        const picks = { ...(w.overrides?.dayPicks ?? {}) }
+        if (day) picks[ruleId] = day
+        else delete picks[ruleId]
+        w.overrides = { ...w.overrides, dayPicks: picks }
+      },
+      day ? `${ruleId} on ${day}` : `${ruleId}: planner picks the day`
+    )
+  }
+
+  /** This week's own grid hours (null: back to the grid from Settings). */
+  setWeekGrid(week: string, grid: Record<string, Partial<Record<Weekday, number>>> | null) {
+    this.updateWeek(week, (w) => (w.overrides = { ...w.overrides, grid: grid ?? undefined }), grid ? `hours for ${week}` : `${week} uses the usual hours`)
+  }
+
+  setWeekNotes(week: string, notes: string) {
+    this.updateWeek(week, (w) => (w.notes = notes.trim() || undefined), `focus for ${week}`)
+  }
+
+  /** Moves checked tasks from the todo file to this year's archive file. Returns how many tasks moved. */
+  archiveDone(now: Date): number {
+    const text = this.read(TODOS_FILE)
+    if (text === null) throw new Error(`${TODOS_FILE} not found in the vault.`)
+    const { text: rest, taken } = takeDone(text, TODOS_FILE, this.preferences.categories, now)
+    if (!taken.length) return 0
+    const rel = archiveFile(String(now.getFullYear()))
+    const archive = this.read(rel) ?? `# Done tasks ${now.getFullYear()}\n\nChecked tasks moved out of \`${TODOS_FILE}\` by the AI Center app in the weekly review. The app only appends here.\n`
+    const bySection = new Map<string, string[]>()
+    for (const t of taken) bySection.set(t.section.join(' › ') || 'No heading', [...(bySection.get(t.section.join(' › ') || 'No heading') ?? []), ...t.lines])
+    const block = [`## ${isoDate(now)} (${isoWeek(now)})`, '', ...[...bySection].flatMap(([sec, lines]) => [`### ${sec}`, ...lines, ''])].join('\n')
+    const count = taken.reduce((n, t) => n + t.lines.filter((l) => /^\s*[-*] \[x\]/i.test(l)).length, 0)
+    this.write(rel, `${archive.trimEnd()}\n\n${block}`, `archive ${count} done task${count === 1 ? '' : 's'}`)
+    this.write(TODOS_FILE, rest, `archive ${count} done task${count === 1 ? '' : 's'}`)
+    return count
+  }
+
   clearHolds(now: Date) {
     for (const [week, data] of Object.entries(this.weeks())) {
       if (!data.overrides?.holds?.some((h) => new Date(h.end) > now)) continue

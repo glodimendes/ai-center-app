@@ -68,7 +68,7 @@ export function Today() {
     <div className="flex-1 min-h-0 flex flex-col">
       <Header
         title={isToday ? 'Today' : date.toLocaleDateString(undefined, { weekday: 'long' })}
-        sub={date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+        sub={[date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), ...(s.plan.ruleDays ?? []).filter((r) => r.day === day).map((r) => r.label)].join(' · ')}
       >
         <Button kind={listOpen ? 'default' : 'ghost'} onClick={() => setListOpen(!listOpen)} className="@3xl:hidden" title="Show the task list">
           <ListChecks size={14} />

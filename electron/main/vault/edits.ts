@@ -1,4 +1,4 @@
-import type { CategoryPref, TaskPatch } from '@shared/types'
+import type { CategoryPref, Task, TaskPatch } from '@shared/types'
 import { HEADING_RE, TASK_RE, parseInbox, parseTasks, splitLines } from './parser'
 import { nextOccurrence } from '@shared/repeat'
 import { editTokens, isoDate } from './tokens'
@@ -98,6 +98,27 @@ function subtreeEnd(lines: string[], line: number, indent: number): number {
     else break
   }
   return end
+}
+
+/**
+ * Takes checked tasks out of the todo file (weekly review "tidy"): each done task whose subtasks are
+ * all done too, with its subtree. A done subtask under an open parent goes on its own. Only those
+ * lines change; they come back grouped by heading, de-indented, for the archive.
+ */
+export function takeDone(text: string, file: string, categories: CategoryPref[], today: Date): { text: string; taken: { section: string[]; lines: string[] }[] } {
+  const { tasks } = parseTasks(text, file, categories, today)
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  const allDone = (t: Task): boolean => t.done && t.childIds.every((id) => !byId.get(id) || allDone(byId.get(id)!))
+  const roots = tasks.filter((t) => allDone(t) && !(t.parentId && byId.get(t.parentId) && allDone(byId.get(t.parentId)!)))
+  if (!roots.length) return { text, taken: [] }
+  const { lines, eol } = splitLines(text)
+  const ranges = roots.map((t) => ({ t, start: t.line, end: subtreeEnd(lines, t.line, t.indent) }))
+  const taken = ranges.map(({ t, start, end }) => {
+    const lead = lines[start].match(/^[\t ]*/)![0]
+    return { section: t.section, lines: lines.slice(start, end).map((l) => (l.startsWith(lead) ? l.slice(lead.length) : l.trimStart())) }
+  })
+  for (const r of [...ranges].sort((a, b) => b.start - a.start)) lines.splice(r.start, r.end - r.start)
+  return { text: lines.join(eol), taken }
 }
 
 /** One indentation step as the file already uses it (the vault uses tabs). */
