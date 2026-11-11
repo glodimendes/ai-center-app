@@ -94,7 +94,9 @@ npm run build && npx electron . --remote-debugging-port=9333 &   # runs against 
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
 #   main-process calls from the renderer: window.api.call('<method>', ...args)
 cd .dev-vault && git status && git log --oneline | head   # confirm exactly what the app wrote
-npm run install-app   # build helper + package + copy to /Applications (real vault at runtime; ask the user to restart the app)
+npm run install-app   # build helper + package + sign + copy to /Applications (real vault at runtime; ask the user to restart the app)
+npm run sign          # scripts/sign-app.sh: signs dist with the local cert "AI Center Dev" so TCC keeps Calendar
+                      #   access across rebuilds. Warns and exits 0 if the cert is missing.
 ```
 
 macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The calendar permission prompt needs the user's click: test calendar features in the packaged app with the user.
