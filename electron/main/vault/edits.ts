@@ -152,6 +152,36 @@ export function indentTask(text: string, file: string, taskId: string, dir: 'in'
   return next
 }
 
+/**
+ * Move a task's subtree to sit right before or after another task at the same level (same
+ * parent, same section). Its own subtasks move with it; everything else stays byte-identical.
+ */
+export function reorderTask(
+  text: string,
+  file: string,
+  taskId: string,
+  targetId: string,
+  position: 'before' | 'after',
+  categories: CategoryPref[],
+  today: Date
+): string {
+  const { tasks } = parseTasks(text, file, categories, today)
+  const task = tasks.find((t) => t.id === taskId)
+  const target = tasks.find((t) => t.id === targetId)
+  if (!task || !target) throw new TargetMissingError('That task changed or was removed in the file.')
+  if (task.id === target.id) return text
+  if (task.parentId !== target.parentId || task.section.join('>') !== target.section.join('>'))
+    throw new TargetMissingError('Can only reorder tasks at the same level.')
+  const { lines, eol } = splitLines(text)
+  const end = subtreeEnd(lines, task.line, task.indent)
+  const block = lines.slice(task.line, end)
+  const rest = [...lines.slice(0, task.line), ...lines.slice(end)]
+  const targetLine = target.line > task.line ? target.line - (end - task.line) : target.line
+  const insertAt = position === 'before' ? targetLine : subtreeEnd(rest, targetLine, target.indent)
+  const out = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
+  return out.join(eol)
+}
+
 /** New open subtask at the end of a task's subtasks. */
 export function addSubtask(text: string, file: string, parentId: string, body: string, categories: CategoryPref[], today: Date): string {
   const { tasks } = parseTasks(text, file, categories, today)

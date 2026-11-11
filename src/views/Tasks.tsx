@@ -93,7 +93,7 @@ export function Tasks() {
                 {!isCollapsed && (
                   <div>
                     {roots.map((t) => (
-                      <TaskTree key={t.id} task={t} showDone={showDone} />
+                      <TaskTree key={t.id} task={t} showDone={showDone} reorderable />
                     ))}
                     {adding === key && <QuickAdd section={sec.path} autoFocus placeholder={`Add to ${sec.path.join(' › ')}…`} onDone={() => setAdding(null)} />}
                   </div>

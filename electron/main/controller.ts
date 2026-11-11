@@ -314,6 +314,10 @@ export class Controller implements Api {
     const title = this.taskTitle(taskId)
     this.mutate(() => this.vault.indentTask(taskId, dir, title))
   }
+  async reorderTask(taskId: string, targetId: string, position: 'before' | 'after') {
+    const title = this.taskTitle(taskId)
+    this.mutate(() => this.vault.reorderTask(taskId, targetId, position, title))
+  }
   async addSubtask(parentId: string, body: string) {
     const title = this.taskTitle(parentId)
     this.mutate(() => this.vault.addSubtask(parentId, body, title))
