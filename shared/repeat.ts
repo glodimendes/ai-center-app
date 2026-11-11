@@ -3,7 +3,7 @@
 //   repeat:3d  repeat:2w  repeat:6m  repeat:1y      every N days / weeks / months / years
 //   repeat:mon,thu                                  on these weekdays, every week
 //   repeat:3w:sun                                   on these weekdays, every 3 weeks
-// Checking one off adds the next occurrence (same line, next due date) above it.
+// Checking one off adds the next occurrence (same line, next due date) below it.
 // Weekday rules mean "on that day" (planned on the due date); interval rules mean "once per
 // period" (planned anywhere in the period that ends on the due date).
 

@@ -1,6 +1,6 @@
 import { NO_AREA, noAreaCategory } from '@shared/categories'
 import type { AppState } from '@shared/api'
-import type { CategoryPref, Task } from '@shared/types'
+import type { CategoryPref, ContextEngine, Task } from '@shared/types'
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 
@@ -50,3 +50,6 @@ export function parseMinutes(s: string): number | null {
   if (m) return Number(m[1]) * 60 + Number(m[2])
   return null
 }
+
+/** Who answers Suggest estimates and Plan with a wish (Settings). */
+export const askerName = (engine: ContextEngine | undefined) => (engine === 'codex' ? 'Codex (GPT-5.6 Luna)' : 'Claude Haiku')

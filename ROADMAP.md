@@ -18,6 +18,9 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
 - **Verify single-day sync live** (installed, never run against the real calendar; pushed anyway on 2026-11-11 at the user's go-ahead). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
 - **Watch the repeating-task skip live** (installed 2026-11-11). Today's trash on an open repeating task should move its `due:` on and keep the series; the Tasks view should still delete the whole thing. Verified in the dev vault only.
+- **Watch the 2026-11-11 (third session) fixes live** — verified in the dev app only:
+  - **checking off a repeating task inside a block**: the block should keep showing it checked, and the next occurrence should appear only in a later block (on its own date), not in this one. Unchecking it right away should leave a single open line in `daily-todos.md`. Before the fix the block jumped to the next occurrence, unchecked.
+  - **Settings → "Suggest estimates" and "Plan with a wish" ask → Codex**: both answer through `codex exec` (GPT-5.6 Luna). Default stays Claude Haiku.
 - **Watch the 2026-11-11 (second session) features live** — all verified in the dev app only:
   - narrow windows on the real screen, including dragging a task from Today's narrow drawer onto the timeline (untested: CDP can't drive HTML5 drag);
   - the weekly review on real data, especially **Archive checked tasks** against the real `daily-todos.md` (it removes `[x]` lines; they go to `05_Tasks/archive/done-YYYY.md`);
@@ -47,6 +50,8 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Week overrides** (a week's own grid, day picks, wish rules, focus) stay in that week's file; a wish's hours and the weekly review's hours share the same week grid, so "Back to usual hours" also drops a wish's hours.
 - **"New in your todo list"** goes by task id (file + heading + title), so a task renamed or moved in Obsidian shows up as new too.
 - **Wish focus blocks** are pins (`wish:` ids), so they don't move; they're listed under "Active wishes" in the Re-plan dialog with Remove. They hold the heading's tasks only, even if those take less than the block.
+- **Checked repeating tasks pile up as `[x]` lines** above each new occurrence until the weekly review archives them. Archiving shifts the open copy's id back to the old one (ids count same-titled tasks in order), which only matters for past blocks and logs naming it.
+- **Codex for one-shot questions** runs with its read-only sandbox from an empty folder: it can't write or reach the network, but unlike Haiku (no tools at all) it could read files on disk; Codex has no switch to turn its shell off.
 - **Habits:** a pin or block assignment that names a habit takes one of that week's open sessions; a habit with open subtasks is planned as a normal parent (waits for them). Checking a habit off can't be undone from the row (remove its ✓ block's log in the block panel).
 - **`plan()` is one long function:** splitting it into passes is left for the skeleton-then-fill redesign (see "Later").
 

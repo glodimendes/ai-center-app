@@ -26,9 +26,16 @@ export function patchTask(
   const { done: _done, ...tokenEdit } = patch
   const nextBody = Object.keys(tokenEdit).length ? editTokens(body, tokenEdit, today) : body
   lines[task.line] = `${ws}${marker} [${nextState}] ${nextBody}`
-  // Checking off a repeating task: the next occurrence goes above it, so the open task keeps its id.
-  const next = patch.done && state === ' ' && task.repeat ? nextOccurrence(task.repeat, task.due, today) : null
-  if (next) lines.splice(task.line, 0, `${ws}${marker} [ ] ${editTokens(nextBody, { due: next, postponed: null }, today)}`)
+  if (!task.repeat) return lines.join(eol)
+  // Checking off a repeating task: the next occurrence goes below its subtree, so the checked line keeps
+  // the id that blocks and logs refer to and the block shows it done; the new copy is planned on its own.
+  const end = subtreeEnd(lines, task.line, task.indent)
+  const next = patch.done && state === ' ' ? nextOccurrence(task.repeat, task.due, today) : null
+  if (next) lines.splice(end, 0, `${ws}${marker} [ ] ${editTokens(nextBody, { due: next, postponed: null }, today)}`)
+  // Reopening it takes back the copy that check-off added, so unchecking doesn't leave two open tasks.
+  const copy = patch.done === false && state !== ' ' ? tasks.find((t) => t.line === end) : undefined
+  if (copy && !copy.done && !copy.childIds.length && copy.indent === task.indent && lines[end] === `${ws}${marker} [ ] ${editTokens(nextBody, { due: copy.due ?? null, postponed: null }, today)}`)
+    lines.splice(end, 1)
   return lines.join(eol)
 }
 

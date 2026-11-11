@@ -4,7 +4,7 @@ import type { PlanOption, PlanVariant, Wish } from '@shared/api'
 import { addDays, isoDate, minutesOfDay, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { categoryOf, cx } from '@/lib/util'
+import { askerName, categoryOf, cx } from '@/lib/util'
 import { Button, Modal } from './ui'
 
 /**
@@ -166,7 +166,7 @@ function Metrics({ option }: { option: PlanOption }) {
   )
 }
 
-/** "Plan with a wish": a sentence becomes concrete changes (Claude Haiku), previewed as a plan before anything is saved. */
+/** "Plan with a wish": a sentence becomes concrete changes (Claude Haiku or Codex, per Settings), previewed as a plan before anything is saved. */
 function WishBox({ onApplied }: { onApplied: () => void }) {
   const s = useStore((st) => st.state!)
   const [text, setText] = useState('')
@@ -212,7 +212,7 @@ function WishBox({ onApplied }: { onApplied: () => void }) {
           {busy ? <Loader2 size={13} className="animate-spin" /> : null} Preview
         </Button>
       </div>
-      <p className="text-[11px] text-faint mt-1">Claude Haiku turns it into changes for the next 14 days (it sees only this sentence and your areas and hours). You see the plan before anything is saved.</p>
+      <p className="text-[11px] text-faint mt-1">{askerName(s.settings.askEngine)} turns it into changes for the next 14 days (it gets only this sentence and your areas and hours). You see the plan before anything is saved.</p>
       {preview && (
         <div className="mt-3 rounded-lg border border-accent p-3 flex flex-col">
           <div className="text-[13px] font-semibold">{preview.wish.summary || 'Your wish'}</div>

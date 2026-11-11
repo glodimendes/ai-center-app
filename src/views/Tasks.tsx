@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Plus, Sparkles } from 'lucide-react'
 import type { Task } from '@shared/types'
 import { fmtDuration } from '@shared/time'
 import { useStore } from '@/store/app'
-import { categoryOf, cx, relDay } from '@/lib/util'
+import { askerName, categoryOf, cx, relDay } from '@/lib/util'
 import { projection } from '@/lib/plan'
 import { TaskTree } from '@/components/TaskRow'
 import { QuickAdd } from '@/components/QuickAdd'
@@ -43,7 +43,7 @@ export function Tasks() {
           className="h-7 w-52 @max-4xl:w-36 @max-2xl:w-28 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
         />
         {noEstimate > 0 && (
-          <Button kind="ghost" onClick={() => setSuggesting(true)} label={`Suggest ${noEstimate} estimates`} title={`Claude Haiku suggests estimates for ${noEstimate} open tasks without one; you pick which to keep`}>
+          <Button kind="ghost" onClick={() => setSuggesting(true)} label={`Suggest ${noEstimate} estimates`} title={`${askerName(s.settings.askEngine)} suggests estimates for ${noEstimate} open tasks without one; you pick which to keep`}>
             <Sparkles size={13} className="text-accent" />
           </Button>
         )}

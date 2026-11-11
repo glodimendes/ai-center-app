@@ -72,6 +72,14 @@ export function Settings() {
               </select>
               <span className="text-[11.5px] text-faint">uses your existing subscription; file edits inside the vault only</span>
             </label>
+            <label className="flex items-center gap-2 mt-3 text-[12.5px]">
+              <span className="text-muted">“Suggest estimates” and “Plan with a wish” ask</span>
+              <select className={input} value={s.settings.askEngine} onChange={(e) => act(api.saveSettings({ askEngine: e.target.value as 'claude' | 'codex' }))}>
+                <option value="claude">Claude Code · Haiku 5.5, medium</option>
+                <option value="codex">Codex · GPT-5.6 Luna, medium</option>
+              </select>
+              <span className="text-[11.5px] text-faint">gets only the question's text and can't change anything (Codex runs read-only from an empty folder)</span>
+            </label>
           </Card>
 
           <Card title="Calendar" desc="Reads all your calendars to find free time and writes approved blocks into each area's calendar. Only events the planner created are ever changed, and edits you make in your calendar win.">

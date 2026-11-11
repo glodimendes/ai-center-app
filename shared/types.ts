@@ -334,6 +334,8 @@ export interface Settings {
   vaultPath: string
   autoCommit: boolean
   contextEngine: ContextEngine
+  /** Who answers the one-shot planning questions (Suggest estimates, Plan with a wish). */
+  askEngine: ContextEngine
   calendarProvider: 'macos' | 'google'
   /** Generate the daily brief the first time the app opens each day. */
   briefAuto: boolean

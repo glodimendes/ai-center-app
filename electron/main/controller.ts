@@ -248,7 +248,7 @@ export class Controller implements Api {
     const v = this.vault.state()
     const now = new Date()
     const headings = this.headings(v)
-    const wish = sanitizeWish(await askJson<unknown>(wishPrompt(text, v.preferences, now, headings)), v.preferences, now, headings)
+    const wish = sanitizeWish(await askJson<unknown>(this.settings.askEngine, wishPrompt(text, v.preferences, now, headings)), v.preferences, now, headings)
     const pins = focusPins(wish, v.tasks, this.busySpans(v), 'preview')
     if (!wish.limits.length && !wish.hours.length && !pins.length && !wish.strategy) throw new Error("Couldn't turn that into a change. Try naming a day, a time, an area or a heading from your todo list.")
     const weeks = weeksWithWish(v.weeks, wish, v.preferences, 'preview', pins)
@@ -330,7 +330,7 @@ export class Controller implements Api {
       examples.length ? `\nThe user's own estimates:\n${examples.map((t) => `- ${t.title} [${label(t.category)} › ${t.section.join(' › ')}] = ${t.estimateMin} min`).join('\n')}` : '',
       `\nTasks to estimate:\n${todo.map((t, i) => `${i + 1}. ${t.title} [${label(t.category)} › ${t.section.join(' › ')}]${t.due ? ` due ${t.due}` : ''}`).join('\n')}`
     ].join('\n')
-    const answer = await askJson<{ n: number; minutes: number; why?: string }[]>(prompt)
+    const answer = await askJson<{ n: number; minutes: number; why?: string }[]>(this.settings.askEngine, prompt)
     if (!Array.isArray(answer)) throw new Error("The model's answer wasn't a list. Try again.")
     return answer
       .filter((a) => Number.isInteger(a.n) && todo[a.n - 1] && Number(a.minutes) > 0)
@@ -412,8 +412,7 @@ export class Controller implements Api {
       const start = localISO(new Date(end.getTime() - minutes * 60_000))
       const blockId = `done:${isoDate(now)}:${taskId}`
       const title = doneTitle(task.title)
-      // A repeating task's open copy keeps this id, so the block must not pull it in.
-      const taskIds = task.repeat ? [] : [taskId]
+      const taskIds = [taskId]
       const pin = { blockId, category: task.category, title, start, end: localISO(end), taskIds }
       this.vault.logBlock({ blockId, date: isoDate(now), category: task.category, title, start, plannedMin: minutes, actualMin: minutes, status: 'done', taskIds }, pin)
     })

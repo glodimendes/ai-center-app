@@ -285,16 +285,38 @@ describe('repeating tasks', () => {
     expect(editTokens('Weekly review repeat:weekly', { repeat: null }, mon)).toBe('Weekly review')
   })
 
-  it('checking one off adds the next occurrence above it, keeping the open task id', () => {
+  // A block refers to the task by id: the checked line must keep it, or the block shows the next occurrence unchecked.
+  it('checking one off keeps its id on the checked line and adds the next occurrence below it', () => {
     const text = '## Personal\n\n- [ ] Water plants ~15m due:2026-11-09 repeat:3d\n- [ ] Other\n'
     const before = parseTasks(text, FILE, cats, mon).tasks[0]
     const out = patchTask(text, FILE, before.id, { done: true }, cats, mon)
     const lines = out.split('\n')
-    expect(lines[2]).toBe('- [ ] Water plants ~15m due:2026-11-12 repeat:3d')
-    expect(lines[3]).toBe('- [x] Water plants ~15m due:2026-11-09 repeat:3d')
+    expect(lines[2]).toBe('- [x] Water plants ~15m due:2026-11-09 repeat:3d')
+    expect(lines[3]).toBe('- [ ] Water plants ~15m due:2026-11-12 repeat:3d')
     expect(lines[4]).toBe('- [ ] Other')
     const after = parseTasks(out, FILE, cats, mon).tasks
-    expect(after.find((t) => t.id === before.id)).toMatchObject({ done: false, due: '2026-11-12' })
+    expect(after.find((t) => t.id === before.id)).toMatchObject({ done: true, due: '2026-11-09' })
+    expect(after.find((t) => t.id !== before.id && t.title === 'Water plants')).toMatchObject({ done: false, due: '2026-11-12' })
+  })
+
+  it('the next occurrence goes after the checked task\'s subtasks', () => {
+    const text = '## Personal\n\n- [ ] Weekly review due:2026-11-09 repeat:weekly\n\t- [ ] Inbox zero\n- [ ] Other\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    const lines = patchTask(text, FILE, t.id, { done: true }, cats, mon).split('\n')
+    expect(lines.slice(2, 6)).toEqual(['- [x] Weekly review due:2026-11-09 repeat:weekly', '\t- [ ] Inbox zero', '- [ ] Weekly review due:2026-11-16 repeat:weekly', '- [ ] Other'])
+  })
+
+  it('unchecking right after checking off restores the file', () => {
+    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu postpone:2026-11-09\n- [ ] Other\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    const done = patchTask(text, FILE, t.id, { done: true }, cats, mon)
+    expect(patchTask(done, FILE, t.id, { done: false }, cats, mon)).toBe(text)
+  })
+
+  it('unchecking leaves a following copy alone once it was edited', () => {
+    const text = '## Personal\n\n- [x] Water plants due:2026-11-09 repeat:3d\n- [ ] Water plants ~30m due:2026-11-12 repeat:3d\n'
+    const t = parseTasks(text, FILE, cats, mon).tasks[0]
+    expect(patchTask(text, FILE, t.id, { done: false }, cats, mon).split('\n').length).toBe(text.split('\n').length)
   })
 
   it('postpone: parsed, edited in place, and dropped from the next occurrence', () => {
@@ -303,7 +325,7 @@ describe('repeating tasks', () => {
     expect(editTokens('Call bank postpone:2026-11-20', { postponed: null }, mon)).toBe('Call bank')
     const text = '## Personal\n\n- [ ] Review budget due:2026-11-09 repeat:weekly postpone:2026-11-09\n'
     const t = parseTasks(text, FILE, cats, mon).tasks[0]
-    expect(patchTask(text, FILE, t.id, { done: true }, cats, mon).split('\n')[2]).toBe('- [ ] Review budget due:2026-11-16 repeat:weekly')
+    expect(patchTask(text, FILE, t.id, { done: true }, cats, mon).split('\n')[3]).toBe('- [ ] Review budget due:2026-11-16 repeat:weekly')
   })
 
   // Today's trash skips one occurrence instead of deleting the line (Controller.skipOccurrence).

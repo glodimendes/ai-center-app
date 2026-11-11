@@ -4,10 +4,10 @@ import type { EstimateSuggestion } from '@shared/api'
 import { fmtDuration } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { categoryOf, cx, inlineMd } from '@/lib/util'
+import { askerName, categoryOf, cx, inlineMd } from '@/lib/util'
 import { Button, Dot, Modal } from './ui'
 
-/** Claude Haiku suggests estimates for tasks without one; the user ticks what to keep. */
+/** Claude Haiku (or Codex, in Settings) suggests estimates for tasks without one; the user ticks what to keep. */
 export function EstimateSuggestions({ onClose }: { onClose: () => void }) {
   const s = useStore((st) => st.state)!
   const [rows, setRows] = useState<(EstimateSuggestion & { on: boolean })[] | null>(null)
@@ -35,14 +35,14 @@ export function EstimateSuggestions({ onClose }: { onClose: () => void }) {
           <div className="text-[15px] font-semibold">Suggested estimates</div>
         </div>
         <p className="text-muted">
-          Claude Haiku (no access to anything; it only sees these task titles and your existing estimates) suggests how long each task without a <code>~</code> estimate takes. Nothing is written
+          {askerName(s.settings.askEngine)} (it can't change anything and only gets these task titles and your existing estimates) suggests how long each task without a <code>~</code> estimate takes. Nothing is written
           until you apply; untick or change any.
         </p>
         {error && <div className="rounded-md bg-warn-soft text-warn px-3 py-2">{error}</div>}
         {!rows && !error && (
           <div className="py-10 grid place-items-center text-muted gap-2">
             <Loader2 size={18} className="animate-spin" />
-            Asking Claude Haiku…
+            Asking {askerName(s.settings.askEngine)}…
           </div>
         )}
         {rows && !rows.length && <p className="text-faint py-4">Every open task already has an estimate.</p>}

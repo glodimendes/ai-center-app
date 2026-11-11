@@ -136,13 +136,13 @@ export interface Api {
   setWeekNotes(week: string, notes: string): Promise<void>
   /** Weekly review: moves checked tasks to 05_Tasks/archive/done-YYYY.md. Returns how many moved. */
   archiveDone(): Promise<number>
-  /** Claude Haiku suggests ~estimates for open tasks without one (no tools; nothing is written). */
+  /** Claude Haiku or Codex (settings.askEngine) suggests ~estimates for open tasks without one (no tools; nothing is written). */
   suggestEstimates(): Promise<EstimateSuggestion[]>
   /** Writes the estimates the user accepted. */
   applyEstimates(minutesById: Record<string, number>): Promise<void>
   /** Marks tasks added outside the app as reviewed. */
   acknowledgeTasks(ids: string[]): Promise<void>
-  /** Claude Haiku turns a sentence into a Wish; previewed as a plan, nothing is saved. */
+  /** Claude Haiku or Codex (settings.askEngine) turns a sentence into a Wish; previewed as a plan, nothing is saved. */
   planWish(text: string): Promise<{ wish: Wish; changes: string[]; option: PlanOption }>
   /** Saves a previewed wish into the weeks it touches and re-plans. */
   applyWish(wish: Wish): Promise<void>

@@ -40,7 +40,7 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
 - **Update context** (⌘U, `electron/main/context/agent.ts`)
   - **How:** runs `codex exec -m gpt-5.6-luna` (default) or `claude -p --model claude-haiku-5-5`, inside the vault and following `context-maintenance.md`. Claude is limited to file tools; Codex has no flag to disable its shell, so it runs in its `workspace-write` sandbox (writes confined to the vault, no network).
   - **Review:** the vault's text files are snapshotted first, then the user sees a per-file diff and chooses **Keep** (one commit) or **Undo**. Cancel, an error or quitting undoes it too. Undo reverts only the agent's own lines (`context/revert.ts`), so anything written to the same files since survives; a file where that can't be done with certainty is left as is and named in the toast. While a run is going, the app's own background writes wait (calendar-edit adoption, the auto brief, quick capture).
-- **One-shot questions** (`electron/main/context/ask.ts`): `claude -p --model claude-haiku-5-5 --tools '' --strict-mcp-config`, so the model sees only the prompt text and can't read or change anything; it answers JSON. Used for **Suggest estimates** (Tasks view) and **Plan with a wish** (Re-plan dialog). Results are shown for approval; nothing is written without a click.
+- **One-shot questions** (`electron/main/context/ask.ts`): by default `claude -p --model claude-haiku-5-5 --tools '' --strict-mcp-config`, so the model sees only the prompt text and can't read or change anything; it answers JSON. Settings → `askEngine` can switch them to Codex (`codex exec -m gpt-5.6-luna -s read-only` from an empty temp folder: no writes, no network, but its shell can't be turned off). Used for **Suggest estimates** (Tasks view) and **Plan with a wish** (Re-plan dialog). Results are shown for approval; nothing is written without a click.
 - **Everything else is deterministic code, not AI:** planning, re-planning, the rest of the Brief screen, sync diff, logging, budgets.
 
 ## Architecture
@@ -101,7 +101,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 142 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
+npm test              # 145 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
@@ -117,12 +117,16 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 ## Status (2026-11-11)
 
 **Start here next session:**
-1. Ask the user how the installed app behaved on real data, especially: archiving checked tasks in the weekly review, a day rule, a habit, a wish with focus, and the narrow-window drawer drag (ROADMAP "Next" has the full list).
-2. Everything is pushed (2026-11-11). Push again only when the user asks.
+1. Ask the user how the installed app behaved on real data, especially: **checking off a repeating task inside a block** (third-session fix below), archiving checked tasks in the weekly review, a day rule, a habit, a wish with focus, and the narrow-window drawer drag (ROADMAP "Next" has the full list).
+2. The third-session commit (repeat fix + Codex for one-shot questions) is committed locally, **not pushed**. Push only when the user asks.
 3. The user still has setup to do in Settings and in Codex (ROADMAP "Next" → "User's own setup"); don't do it for them in code.
 4. If they want more features, the Sunsama-style list in ROADMAP is what was offered; ask which, and keep routine-specific behaviour configurable (Settings), not hard-coded.
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
+
+**Added 2026-11-11, third session (installed ~end of session, NOT yet watched live):**
+- **Bug fix — checking off a repeating task inside a block** (reported by the user): the block flipped to the next occurrence, unchecked, and a second click completed that one too. Cause: check-off inserted the next occurrence *above* the checked line, and task ids are `file|heading|title#n` (n counts same-titled tasks in order), so the new open copy took over the id the block/pin/log referred to. Now `patchTask` (`vault/edits.ts`) puts the next occurrence **below the task's subtree**: the checked line keeps the id, the new copy gets a fresh one (marked seen via `onOwnTaskIds`, so it isn't "new in your todo list") and is planned on its own date. Unchecking right after removes that copy again, only if it is still byte-identical to what check-off wrote. `Controller.completeTask` now lists repeating tasks in its ✓ block too. Verified by 4 tests and live in the dev app (pinned started block → check → block shows it done, next copy in a later block; uncheck restores the file exactly).
+- **Codex for one-shot questions:** `Settings.askEngine` (`'claude'` default | `'codex'`), Settings → Vault. `askJson(engine, prompt)` in `context/ask.ts`; Codex runs `codex exec -m CONTEXT_MODELS.codex.model -s read-only` from an empty temp dir and reads `-o last.txt`. UI texts name the chosen engine via `askerName` (`src/lib/util.ts`). Verified live in the dev app: Suggest estimates (78 answers, ~30 s) and Plan with a wish both worked through Codex.
 
 **Added 2026-11-11, second session — evaluation plan, phases 1–5** (plan: `~/.claude/plans/foamy-discovering-breeze.md`). All verified in the dev app over CDP and by tests (142). **Everything is installed** in `/Applications/AI Center.app` (last install 2026-11-11 ~22:05, `50c3217`: wish focus on a heading). The user has tried only the collapsed sidebar (dev run) and "Plan with a wish" (which failed, then got fixed); **everything else is unwatched live** — see ROADMAP "Next".
 - **Small windows:** min window 640×480; container queries on `<main>`; icon sidebar under 900 px (84 px wide, expand button at the top; the macOS window buttons are pinned at x 12 via `trafficLightPosition` so they sit over the rail with 12 px on each side — change both together); header buttons drop labels; Today's list is a drawer and BlockPanel an overlay when narrow; Week columns ≥88 px with sideways scroll; popovers in a portal that flip; modals scroll. Untested: dragging a task from the narrow drawer onto the timeline (CDP can't drive HTML5 drag).
