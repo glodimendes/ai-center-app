@@ -34,7 +34,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Blocks that don't take new tasks:** logged or past blocks.
 - **Brief ribbon:** "In meetings / classes" counts events that are free only by a per-event override or the calendar's own free flag.
 - **Duplicate blocks:** new blocks may be created next to Codex-made ones for areas without matching containers. That goes away if the user picks ownership option 1.
-- **Packaging:** the app is unsigned (first launch may need right-click → Open). `install-app` replaces the bundle (and removes the old "AI Center Planner.app"); the user must restart the app. A new install can make macOS ask for Calendar access again.
+- **Packaging:** the app is signed with a local self-signed certificate (`scripts/sign-app.sh`, identity "AI Center Dev"), not an Apple Developer ID, so first launch may still need right-click → Open. `install-app` packages, signs, then replaces the bundle (and removes the old "AI Center Planner.app"); the user must restart the app. The certificate exists to keep the Calendar permission across rebuilds — an ad-hoc bundle's code hash changes every build, so macOS asked for access again each time.
 - **Vault auto-commits take whole files:** a manual edit to a file the app later writes (e.g. `daily-todos.md`) is included in the app's next `planner: …` commit.
 - **Kept-free slots** are released only by Re-plan or "Let the planner use it"; the morning re-plan keeps them.
 - **Re-plan options can look alike:** when the weekly hours grid is what limits each area (the usual case), strategies mostly reorder tasks inside the same blocks; the dialog says "same plan as Balanced right now" when nothing differs.
