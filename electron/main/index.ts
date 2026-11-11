@@ -10,6 +10,7 @@ app.setPath('userData', join(app.getPath('appData'), app.isPackaged ? 'AI Center
 let main: BrowserWindow | null = null
 let capture: BrowserWindow | null = null
 let controller: Controller
+let lastFocusRefresh = 0
 
 function load(win: BrowserWindow, hash = '') {
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)
@@ -34,7 +35,12 @@ function createMain() {
     webPreferences: webPreferences()
   })
   load(main)
-  main.on('focus', () => void controller.refreshCalendar().catch(() => {}).finally(() => void controller.maybeRunBrief()))
+  main.on('focus', () => {
+    // Coming back to the window refreshes the calendar, at most once a minute (each refresh runs the helper).
+    if (Date.now() - lastFocusRefresh < 60_000) return void controller.maybeRunBrief()
+    lastFocusRefresh = Date.now()
+    void controller.refreshCalendar().catch(() => {}).finally(() => void controller.maybeRunBrief())
+  })
   main.on('closed', () => (main = null))
 }
 

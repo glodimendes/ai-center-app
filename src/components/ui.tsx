@@ -52,12 +52,33 @@ export function Header({ title, children, sub }: { title: ReactNode; sub?: React
   )
 }
 
-export function Modal({ children, onClose, width = 'max-w-lg' }: { children: ReactNode; onClose: () => void; width?: string }) {
+const escapeStack: { current: () => void }[] = []
+let escapeListening = false
+
+/** Esc closes only the most recently opened modal or popover, not every layer at once. */
+export function useEscape(onEscape: () => void, active = true) {
+  const ref = useRef(onEscape)
+  ref.current = onEscape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    if (!active) return
+    if (!escapeListening) {
+      escapeListening = true
+      window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !escapeStack.length) return
+        e.preventDefault()
+        escapeStack[escapeStack.length - 1].current()
+      })
+    }
+    escapeStack.push(ref)
+    return () => {
+      const i = escapeStack.lastIndexOf(ref)
+      if (i >= 0) escapeStack.splice(i, 1)
+    }
+  }, [active])
+}
+
+export function Modal({ children, onClose, width = 'max-w-lg' }: { children: ReactNode; onClose: () => void; width?: string }) {
+  useEscape(onClose)
   return (
     <div className="fixed inset-0 z-40 bg-black/30 flex items-start justify-center p-4 pt-[min(12vh,6rem)]" onMouseDown={onClose}>
       <div className={cx('w-full max-h-full overflow-y-auto bg-panel rounded-xl shadow-2xl border border-line', width)} onMouseDown={(e) => e.stopPropagation()}>
@@ -106,14 +127,10 @@ export function Popover({ children, onClose, className, align = 'left' }: { chil
       if (ref.current?.contains(t) || anchor.current?.parentElement?.contains(t) || t.closest?.('[data-popover]')) return
       onClose()
     }
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     setTimeout(() => window.addEventListener('mousedown', onDown))
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('mousedown', onDown)
   }, [onClose])
+  useEscape(onClose)
   return (
     <>
       <span ref={anchor} hidden />

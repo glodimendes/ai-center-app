@@ -15,7 +15,7 @@ import { ReplanButton } from '@/components/ReplanButton'
 import { CalendarFilter } from '@/components/CalendarFilter'
 import { SyncDialog } from '@/components/SyncDialog'
 import { AddBlockButton, NewBlockDialog, type BlockDraft } from '@/components/NewBlock'
-import { Button, Dot, Header } from '@/components/ui'
+import { Button, Dot, Header, useEscape } from '@/components/ui'
 
 export function Today() {
   const { state, day, setDay, selectedBlockId, selectBlock, go } = useStore()
@@ -26,6 +26,7 @@ export function Today() {
   // Narrow windows: the task list is a drawer over the timeline, hidden while a task is dragged out of it.
   const [listOpen, setListOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
+  useEscape(() => setListOpen(false), listOpen)
   const filter = view.q
   const { items, allDay } = useMemo(() => gridItems(s, [day]), [s, day])
   const date = parseDate(day)
@@ -245,6 +246,7 @@ const SHOW: { key: string; label: string; test: (t: Task, s: AppState) => boolea
   { key: 'unplanned', label: 'Not planned', test: (t, s) => !s.plan.taskFinish[t.id] },
   { key: 'overdue', label: 'Overdue', test: (t) => Boolean(t.due && t.due < isoDate(new Date())) },
   { key: 'due', label: 'With deadline', test: (t) => Boolean(t.due) },
+  { key: 'noest', label: 'No estimate', test: (t) => !t.estimateMin },
   { key: 'high', label: 'High or urgent', test: (t) => t.priority === 'high' || t.priority === 'urgent' },
   { key: 'repeat', label: 'Repeating', test: (t) => Boolean(t.repeat) },
   { key: 'postponed', label: 'Postponed', test: (t) => Boolean(t.postponed && t.postponed > isoDate(new Date())) },

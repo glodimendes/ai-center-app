@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Api, AppState, PlanOption, PlanVariant } from '@shared/api'
 import type { CalEvent, CalendarStatus, ContextChange, ContextResult, Plan, Settings, SyncOp, VaultState } from '@shared/types'
@@ -48,6 +49,8 @@ export class Controller implements Api {
   private briefRunning = false
   private briefError: string | undefined
   private briefAttemptDay = ''
+  private pushQueued = false
+  private lastCacheText = ''
 
   constructor(
     private broadcast: (state: AppState) => void,
@@ -160,10 +163,10 @@ export class Controller implements Api {
       this.forceFull = false
     }
     this.lastPlan = p
-    try {
-      writeFileSync(this.planCacheFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, plan: p, fullDay: this.lastFullDay, prefsHash: this.lastPrefsHash, variant: this.variant }))
-    } catch {
-      /* cache is best effort */
+    const cache = JSON.stringify({ vaultPath: this.settings.vaultPath, plan: p, fullDay: this.lastFullDay, prefsHash: this.lastPrefsHash, variant: this.variant })
+    if (cache !== this.lastCacheText) {
+      this.lastCacheText = cache
+      void writeFile(this.planCacheFile(), cache).catch(() => {}) // cache is best effort
     }
     return p
   }
@@ -217,8 +220,9 @@ export class Controller implements Api {
   async getState(): Promise<AppState> {
     const vault = this.vault.state()
     const p = this.computePlan(vault)
+    const gitError = this.vault.git.lastError
     return {
-      vault,
+      vault: gitError ? { ...vault, errors: [...vault.errors, `Couldn't commit to the vault's git history (will retry): ${gitError}`] } : vault,
       plan: p,
       planVariant: { ...this.variant, label: PLAN_VARIANTS.find((x) => x.key === this.variant.key)?.label ?? 'Balanced' },
       events: this.events,
@@ -228,8 +232,14 @@ export class Controller implements Api {
     }
   }
 
+  /** Several changes in one tick (a mutation plus its follow-ups) become one re-plan and one broadcast. */
   push() {
-    void this.getState().then(this.broadcast, (err) => console.error('[state]', err))
+    if (this.pushQueued) return
+    this.pushQueued = true
+    setImmediate(() => {
+      this.pushQueued = false
+      void this.getState().then(this.broadcast, (err) => console.error('[state]', err))
+    })
   }
 
   private mutate<T>(fn: () => T): T {
@@ -366,6 +376,8 @@ export class Controller implements Api {
   /** First open of the planning day (and on focus): generate the brief once if today's file is missing. */
   async maybeRunBrief() {
     const day = this.planningDay()
+    // Dev runs never spend a model call on their own; "Run daily brief" still works there.
+    if (!app.isPackaged) return
     if (!this.settings.briefAuto || this.briefRunning || this.agentRun || this.briefAttemptDay === day) return
     if (this.vault.read(`05_Tasks/briefs/${isoDate(new Date())}.md`) !== null) return
     this.briefAttemptDay = day
