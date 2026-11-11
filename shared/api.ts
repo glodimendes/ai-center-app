@@ -64,6 +64,8 @@ export interface Api {
   addSubtask(parentId: string, body: string): Promise<void>
   /** Check off now; outside a running block it's also logged as a short block ending now. */
   completeTask(taskId: string): Promise<void>
+  /** Skip one occurrence of a repeating task: its due date moves on, the series stays. Returns the new due date. */
+  skipOccurrence(taskId: string): Promise<string>
   // inbox
   addInbox(text: string): Promise<void>
   inboxToTask(itemId: string, text: string, section: string[]): Promise<void>
