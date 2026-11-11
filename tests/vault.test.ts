@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseInbox, parseTasks } from '../electron/main/vault/parser'
-import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask } from '../electron/main/vault/edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, reorderTask } from '../electron/main/vault/edits'
 import { editTokens, inferYear, parseTokens } from '../electron/main/vault/tokens'
 import { DEFAULT_PREFERENCES, parsePreferences, serializePreferences } from '../electron/main/vault/preferences'
 import { parseWeekly, serializeWeekly } from '../electron/main/vault/weekly'
@@ -151,6 +151,31 @@ describe('subtasks', () => {
     expect(out.split('\n').slice(6, 10)).toEqual(['- [ ] B ~1h', '\t- [ ] B1', '\t- [ ] B2 ~30m', '- [ ] C'])
     const out2 = addSubtask(md, FILE, byTitle(md, 'C').id, 'C1', cats, today)
     expect(byTitle(out2, 'C1').parentId).toBe(byTitle(out2, 'C').id)
+  })
+})
+
+describe('reordering', () => {
+  const md = ['# Todos', '', '## ETH', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
+  const parse = (t: string) => parseTasks(t, FILE, cats, today).tasks
+  const byTitle = (t: string, title: string) => parse(t).find((x) => x.title === title)!
+
+  it('moves a task (with its subtasks) before a sibling', () => {
+    const out = reorderTask(md, FILE, byTitle(md, 'C').id, byTitle(md, 'A').id, 'before', cats, today)
+    expect(out.split('\n').slice(5, 9)).toEqual(['- [ ] C', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1'])
+  })
+
+  it('moves a task (with its subtasks) after a sibling', () => {
+    const out = reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'B').id, 'after', cats, today)
+    expect(out.split('\n').slice(5, 9)).toEqual(['- [ ] B ~1h', '\t- [ ] B1', '- [ ] A', '- [ ] C'])
+  })
+
+  it('is a no-op when dropped on itself', () => {
+    expect(reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'A').id, 'after', cats, today)).toBe(md)
+  })
+
+  it('refuses across sections or levels', () => {
+    expect(() => reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'D').id, 'before', cats, today)).toThrow()
+    expect(() => reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'B1').id, 'before', cats, today)).toThrow()
   })
 })
 

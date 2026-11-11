@@ -5,7 +5,7 @@ import { watch, type FSWatcher } from 'chokidar'
 import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides } from '@shared/types'
 import { isoWeek } from '@shared/time'
 import { parseInbox, parseTasks } from './parser'
-import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, stampLastUpdated } from './edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, reorderTask, stampLastUpdated } from './edits'
 import { DEFAULT_PREFERENCES, PREFERENCES_FILE, parsePreferences, serializePreferences } from './preferences'
 import { WEEKLY_DIR, parseWeekly, serializeWeekly, weeklyFile } from './weekly'
 import { VaultGit } from './git'
@@ -123,6 +123,11 @@ export class VaultService {
   indentTask(taskId: string, dir: 'in' | 'out', title: string) {
     const prefs = this.preferences
     this.update(TODOS_FILE, (t) => indentTask(t, TODOS_FILE, taskId, dir, prefs.categories, new Date()), `${dir === 'in' ? 'nest' : 'un-nest'} "${title}"`)
+  }
+
+  reorderTask(taskId: string, targetId: string, position: 'before' | 'after', title: string) {
+    const prefs = this.preferences
+    this.update(TODOS_FILE, (t) => reorderTask(t, TODOS_FILE, taskId, targetId, position, prefs.categories, new Date()), `reorder "${title}"`)
   }
 
   addSubtask(parentId: string, body: string, parentTitle: string) {

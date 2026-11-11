@@ -13,12 +13,30 @@ const PRI_STYLE: Record<Priority, string> = { urgent: 'text-danger bg-danger/10'
 // The flag cycles upward and wraps: low → medium → high → urgent → low.
 const PRI_NEXT: Record<Priority, Priority> = { low: 'medium', medium: 'high', high: 'urgent', urgent: 'low' }
 
-export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask, skipRepeats }: { task: Task; depth?: number; draggable?: boolean; showSection?: boolean; onAddSubtask?: () => void; skipRepeats?: boolean }) {
+export function TaskRow({
+  task,
+  depth = 0,
+  draggable,
+  showSection,
+  onAddSubtask,
+  skipRepeats,
+  onReorder
+}: {
+  task: Task
+  depth?: number
+  draggable?: boolean
+  showSection?: boolean
+  onAddSubtask?: () => void
+  skipRepeats?: boolean
+  /** Dropping another task on this row, above or below its midline. */
+  onReorder?: (draggedId: string, position: 'before' | 'after') => void
+}) {
   const state = useStore((s) => s.state)!
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [pop, setPop] = useState<'est' | 'due' | 'repeat' | 'postpone' | null>(null)
   const [est, setEst] = useState('')
+  const [dropPos, setDropPos] = useState<'before' | 'after' | null>(null)
   const cat = categoryOf(state, task.category)
   const finish = state.plan.taskFinish[task.id]
   const firstBlock = state.plan.blocks.find((b) => b.chunks.some((c) => c.taskId === task.id) && new Date(b.end) > new Date())
@@ -60,12 +78,31 @@ export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask,
 
   return (
     <div
-      className={cx('group flex items-center gap-2 py-1.5 pr-2 rounded-md hover:bg-sunken/70', task.done && 'opacity-55')}
+      className={cx(
+        'group flex items-center gap-2 py-1.5 pr-2 rounded-md hover:bg-sunken/70',
+        task.done && 'opacity-55',
+        dropPos === 'before' && 'border-t-2 border-accent',
+        dropPos === 'after' && 'border-b-2 border-accent'
+      )}
       style={{ paddingLeft: 8 + depth * 22 }}
       draggable={draggable && !task.done && !editing}
       onDragStart={(e) => {
         e.dataTransfer.setData('application/x-task', task.id)
         e.dataTransfer.effectAllowed = 'move'
+      }}
+      onDragOver={(e) => {
+        if (!onReorder || !e.dataTransfer.types.includes('application/x-task')) return
+        e.preventDefault()
+        const rect = e.currentTarget.getBoundingClientRect()
+        setDropPos(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after')
+      }}
+      onDragLeave={() => setDropPos(null)}
+      onDrop={(e) => {
+        if (!onReorder) return
+        const draggedId = e.dataTransfer.getData('application/x-task')
+        setDropPos(null)
+        if (!draggedId || draggedId === task.id) return
+        onReorder(draggedId, dropPos ?? 'after')
       }}
     >
       {draggable && <GripVertical size={12} className="text-faint opacity-0 group-hover:opacity-100 -ml-1 shrink-0 cursor-grab" />}
@@ -315,16 +352,19 @@ export function TaskRow({ task, depth = 0, draggable, showSection, onAddSubtask,
   )
 }
 
-/** A task and its subtasks, recursively. */
-export function TaskTree({ task, depth = 0, showDone, draggable }: { task: Task; depth?: number; showDone: boolean; draggable?: boolean }) {
+/** A task and its subtasks, recursively. Pass `reorderable` to let the user drag a task onto a sibling to reorder it. */
+export function TaskTree({ task, depth = 0, showDone, draggable, reorderable }: { task: Task; depth?: number; showDone: boolean; draggable?: boolean; reorderable?: boolean }) {
   const tasks = useStore((s) => s.state!.vault.tasks)
   const children = task.childIds.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t) && (showDone || !t!.done))
   const [adding, setAdding] = useState(false)
+  const onReorder = reorderable
+    ? (draggedId: string, position: 'before' | 'after') => void act(api.reorderTask(draggedId, task.id, position))
+    : undefined
   return (
     <>
-      <TaskRow task={task} depth={depth} draggable={draggable} onAddSubtask={() => setAdding(true)} />
+      <TaskRow task={task} depth={depth} draggable={draggable || reorderable} onAddSubtask={() => setAdding(true)} onReorder={onReorder} />
       {children.map((c) => (
-        <TaskTree key={c.id} task={c} depth={depth + 1} showDone={showDone} draggable={draggable} />
+        <TaskTree key={c.id} task={c} depth={depth + 1} showDone={showDone} draggable={draggable} reorderable={reorderable} />
       ))}
       {adding && <SubtaskInput parent={task} depth={depth + 1} onDone={() => setAdding(false)} />}
     </>
