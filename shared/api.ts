@@ -34,6 +34,8 @@ export interface Wish {
   limits: { date: string; areas: string[]; maxMinutes: number; from?: string; to?: string }[]
   /** Hours set aside for an area on a date (replaces the grid cell for that weekday, that week only). */
   hours: { date: string; area: string; hours: number }[]
+  /** Time on a date kept for one heading's tasks (e.g. a project): becomes a pinned block holding only them. */
+  focus: { date: string; from: string; to: string; heading: string }[]
 }
 
 export type PlanVariant = 'balanced' | 'deadlines' | 'deep' | 'light'

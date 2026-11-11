@@ -25,7 +25,6 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
   - "New in your todo list": on the first run it knows every existing task, so it should show nothing until the meeting automation, Codex or Obsidian adds a line.
 - **User's own setup, no code** (agreed 2026-11-11): Settings → headings Work / Work application / Mentoria / Masters to Outside work, Training's 07–09 window first, drop the DMS heading; turn off the Codex `plan-next-eth-week` and Saturday `weekly-review` automations once the in-app versions are trusted.
 - **Vault docs, via Update context with the user's OK:** `03_Workflows/daily-planning.md` still says not to create dated plan files; training Day 1 (vertical pull) and Day 3 (chest) have no TRAINING tasks.
-- **"Plan with a wish" refused a wish once** ("Couldn't turn that into a change") in the user's dev run on 2026-11-11; the sentence is unknown. Ask what they typed; the prompt may need to handle vaguer wishes.
 - **The user's Codex `daily-brief` automation** is paused (seen 2026-11-11) but still exists alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
 ## Known limitations
@@ -47,6 +46,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses. Tasks → **Suggest estimates** fills them in with approval.
 - **Week overrides** (a week's own grid, day picks, wish rules, focus) stay in that week's file; a wish's hours and the weekly review's hours share the same week grid, so "Back to usual hours" also drops a wish's hours.
 - **"New in your todo list"** goes by task id (file + heading + title), so a task renamed or moved in Obsidian shows up as new too.
+- **Wish focus blocks** are pins (`wish:` ids), so they don't move; they're listed under "Active wishes" in the Re-plan dialog with Remove. They hold the heading's tasks only, even if those take less than the block.
 - **Habits:** a pin or block assignment that names a habit takes one of that week's open sessions; a habit with open subtasks is planned as a normal parent (waits for them). Checking a habit off can't be undone from the row (remove its ✓ block's log in the block panel).
 - **`plan()` is one long function:** splitting it into passes is left for the skeleton-then-fill redesign (see "Later").
 
@@ -117,5 +117,5 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
   - speed: one re-plan per change, throttled focus refresh, async plan cache, serialized git with retry and a visible error;
   - code health: tests run from a fresh clone (synthetic samples), calendar adoption and re-plan cadence are pure and tested, Update context in its own module, BlockPanel split;
   - routine as settings: Day rules, in-app weekly review (archive, focus, week grid, picks), block ownership decided (app owns);
-  - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish, "New in your todo list".
+  - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish (with focus on a heading, after the user's "make tomorrow's first half of the day focus on Tamanduá" failed: the prompt didn't name today/tomorrow and a wish could only set area hours), "New in your todo list".
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.
