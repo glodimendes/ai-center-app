@@ -94,6 +94,7 @@ The next day is tried only after all of that fails, subject to the daily, deep-w
 - Training is an ordinary area: its tasks (under the headings mapped to Training, typically with a `repeat:` rule) get the same scoring, windows, grid hours, warnings and Re-plan options as everything else. It fills your Sports events ("Sport", "Running") like any container, and a new single-session block is named after the session. Differences: it's placed before breaks (dinner floats around it), a session is never split ("Keep tasks whole" in Settings → Areas, on for Training), a gap around it, and it doesn't count toward (or use up) the daily work cap.
 - Repeating tasks are planned by their rule: weekday rules (`repeat:mon`, `repeat:3w:sun`) **on** their due day; interval rules (`repeat:weekly`, `repeat:3d`) anywhere in the period ending on the due date.
 - **Postponed** tasks (`postpone:2026-11-20`, the 🌙 chip) aren't planned before that date; from then on they're ranked as usual.
+- **Habits** (`3x/week`) become that many sessions per week, minus sessions already logged this week: each due at the end of its week, not before its slot (spread over the days left), one per day, each kept whole. Weeks cut off by the 14-day horizon only get the sessions inside it.
 - Weekly minimums: Thesis gets reserved blocks until 18 h/week (logged + planned) is reached.
 - Warnings: overdue, deadline at risk, stale, doesn't fit in 14 days, budget behind/over, calendar conflict.
 
@@ -116,7 +117,7 @@ The next day is tried only after all of that fails, subject to the daily, deep-w
 ```bash
 npm install
 npm run dev          # hot-reload, against .dev-vault (scratch copy), never the real vault
-npm test             # parser, scheduler, sync-diff, brief-prompt tests
+npm test             # parser, edits, scheduler (rules, habits, wishes), sync/adoption, brief, context-undo tests
 npm run typecheck
 npm run build:helper # compile the macOS Calendar helper (Swift; also part of package)
 npm run build:icon   # redraw the app icon (scripts/make-icon.swift → build/icon.icns)

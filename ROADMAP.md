@@ -18,7 +18,15 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
 - **Verify single-day sync live** (installed, never run against the real calendar; pushed anyway on 2026-11-11 at the user's go-ahead). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
 - **Watch the repeating-task skip live** (installed 2026-11-11). Today's trash on an open repeating task should move its `due:` on and keep the series; the Tasks view should still delete the whole thing. Verified in the dev vault only.
-- **The user's Codex `daily-brief` automation** still runs alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
+- **Watch the 2026-11-11 (second session) features live** — all verified in the dev app only:
+  - narrow windows on the real screen, including dragging a task from Today's narrow drawer onto the timeline (untested: CDP can't drive HTML5 drag);
+  - the weekly review on real data, especially **Archive checked tasks** against the real `daily-todos.md` (it removes `[x]` lines; they go to `05_Tasks/archive/done-YYYY.md`);
+  - a day rule (the sample "Lighter half-day" is off until the user turns it on), a habit (`3x/week`), Wrap up, Suggest estimates, Plan with a wish;
+  - "New in your todo list": on the first run it knows every existing task, so it should show nothing until the meeting automation, Codex or Obsidian adds a line.
+- **User's own setup, no code** (agreed 2026-11-11): Settings → headings Work / Work application / Mentoria / Masters to Outside work, Training's 07–09 window first, drop the DMS heading; turn off the Codex `plan-next-eth-week` and Saturday `weekly-review` automations once the in-app versions are trusted.
+- **Vault docs, via Update context with the user's OK:** `03_Workflows/daily-planning.md` still says not to create dated plan files; training Day 1 (vertical pull) and Day 3 (chest) have no TRAINING tasks.
+- **"Plan with a wish" refused a wish once** ("Couldn't turn that into a change") in the user's dev run on 2026-11-11; the sentence is unknown. Ask what they typed; the prompt may need to handle vaguer wishes.
+- **The user's Codex `daily-brief` automation** is paused (seen 2026-11-11) but still exists alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
 ## Known limitations
 
@@ -36,7 +44,11 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Event hand edits:** container events (calendar blocks the planner fills, e.g. "Thesis Deep Work") are still not draggable or editable in the app; deleting an event has no Undo (it asks first); editing a repeating event changes only that occurrence.
 - **Urgent is a score, not a rule:** `!urgent` weighs 2 (high 1) in the weighted score, so it usually beats high-priority tasks and far deadlines but still comes after guarded deadlines. Making it a hard "first" rule was offered to the user, not decided.
 - **Block panel auto-log** uses the "Time actually spent" field as it stands. For a block still running it defaults to the time elapsed so far (to 5 min); for a finished one, to the planned length. A checked task shows "0m planned here" (also true after Save log before).
-- **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses.
+- **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses. Tasks → **Suggest estimates** fills them in with approval.
+- **Week overrides** (a week's own grid, day picks, wish rules, focus) stay in that week's file; a wish's hours and the weekly review's hours share the same week grid, so "Back to usual hours" also drops a wish's hours.
+- **"New in your todo list"** goes by task id (file + heading + title), so a task renamed or moved in Obsidian shows up as new too.
+- **Habits:** a pin or block assignment that names a habit takes one of that week's open sessions; a habit with open subtasks is planned as a normal parent (waits for them). Checking a habit off can't be undone from the row (remove its ✓ block's log in the block panel).
+- **`plan()` is one long function:** splitting it into passes is left for the skeleton-then-fill redesign (see "Later").
 
 ## Ideas (proposed, not approved)
 
@@ -45,10 +57,20 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Skip history.** A skip leaves no trace, so a task skipped every week looks identical to one being done on time. A counter or a log line would surface repeats that are not working — worth it only if the user wants the Review screen to show it.
 - Docs editor: keep the file's bullet style.
 
+## More Sunsama-style ideas (offered 2026-11-11, not picked yet)
+
+- Morning planning: choose today's tasks against the free time actually left, with an "overcommitted" warning past the daily cap.
+- Rollover count: "moved 4 times — reschedule, split or drop?".
+- Weekly objectives: the week's focus as checkable goals linked to tasks, with progress.
+- Shutdown note: a "what went well" line at Wrap up, shown in the weekly review.
+- Focus mode: one task full-screen with a timer that logs actual time.
+- Tags across areas (e.g. #applications) with time per tag in Review.
+- Email to task: an "Add to tasks" button on the Brief's email items.
+- (Offered earlier, not picked: a "Now" mini-window / menu-bar item; natural-language quick add.)
+
 ## Ideas where AI could help (proposed, not approved)
 
 The scheduler stays deterministic. AI is useful where judgment is needed:
-- suggest estimates for tasks without `~` (batch, user confirms);
 - turn braindump entries into well-formed tasks under the right heading;
 - weekly review summary and "what to drop" suggestions when budgets are over.
 
@@ -89,4 +111,11 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
 - **2026-11-10:** skip one occurrence of a repeating task — Today's trash moves a repeating task's `due:` on (`Controller.skipOccurrence`) instead of deleting the line; the Tasks view still deletes the series. Prior art checked: org-mode repeaters (`+` / `++` / `.+`), Obsidian Tasks (`every week` vs `when done`), iCalendar `EXDATE` / `RECURRENCE-ID`.
 - **2026-11-10:** single-day sync — **Sync day** in Today's header syncs only the day on screen, through the same approval dialog (`buildSyncDiff(..., day?)` → `syncPreview(day?)` → `SyncDialog day`). The week's Sync still covers the whole window. Other days are never touched by a day sync. Unit-tested (104 tests) and checked in the dev app; not yet run against the real calendar.
 - **2026-11-11:** the packaged app is signed with the user's self-signed "AI Center Dev" certificate (`scripts/sign-app.sh`, run by `install-app`), so macOS stops asking for Calendar access after every rebuild. Not an Apple Developer ID: Gatekeeper can still ask for right-click → Open.
+- **2026-11-11 (second session, evaluation plan `~/.claude/plans/foamy-discovering-breeze.md`):**
+  - readable at any window size (min 640×480, icon sidebar, drawers/overlays, sideways-scrolling week, portal popovers, scrolling modals; collapsed sidebar sized for the window buttons);
+  - safety: Update context undo reverts only the agent's lines; offline calendars don't dismiss blocks; IPC allow-list; CLI runs escalate to SIGKILL;
+  - speed: one re-plan per change, throttled focus refresh, async plan cache, serialized git with retry and a visible error;
+  - code health: tests run from a fresh clone (synthetic samples), calendar adoption and re-plan cadence are pure and tested, Update context in its own module, BlockPanel split;
+  - routine as settings: Day rules, in-app weekly review (archive, focus, week grid, picks), block ownership decided (app owns);
+  - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish, "New in your todo list".
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.

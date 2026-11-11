@@ -52,24 +52,30 @@ electron/main/
                         edits, brief runs, block editing; delegates Update context to context/session.ts
   settings.ts           userData/settings.json (vault path, autoCommit, calendarProvider, OAuth client, contextEngine,
                         briefAuto/briefEmail, hiddenCalendars, eventAvailability)
-  vault/                parser.ts (tasks, inbox), tokens.ts (~2h, due:/by 31/10, !high, @spread/@asap, repeat:, postpone:),
-                        edits.ts (line patches), service.ts (read/write/watch, brief, overrides), git.ts (batched commits),
-                        preferences.ts (defaults + frontmatter, migrations), weekly.ts (log/pins/overrides/holds)
+  vault/                parser.ts (tasks, inbox), tokens.ts (~2h, due:/by 31/10, !high, @spread/@asap, repeat:, postpone:, 3x/week),
+                        edits.ts (line patches, takeDone for the archive), service.ts (read/write/watch, brief, overrides,
+                        archive, week picks/grid/notes/wishes), git.ts (batched, serialized commits with retry),
+                        preferences.ts (defaults + frontmatter, migrations, dayRules), weekly.ts (log/pins/overrides/holds/notes)
   scheduler/plan.ts     pure planner (README "Planning rules"); variants.ts: Re-plan strategies + metrics;
-                        cadence.ts: planning day (04:00 rollover) and full-vs-incremental decision
+                        cadence.ts: planning day (04:00 rollover) and full-vs-incremental decision; habits.ts: `3x/week`
+                        → per-week sessions (ids `<task>@<week>#n`, mapped back before plan() returns); wish.ts: "Plan with
+                        a wish" prompt, validation, and writing it into week overrides; day rules live inside plan.ts
   calendar/             provider.ts (interface), macos.ts (→ native/calendar-helper, Swift/EventKit),
                         google.ts (OAuth loopback), sync.ts (pure diff), adopt.ts (pure: which calendar edits win)
   context/              agent.ts (CLI runs + resolution), session.ts (Update context: snapshot, diff, Keep/Undo),
-                        revert.ts (undo only the agent's lines), brief.ts (daily brief prompt + runner)
+                        revert.ts (undo only the agent's lines), brief.ts (daily brief prompt + runner),
+                        ask.ts (one-shot Haiku question, no tools, JSON answer: estimates, wishes)
 electron/preload/       window.api.call / onState / onProgress / onBriefProgress
 native/calendar-helper/ main.swift → resources/calendar-helper (npm run build:helper; bundled via electron-builder.yml)
 shared/                 types.ts, api.ts (renderer↔main contract), time.ts, categories.ts (heading → area, NO_AREA),
                         repeat.ts (repeat rules: next occurrence, earliest plannable day)
 src/                    React 19 + Tailwind 4 + zustand
-  views/                Brief (landing), Today, Week, Tasks, Alerts, Inbox, Docs, Review, Settings (+ settings/*), Capture
+  views/                Brief (landing), Today, Week, Tasks, Alerts, Inbox, Docs, Review, Settings (+ settings/*: areas,
+                        strategy, heading map, brief prompt, DayRules), Capture
   components/           TimeGrid (own grid: drag, resize, draw), BlockPanel (+ block-panel/: event editing, block tools),
                         TaskRow, RepeatPicker, NewBlock, ReplanButton (Re-plan options dialog), CalendarFilter, SyncDialog,
-                        DocEditor (Milkdown), ui (Button, Header, Modal, Popover in a portal, useEscape)
+                        DocEditor (Milkdown), WeeklyReview (Review → "Review & plan the week"), Shutdown (Today → Wrap up),
+                        EstimateSuggestions (Tasks), ui (Button, Header, Modal, Popover in a portal, useEscape)
 tests/                  vitest: vault, scheduler, sync, brief, context, inbox. sample/ = synthetic files (committed);
                         fixtures/ = copies of real vault files (gitignored, optional: their tests skip when absent)
 scripts/cdp.mjs         screenshot / eval in the running app over the DevTools protocol (port 9333)
@@ -112,7 +118,7 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
-**Added 2026-11-11, second session — evaluation plan, phases 1–5** (plan: `~/.claude/plans/foamy-discovering-breeze.md`). All verified in the dev app over CDP and by tests (141); the first five commits were installed at ~21:18, the rest at the end of the session. **None watched live by the user yet.**
+**Added 2026-11-11, second session — evaluation plan, phases 1–5** (plan: `~/.claude/plans/foamy-discovering-breeze.md`). All verified in the dev app over CDP and by tests (141). **Everything through the collapsed-sidebar fix is installed** in `/Applications/AI Center.app` (last install 2026-11-11 evening). **None watched live by the user yet** — see ROADMAP "Next".
 - **Small windows:** min window 640×480; container queries on `<main>`; icon sidebar under 900 px (84 px wide, expand button at the top; the macOS window buttons are pinned at x 12 via `trafficLightPosition` so they sit over the rail with 12 px on each side — change both together); header buttons drop labels; Today's list is a drawer and BlockPanel an overlay when narrow; Week columns ≥88 px with sideways scroll; popovers in a portal that flip; modals scroll. Untested: dragging a task from the narrow drawer onto the timeline (CDP can't drive HTML5 drag).
 - **Data safety:** Update context undo reverts only the agent's lines (`context/revert.ts`) and the app's background writes wait during a run; an offline calendar no longer dismisses synced blocks; IPC only accepts `API_METHODS`.
 - **Speed:** one push per change (was two), focus refresh at most once a minute, async plan cache, serialized git with retry and a banner on failure.
