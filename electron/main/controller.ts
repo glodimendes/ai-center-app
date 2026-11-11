@@ -49,6 +49,8 @@ export class Controller implements Api {
   private briefError: string | undefined
   private briefAttemptDay = ''
   private pushQueued = false
+  /** Task ids already known (created by the app, or reviewed); others are new from outside. Null until seeded. */
+  private seenTasks: Set<string> | null = null
   private lastCacheText = ''
 
   constructor(
@@ -64,6 +66,12 @@ export class Controller implements Api {
   private openVault() {
     void this.vault?.close()
     this.vault = new VaultService(this.settings.vaultPath, () => this.settings.autoCommit, () => this.push())
+    this.loadSeenTasks()
+    this.vault.onOwnTaskIds = (ids) => {
+      if (!ids.length || !this.seenTasks) return
+      for (const id of ids) this.seenTasks.add(id)
+      this.saveSeenTasks()
+    }
     this.vault.startWatching()
   }
 
@@ -78,6 +86,42 @@ export class Controller implements Api {
     } catch {
       /* start fresh */
     }
+  }
+
+  private seenFile = () => join(app.getPath('userData'), 'seen-tasks.json')
+
+  private loadSeenTasks() {
+    this.seenTasks = null
+    try {
+      if (!existsSync(this.seenFile())) return
+      const c = JSON.parse(readFileSync(this.seenFile(), 'utf8'))
+      if (c.vaultPath === this.settings.vaultPath) this.seenTasks = new Set(c.ids)
+    } catch {
+      /* seeded again from the current file */
+    }
+  }
+
+  private saveSeenTasks() {
+    // Bounded: renamed or removed tasks leave stale ids behind.
+    const ids = [...this.seenTasks!].slice(-5000)
+    void writeFile(this.seenFile(), JSON.stringify({ vaultPath: this.settings.vaultPath, ids })).catch(() => {})
+  }
+
+  /** New from outside: open tasks not created by the app and not reviewed. The first run knows everything. */
+  private newTaskIds(vault: VaultState): string[] {
+    if (!this.seenTasks) {
+      this.seenTasks = new Set(vault.tasks.map((t) => t.id))
+      this.saveSeenTasks()
+      return []
+    }
+    return vault.tasks.filter((t) => !t.done && !this.seenTasks!.has(t.id)).map((t) => t.id)
+  }
+
+  async acknowledgeTasks(ids: string[]) {
+    if (!this.seenTasks) return
+    for (const id of ids) this.seenTasks.add(id)
+    this.saveSeenTasks()
+    this.push()
   }
 
   private syncStateFile = () => join(app.getPath('userData'), 'sync-state.json')
@@ -259,7 +303,8 @@ export class Controller implements Api {
       events: this.events,
       calendar: { ...this.calendar, provider: this.cal.kind, connected: this.cal.connected, configured: this.cal.configured },
       settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined },
-      brief: { running: this.briefRunning, error: this.briefError }
+      brief: { running: this.briefRunning, error: this.briefError },
+      newTaskIds: this.newTaskIds(vault)
     }
   }
 

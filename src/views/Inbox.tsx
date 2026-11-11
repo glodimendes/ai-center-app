@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ArrowRight, Trash2 } from 'lucide-react'
-import type { InboxItem } from '@shared/types'
+import { ArrowRight, Check, Trash2 } from 'lucide-react'
+import type { InboxItem, Task } from '@shared/types'
+import { categoryOf, inlineMd } from '@/lib/util'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { Button, Empty, Header } from '@/components/ui'
+import { Button, Dot, Empty, Header } from '@/components/ui'
 
 export function InboxView() {
   const s = useStore((st) => st.state)!
@@ -35,6 +36,7 @@ export function InboxView() {
               Capture
             </Button>
           </div>
+          <NewTasks />
           {!s.vault.inbox.length && <Empty>Inbox is empty.</Empty>}
           {[...byDate].map(([date, items]) => (
             <section key={date} className="mt-6">
@@ -87,3 +89,40 @@ function Item({ item }: { item: InboxItem }) {
     </div>
   )
 }
+
+/**
+ * Tasks that showed up in daily-todos.md from outside the app (the meeting-review automation, Codex,
+ * an edit in Obsidian). Keep them, or delete the line, one by one.
+ */
+function NewTasks() {
+  const s = useStore((st) => st.state)!
+  const tasks = s.newTaskIds.map((id) => s.vault.tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t))
+  if (!tasks.length) return null
+  return (
+    <section className="mt-6 rounded-lg border border-accent/40 bg-accent-soft/40 p-3">
+      <div className="flex flex-wrap items-center gap-2 mb-1">
+        <h3 className="text-[13px] font-semibold flex-1 min-w-0">New in your todo list</h3>
+        <Button onClick={() => act(api.acknowledgeTasks(tasks.map((t) => t.id)), 'All kept')}>
+          <Check size={13} /> Keep all
+        </Button>
+      </div>
+      <p className="text-[11.5px] text-muted mb-2">Added outside the app (e.g. by the meeting-review automation, Codex or an edit in Obsidian; a renamed task shows up here too).</p>
+      {tasks.map((t) => (
+        <div key={t.id} className="group flex items-center gap-2 py-1 min-w-0">
+          <Dot color={categoryOf(s, t.category).color} />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] break-words" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
+            <span className="block text-[11px] text-faint truncate">{t.section.join(' › ')}</span>
+          </span>
+          <Button kind="ghost" onClick={() => act(api.acknowledgeTasks([t.id]))} label="Keep">
+            <Check size={13} />
+          </Button>
+          <Button kind="danger" onClick={() => act(api.deleteTask(t.id), 'Deleted from daily-todos.md')} title="Delete this line">
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      ))}
+    </section>
+  )
+}
+

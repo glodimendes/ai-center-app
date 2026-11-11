@@ -114,7 +114,7 @@ export function App() {
   if (error) return <div className="p-10 text-danger">Failed to start: {error}</div>
   if (!state) return <div className="h-full grid place-items-center text-muted">Loading vault…</div>
 
-  const inboxCount = state.vault.inbox.length
+  const inboxCount = state.vault.inbox.length + state.newTaskIds.length
   const alerts = alertItems(state.plan.warnings, state.vault.tasks)
   const urgent = alerts.some((a) => a.group === 'overdue' || a.group === 'risk')
 

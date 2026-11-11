@@ -82,6 +82,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 - `settings.json`
 - `plan-cache.json`: last plan, so blocks stay stable across restarts.
 - `sync-state.json`: what was synced, plus dismissals from calendar deletions.
+- `seen-tasks.json`: task ids the app created or the user reviewed; any other open task is "new in your todo list" (Inbox). Seeded with everything on first run.
 - `google-tokens.bin`: Keychain-encrypted.
 
 ## Conventions
