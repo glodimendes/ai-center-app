@@ -505,6 +505,20 @@ export function plan(input: PlanInput): Plan {
     return usable.slice(0, st.spreadDays)
   }
 
+  // Spread subtasks of one task share one even daily share, filled in order, so the parts follow each
+  // other across the days instead of each part spreading on its own and all of them piling onto the first days.
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  const rootOf = (t: Task): Task => (t.parentId && byId.has(t.parentId) ? rootOf(byId.get(t.parentId)!) : t)
+  const spreadKey = (t: Task) => (t.parentId ? `${rootOf(t).id}|${t.due ?? ''}|${t.category}` : null)
+  const siblings = new Map<string, string[]>()
+  for (const t of queue) {
+    const k = spreadKey(t)
+    const c = catOf(t.category)
+    if (k && !c.wholeTasks && (t.timing ?? c.timing ?? 'asap') === 'spread') siblings.set(k, [...(siblings.get(k) ?? []), t.id])
+  }
+  const shares = new Map<string, number>()
+  const usedOn = (ids: string[], dk: string) => ids.reduce((sum, id) => sum + (perDay.get(id)?.get(dk) ?? 0), 0)
+
   /** `leftover`: second pass, only on days where the task's area has 0 grid hours. */
   const placeTask = (t: Task, leftover = false) => {
     const c = catOf(t.category)
@@ -514,6 +528,12 @@ export function plan(input: PlanInput): Plan {
     const whole = Boolean(c.wholeTasks) || Boolean(habit)
     const spread = !leftover && !whole && !guarded && (t.timing ?? c.timing ?? 'asap') === 'spread'
     const spreadSet = spread ? spreadDaysFor(t, c).map(isoDate) : []
+    const key = spread ? spreadKey(t) : null
+    const group = key && siblings.get(key)!.length > 1 ? siblings.get(key)! : null
+    if (group && key && !shares.has(key) && spreadSet.length) {
+      const total = group.reduce((sum, id) => sum + (remaining.get(id) ?? 0), 0)
+      shares.set(key, Math.ceil(total / spreadSet.length / prefs.slotMinutes) * prefs.slotMinutes)
+    }
     const minChunk = () => (whole ? remaining.get(t.id)! : Math.min(prefs.minChunkMinutes, remaining.get(t.id)!))
     const earliest = earliestOf(t)
     for (const day of days) {
@@ -527,6 +547,8 @@ export function plan(input: PlanInput): Plan {
       const spreadTarget = () => {
         const left = spreadSet.filter((d) => d >= dk).length
         if (!spread || !left || dk > lastSpreadDay) return Infinity
+        // Siblings: the group's share that day minus what the others already took (own minutes come off in dayCap).
+        if (group && key) return Math.max(shares.get(key)!, prefs.minChunkMinutes) - usedOn(group, dk) + usedOn([t.id], dk)
         const per = Math.ceil(remaining.get(t.id)! / left / prefs.slotMinutes) * prefs.slotMinutes
         return Math.max(per, prefs.minChunkMinutes)
       }

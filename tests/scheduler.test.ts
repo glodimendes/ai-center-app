@@ -419,6 +419,23 @@ describe('strategy', () => {
     const monday = asap.blocks.filter((b) => b.start.startsWith('2026-11-09')).flatMap((b) => b.chunks).reduce((s, c) => s + c.minutes, 0)
     expect(monday).toBeGreaterThan(per[0])
   })
+
+  it('spreads the subtasks of a spread task over the days in order, not all on the first days', () => {
+    const noGrid = { ...D, allocation: { ...D.allocation, enabled: false } }
+    const parent = task('Write chapter', 'thesis', { due: '2026-11-14', timing: 'spread' })
+    const parts = [1, 2, 3, 4].map((i) => task(`Part ${i}`, 'thesis', { estimateMin: 120, due: '2026-11-14', timing: 'spread', parentId: parent.id }))
+    parent.childIds = parts.map((t) => t.id)
+    const p = plan({ tasks: [parent, ...parts], events: [], prefs: noGrid, weeks: {}, now })
+    const days = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']
+    const on = (d: string) => p.blocks.filter((b) => b.start.startsWith(d)).flatMap((b) => b.chunks).filter((c) => parts.some((t) => t.id === c.taskId))
+    // 8 h over 5 days: about 2 h a day, never all four parts on Monday.
+    expect(days.every((d) => on(d).reduce((s, c) => s + c.minutes, 0) <= 120)).toBe(true)
+    expect(new Set(on('2026-11-09').map((c) => c.taskId)).size).toBeLessThanOrEqual(2)
+    // In order: part 1 starts before part 4.
+    const first = (t: Task) => p.blocks.filter((b) => b.chunks.some((c) => c.taskId === t.id)).map((b) => b.start).sort()[0]
+    expect(first(parts[0]) < first(parts[3])).toBe(true)
+    expect(parts.every((t) => minsIn(p.blocks, t.id) === 120)).toBe(true)
+  })
 })
 
 describe('calendar edits win', () => {

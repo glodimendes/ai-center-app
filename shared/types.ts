@@ -24,6 +24,9 @@ export interface Task {
   postponed?: string
   /** Habit (`3x/week`): that many sessions a week on different days; checking it off logs one and keeps the line open. */
   perWeek?: number
+  /** `due` / `timing` come from the nearest ancestor (the line has none of its own): shown, planned, never written. */
+  dueFromParent?: boolean
+  timingFromParent?: boolean
   parentId?: string
   childIds: string[]
 }

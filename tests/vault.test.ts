@@ -171,6 +171,18 @@ describe('subtasks', () => {
     const out2 = addSubtask(md, FILE, byTitle(md, 'C').id, 'C1', cats, today)
     expect(byTitle(out2, 'C1').parentId).toBe(byTitle(out2, 'C').id)
   })
+
+  it('subtasks take the parent\'s deadline and timing unless they set their own; editing one never writes them', () => {
+    const tree = ['## ETH', '- [ ] P due:2026-11-20 @spread', '\t- [ ] P1 ~1h', '\t\t- [ ] P1a', '\t- [ ] P2 due:2026-11-15 @asap', '\t- [ ] P3 repeat:weekly', '- [ ] Q'].join('\n')
+    expect(byTitle(tree, 'P1')).toMatchObject({ due: '2026-11-20', timing: 'spread', dueFromParent: true, timingFromParent: true })
+    expect(byTitle(tree, 'P1a')).toMatchObject({ due: '2026-11-20', timing: 'spread', dueFromParent: true })
+    expect(byTitle(tree, 'P2')).toMatchObject({ due: '2026-11-15', timing: 'asap' })
+    expect(byTitle(tree, 'P2').dueFromParent).toBeUndefined()
+    expect(byTitle(tree, 'P3').due).toBeUndefined()
+    expect(byTitle(tree, 'Q').due).toBeUndefined()
+    const out = patchTask(tree, FILE, byTitle(tree, 'P1').id, { estimateMin: 120 }, cats, today)
+    expect(out.split('\n')[2]).toBe('\t- [ ] P1 ~2h')
+  })
 })
 
 describe('reordering', () => {

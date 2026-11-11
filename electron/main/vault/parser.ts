@@ -78,6 +78,10 @@ export function parseTasks(
 
     while (stack.length && stack[stack.length - 1].width >= width) stack.pop()
     const parent = stack[stack.length - 1]?.task
+    // Subtasks default to their parent's deadline and timing, so a spread parent spreads its parts.
+    // Not repeating tasks or habits: their own due drives the next occurrence.
+    const inheritDue = Boolean(parent?.due && !tokens.due && !tokens.repeat && !tokens.perWeek)
+    const inheritTiming = Boolean(parent?.timing && !tokens.timing)
 
     const task: Task = {
       id: hash(`${key}#${n}`),
@@ -89,13 +93,15 @@ export function parseTasks(
       section: path,
       category: resolveCategory(path, categories),
       estimateMin: tokens.estimateMin,
-      due: tokens.due,
+      due: inheritDue ? parent!.due : tokens.due,
       dueStyle: tokens.dueStyle,
       priority: tokens.priority ?? 'medium',
-      timing: tokens.timing,
+      timing: inheritTiming ? parent!.timing : tokens.timing,
       repeat: tokens.repeat,
       postponed: tokens.postponed,
       perWeek: tokens.perWeek,
+      ...(inheritDue && { dueFromParent: true }),
+      ...(inheritTiming && { timingFromParent: true }),
       parentId: parent?.id,
       childIds: []
     }

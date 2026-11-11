@@ -19,7 +19,7 @@ export function Review() {
   const planned = log.reduce((a, l) => a + l.plannedMin, 0)
   const skipped = log.filter((l) => l.status === 'skipped').length
   const weekEnd = isoDate(addDays(start, 6))
-  const slipped = s.vault.tasks.filter((t) => !t.done && t.due && t.due <= weekEnd)
+  const slipped = s.vault.tasks.filter((t) => !t.done && t.due && !t.dueFromParent && t.due <= weekEnd)
   const doneThisWeek = log.flatMap((l) => l.taskIds ?? []).map((id) => s.vault.tasks.find((t) => t.id === id)).filter((t) => t?.done)
 
   return (

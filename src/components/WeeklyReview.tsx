@@ -52,7 +52,7 @@ export function WeeklyReview({ onClose }: { onClose: () => void }) {
     byArea.set(l.category, t)
   }
   const prevEnd = isoDate(addDays(prevStart, 6))
-  const slipped = s.vault.tasks.filter((t) => !t.done && t.due && t.due <= prevEnd)
+  const slipped = s.vault.tasks.filter((t) => !t.done && t.due && !t.dueFromParent && t.due <= prevEnd)
   const skipped = log.filter((l) => l.status === 'skipped').length
 
   // 2. Tidy

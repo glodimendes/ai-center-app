@@ -130,7 +130,7 @@ export function Alerts() {
                                     {label}
                                   </Small>
                                 ))}
-                                {item.task.due && <Small onClick={() => due(item.task!, null)}>Remove</Small>}
+                                {item.task.due && !item.task.dueFromParent && <Small onClick={() => due(item.task!, null)}>Remove</Small>}
                                 <span className="w-2" />
                               </>
                             )}

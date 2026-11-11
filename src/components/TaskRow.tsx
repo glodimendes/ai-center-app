@@ -51,6 +51,8 @@ export function TaskRow({
   const postponed = !task.done && task.postponed && task.postponed > isoDate(new Date()) ? task.postponed : null
 
   const patch = (p: Parameters<typeof api.patchTask>[1]) => act(api.patchTask(task.id, p))
+  // Timing written on this line; an inherited one (from the parent) is shown but not cycled away.
+  const ownTiming = task.timingFromParent ? undefined : task.timing
   // Shown at once and cycled from here, so quick clicks step through levels before the vault write comes back.
   const [pri, setPri] = useState(task.priority)
   useEffect(() => setPri(task.priority), [task.priority])
@@ -209,7 +211,7 @@ export function TaskRow({
           <button
             onClick={() => setPop(pop === 'due' ? null : 'due')}
             className={cx('h-5 px-0.5 text-[10.5px] whitespace-nowrap', overdue && !task.done ? 'text-danger font-semibold' : atRisk ? 'text-warn' : 'text-faint')}
-            title={overdue ? `Overdue since ${task.due}` : `Due ${task.due}${atRisk ? ' (at risk: the plan finishes after it)' : ''}`}
+            title={`${overdue ? `Overdue since ${task.due}` : `Due ${task.due}${atRisk ? ' (at risk: the plan finishes after it)' : ''}`}${task.dueFromParent ? ', from the parent task' : ''}`}
           >
             {overdue && !task.done ? `${overdueDays}d` : relDay(task.due!)}
           </button>
@@ -220,9 +222,9 @@ export function TaskRow({
               'flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap',
               task.due ? (overdue && !task.done ? 'bg-danger/10 text-danger' : atRisk ? 'bg-warn-soft text-warn' : 'bg-sunken text-muted') : 'text-faint hidden group-hover:flex'
             )}
-            title={atRisk ? 'At risk: the plan finishes after this deadline' : 'Deadline'}
+            title={`${atRisk ? 'At risk: the plan finishes after this deadline' : 'Deadline'}${task.dueFromParent ? ' (from the parent task; pick a date to give this one its own)' : ''}`}
           >
-            <Calendar size={11} />
+            <Calendar size={11} className={task.dueFromParent ? 'opacity-50' : undefined} />
             {task.due ? relDay(task.due) : 'Due'}
           </button>
         )}
@@ -247,7 +249,7 @@ export function TaskRow({
                 )
               })}
             </div>
-            {task.due && (
+            {task.due && !task.dueFromParent && (
               <button onClick={() => (patch({ due: null }), setPop(null))} className="w-full mt-1 h-6 rounded text-[11px] text-danger hover:bg-danger/10">
                 Remove deadline
               </button>
@@ -329,10 +331,12 @@ export function TaskRow({
       </button>
 
       <button
-        onClick={() => patch({ timing: task.timing === undefined ? 'spread' : task.timing === 'spread' ? 'asap' : null })}
-        className={cx('h-5 px-1 rounded flex items-center gap-0.5 text-[10.5px]', task.timing ? 'text-accent bg-accent-soft' : 'text-faint hidden group-hover:flex')}
+        onClick={() => patch({ timing: ownTiming === undefined ? (task.timing === 'spread' ? 'asap' : 'spread') : ownTiming === 'spread' ? 'asap' : null })}
+        className={cx('h-5 px-1 rounded flex items-center gap-0.5 text-[10.5px]', ownTiming ? 'text-accent bg-accent-soft' : task.timing ? 'text-accent/70' : 'text-faint hidden group-hover:flex')}
         title={
-          task.timing === 'spread'
+          task.timingFromParent
+            ? `${task.timing === 'spread' ? 'Spread' : 'As soon as possible'}, from the parent task (click: ${task.timing === 'spread' ? 'as soon as possible' : 'spread'} for this one)`
+            : task.timing === 'spread'
             ? 'Spread evenly until the deadline (click: as soon as possible)'
             : task.timing === 'asap'
               ? 'As soon as possible (click: back to the area default)'

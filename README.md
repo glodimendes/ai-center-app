@@ -44,11 +44,11 @@ Code: `electron/main/scheduler/plan.ts` (pure function, unit-tested). Every numb
 1. **Guarded deadlines**: tasks due within 2 days (or recently overdue), earliest first. They may go past the grid hours.
 2. Everything else by **weighted score** = (deadline weight 2 × urgency + priority weight 1 × priority) × area weight (Thesis 1.5, Courses 1.2, Outside 1, Personal 0.8). Urgency = 1 / (1 + days until due); priority urgent 2, high 1, medium 0.5, low 0.
 3. Last: **stale** tasks (overdue > 14 days), flagged "reschedule or drop it?".
-Ties are broken by order in the file. Only leaf tasks are planned (parents wait for their subtasks).
+Ties are broken by order in the file. Only leaf tasks are planned (parents wait for their subtasks). A subtask without its own `due:` or `@spread` / `@asap` takes its parent's (nearest ancestor's; shown muted, never written to the line; repeating tasks and habits keep their own dates).
 
 ### Timing
 - **As soon as possible** (default): earliest free day first.
-- **Spread**: evenly over the working days until deadline − slack (or over 5 days if undated); leftovers fall back to ASAP. Set per area, or per task with the ⇄ button (writes `@spread` / `@asap` on the line).
+- **Spread**: evenly over the working days until deadline − slack (or over 5 days if undated); leftovers fall back to ASAP. Set per area, or per task with the ⇄ button (writes `@spread` / `@asap` on the line). The spread subtasks of one task share a single even daily amount and are filled in file order, so the parts follow each other across the days instead of all starting on the first day.
 
 ### Weekly hours grid
 Hours per area per weekday (default: Thesis 4/2/4/2/4/2/–, Courses 2/3/1/3/1/–/–, Outside 1/1/2/1/2/1/–, Personal 0.5 weekdays, 1 at weekends). An area never gets more than its hours that day, except for guarded deadlines. **A 0 sets nothing aside rather than forbidding the area:** once every area with hours that day is planned, tasks still left over (any area, plus Other, which has no row) may use the remaining time on days where their area has 0 hours, ranked by the usual score. Areas marked **reserve** (Thesis) keep their hours as blocks even without concrete tasks. Reserved hours are placed right after training, breaks and deadlines due within the guard window, before other areas' tasks, so they get their preferred windows; the area's own tasks then fill them. **Weights only decide which tasks go first; the grid decides how many hours an area gets.** Training is outside the grid.

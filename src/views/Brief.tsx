@@ -52,7 +52,7 @@ export function Brief() {
   const toLog = s.plan.blocks.filter((b) => b.start.slice(0, 10) === today && b.kind !== 'break' && new Date(b.end) < new Date() && !logFor(s, b))
 
   const weekEnd = isoDate(addDays(new Date(), 7))
-  const open = s.vault.tasks.filter((t) => !t.done && t.due)
+  const open = s.vault.tasks.filter((t) => !t.done && t.due && !t.dueFromParent)
   const staleCutoff = isoDate(addDays(new Date(), -s.vault.preferences.staleOverdueDays))
   const staleIds = new Set(open.filter((t) => t.due! < staleCutoff).map((t) => t.id))
   const overdue = open.filter((t) => t.due! < today && !staleIds.has(t.id))
