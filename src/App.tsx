@@ -120,14 +120,21 @@ export function App() {
 
   return (
     <div className="h-full flex">
-      <aside className={cx('shrink-0 border-r border-line bg-sunken flex flex-col overflow-y-auto overflow-x-hidden', rail ? 'w-[52px]' : 'w-52')}>
+      {/* The rail fits the macOS window buttons with equal space each side (trafficLightPosition x 12 in electron/main/index.ts). */}
+      <aside className={cx('shrink-0 border-r border-line bg-sunken flex flex-col overflow-y-auto overflow-x-hidden', rail ? 'w-[84px]' : 'w-52')}>
         <div className="drag-region h-12 shrink-0" />
-        <div className={cx('pb-3 flex items-center gap-2 text-[13px] font-semibold', rail ? 'justify-center' : 'px-4')} title={rail ? 'AI Center' : undefined}>
-          <Sparkles size={15} className="text-accent shrink-0" /> {!rail && <span className="flex-1 truncate">AI Center</span>}
-          {!rail && (
-            <button onClick={toggleRail} className="text-faint hover:text-ink" title="Collapse the sidebar">
-              <PanelLeftClose size={14} />
+        <div className={cx('pb-3 flex items-center gap-2 text-[13px] font-semibold', rail ? 'justify-center' : 'px-4')}>
+          {rail ? (
+            <button onClick={toggleRail} className="p-1 rounded-md text-muted hover:text-ink hover:bg-panel/60" title="Expand the sidebar">
+              <PanelLeftOpen size={15} />
             </button>
+          ) : (
+            <>
+              <Sparkles size={15} className="text-accent shrink-0" /> <span className="flex-1 truncate">AI Center</span>
+              <button onClick={toggleRail} className="text-faint hover:text-ink" title="Collapse the sidebar">
+                <PanelLeftClose size={14} />
+              </button>
+            </>
           )}
         </div>
         <nav className="px-2 flex flex-col gap-0.5">
@@ -179,11 +186,6 @@ export function App() {
         </div>
         <div className="flex-1" />
         <div className="px-2 pb-3">
-          {rail && (
-            <button onClick={toggleRail} className="w-full flex justify-center py-1.5 rounded-md text-muted hover:text-ink" title="Expand the sidebar">
-              <PanelLeftOpen size={15} />
-            </button>
-          )}
           <button
             onClick={() => go('settings')}
             title={rail ? 'Settings · ⌘,' : undefined}

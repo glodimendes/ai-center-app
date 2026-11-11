@@ -31,6 +31,8 @@ function createMain() {
     minHeight: 480,
     title: 'AI Center',
     titleBarStyle: 'hiddenInset',
+    // Pinned so the collapsed sidebar (84 px in App.tsx) has the same 12 px on both sides of the three buttons (60 px, measured).
+    trafficLightPosition: { x: 12, y: 20 },
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f7f7f8',
     webPreferences: webPreferences()
   })
