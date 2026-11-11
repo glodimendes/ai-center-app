@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Sparkles } from 'lucide-react'
 import type { Task } from '@shared/types'
 import { fmtDuration } from '@shared/time'
 import { useStore } from '@/store/app'
@@ -7,7 +7,8 @@ import { categoryOf, cx, relDay } from '@/lib/util'
 import { projection } from '@/lib/plan'
 import { TaskTree } from '@/components/TaskRow'
 import { QuickAdd } from '@/components/QuickAdd'
-import { Dot, Header } from '@/components/ui'
+import { Button, Dot, Header } from '@/components/ui'
+import { EstimateSuggestions } from '@/components/EstimateSuggestions'
 
 export function Tasks() {
   const s = useStore((st) => st.state)!
@@ -16,6 +17,7 @@ export function Tasks() {
   const [showDone, setShowDone] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<string | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const byId = useMemo(() => new Map(s.vault.tasks.map((t) => [t.id, t])), [s.vault.tasks])
 
   const matches = (t: Task): boolean => {
@@ -27,6 +29,8 @@ export function Tasks() {
   }
 
   const open = s.vault.tasks.filter((t) => !t.done)
+  const openIds = new Set(open.map((t) => t.id))
+  const noEstimate = open.filter((t) => !t.estimateMin && !t.childIds.some((id) => openIds.has(id))).length
   const totalMin = (ts: Task[]) => ts.reduce((a, t) => a + (t.childIds.length ? 0 : t.estimateMin ?? categoryOf(s, t.category).defaultEstimateMinutes), 0)
 
   return (
@@ -38,6 +42,11 @@ export function Tasks() {
           placeholder="Search…"
           className="h-7 w-52 @max-4xl:w-36 @max-2xl:w-28 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
         />
+        {noEstimate > 0 && (
+          <Button kind="ghost" onClick={() => setSuggesting(true)} label={`Suggest ${noEstimate} estimates`} title={`Claude Haiku suggests estimates for ${noEstimate} open tasks without one; you pick which to keep`}>
+            <Sparkles size={13} className="text-accent" />
+          </Button>
+        )}
         <label className="flex items-center gap-1.5 text-[12px] text-muted whitespace-nowrap" title="Show done">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> <span className="@max-2xl:hidden">Show done</span>
         </label>
@@ -105,6 +114,7 @@ export function Tasks() {
           })}
         </div>
       </div>
+      {suggesting && <EstimateSuggestions onClose={() => setSuggesting(false)} />}
     </div>
   )
 }

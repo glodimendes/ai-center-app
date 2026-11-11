@@ -40,6 +40,7 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
 - **Update context** (⌘U, `electron/main/context/agent.ts`)
   - **How:** runs `codex exec -m gpt-5.6-luna` (default) or `claude -p --model claude-haiku-5-5`, inside the vault and following `context-maintenance.md`. Claude is limited to file tools; Codex has no flag to disable its shell, so it runs in its `workspace-write` sandbox (writes confined to the vault, no network).
   - **Review:** the vault's text files are snapshotted first, then the user sees a per-file diff and chooses **Keep** (one commit) or **Undo**. Cancel, an error or quitting undoes it too. Undo reverts only the agent's own lines (`context/revert.ts`), so anything written to the same files since survives; a file where that can't be done with certainty is left as is and named in the toast. While a run is going, the app's own background writes wait (calendar-edit adoption, the auto brief, quick capture).
+- **One-shot questions** (`electron/main/context/ask.ts`): `claude -p --model claude-haiku-5-5 --tools '' --strict-mcp-config`, so the model sees only the prompt text and can't read or change anything; it answers JSON. Used for **Suggest estimates** (Tasks view) and **Plan with a wish** (Re-plan dialog). Results are shown for approval; nothing is written without a click.
 - **Everything else is deterministic code, not AI:** planning, re-planning, the rest of the Brief screen, sync diff, logging, budgets.
 
 ## Architecture

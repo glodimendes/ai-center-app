@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Api, AppState, PlanOption, PlanVariant } from '@shared/api'
+import type { Api, AppState, EstimateSuggestion, PlanOption, PlanVariant } from '@shared/api'
 import type { CalEvent, CalendarStatus, ContextResult, Plan, Settings, SyncOp, Task, VaultState } from '@shared/types'
 import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
 import { nextOccurrence } from '@shared/repeat'
@@ -17,6 +17,7 @@ import { needsFullPlan, planningDay } from './scheduler/cadence'
 import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
+import { askJson } from './context/ask'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
 
 /** Owns vault, calendar and the current plan; implements the renderer API. */
@@ -215,6 +216,36 @@ export class Controller implements Api {
   }
   async archiveDone() {
     return this.mutate(() => this.vault.archiveDone(new Date()))
+  }
+
+  async suggestEstimates(): Promise<EstimateSuggestion[]> {
+    const v = this.vault.state()
+    const openIds = new Set(v.tasks.filter((t) => !t.done).map((t) => t.id))
+    const todo = v.tasks.filter((t) => !t.done && !t.estimateMin && !t.childIds.some((id) => openIds.has(id))).slice(0, 80)
+    if (!todo.length) return []
+    const label = (key: string) => v.preferences.categories.find((c) => c.key === key)?.label ?? key
+    const examples = v.tasks.filter((t) => t.estimateMin).slice(0, 40)
+    const prompt = [
+      "Estimate how long each task below will take the user (remaining effort, in minutes). Tasks are in Portuguese or English. Use the task's area and heading as context, and calibrate against the user's own estimates when there are any.",
+      'Answer with JSON only: [{"n": <task number>, "minutes": <multiple of 15, 15-480>, "why": "<at most 6 words>"}], one entry per task.',
+      examples.length ? `\nThe user's own estimates:\n${examples.map((t) => `- ${t.title} [${label(t.category)} › ${t.section.join(' › ')}] = ${t.estimateMin} min`).join('\n')}` : '',
+      `\nTasks to estimate:\n${todo.map((t, i) => `${i + 1}. ${t.title} [${label(t.category)} › ${t.section.join(' › ')}]${t.due ? ` due ${t.due}` : ''}`).join('\n')}`
+    ].join('\n')
+    const answer = await askJson<{ n: number; minutes: number; why?: string }[]>(prompt)
+    if (!Array.isArray(answer)) throw new Error("The model's answer wasn't a list. Try again.")
+    return answer
+      .filter((a) => Number.isInteger(a.n) && todo[a.n - 1] && Number(a.minutes) > 0)
+      .map((a) => {
+        const t = todo[a.n - 1]
+        return { taskId: t.id, title: t.title, section: t.section, category: t.category, minutes: Math.min(480, Math.max(15, Math.round(Number(a.minutes) / 15) * 15)), why: String(a.why ?? '').slice(0, 80) }
+      })
+  }
+
+  async applyEstimates(minutesById: Record<string, number>) {
+    const titles = new Map(this.vault.state().tasks.map((t) => [t.id, t.title]))
+    this.mutate(() => {
+      for (const [id, min] of Object.entries(minutesById)) if (titles.has(id) && min > 0) this.vault.patchTask(id, { estimateMin: min }, `estimate "${titles.get(id)}"`)
+    })
   }
 
   async getState(): Promise<AppState> {
