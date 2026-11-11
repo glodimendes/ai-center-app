@@ -17,6 +17,15 @@ import type {
   Weekday
 } from './types'
 
+export interface EstimateSuggestion {
+  taskId: string
+  title: string
+  section: string[]
+  category: string
+  minutes: number
+  why: string
+}
+
 export type PlanVariant = 'balanced' | 'deadlines' | 'deep' | 'light'
 
 export interface PlanMetrics {
@@ -113,6 +122,10 @@ export interface Api {
   setWeekNotes(week: string, notes: string): Promise<void>
   /** Weekly review: moves checked tasks to 05_Tasks/archive/done-YYYY.md. Returns how many moved. */
   archiveDone(): Promise<number>
+  /** Claude Haiku suggests ~estimates for open tasks without one (no tools; nothing is written). */
+  suggestEstimates(): Promise<EstimateSuggestion[]>
+  /** Writes the estimates the user accepted. */
+  applyEstimates(minutesById: Record<string, number>): Promise<void>
   // docs
   listDocs(): Promise<DocInfo[]>
   readDoc(path: string): Promise<DocContent>
@@ -150,5 +163,5 @@ export const API_METHODS: Record<ApiMethod, true> = {
   listDocs: true, readDoc: true, writeDoc: true, savePreferences: true, saveSettings: true, chooseVault: true, revealVault: true,
   connectCalendar: true, disconnectCalendar: true, refreshCalendar: true, syncPreview: true, syncApply: true, closeCapture: true,
   contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true,
-  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true
+  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true, suggestEstimates: true, applyEstimates: true
 }
