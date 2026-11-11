@@ -19,6 +19,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 ## Later (agreed with the user, not now)
 
 - **Skeleton-then-fill placement, with a front-loading option.** Today's order grew from patches: pins → training → breaks → deadlines within the guard → reserved grid hours → other tasks by score (each grabs the first free slot in its area's windows, i.e. front-loading). Proposed redesign (2026-11-09): lay down each area's grid hours first, areas in area-weight order (higher weight wins contested windows), then fill those blocks with tasks by score; unfilled blocks are dropped except for "reserve" areas. Keep the current front-loading behaviour as an option. Rewrites the middle of `scheduler/plan.ts`; most placement tests need review; blocks move once on the first full re-plan.
+  `plan()` is still one ~510-line function whose passes share closure state; splitting it into named passes was deliberately left for this redesign (2026-11-11), since the redesign rewrites that middle anyway.
 
 ## Next (agreed or obvious)
 

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import type { CalEvent } from '@shared/types'
-import { CONTEXT_MODELS, resolveBinary } from './agent'
+import { CONTEXT_MODELS, keepTail, resolveBinary, stop } from './agent'
 
 // In-app daily brief. Runs Claude Code headlessly (cheapest model) inside the vault with read-only
 // tools: vault files and Gmail reads. Calendar events come only from the app (the calendars shown in
@@ -119,12 +119,14 @@ export async function runBrief(vault: string, template: string, date: string, ev
       }
     }
   })
-  child.stderr.on('data', (c: Buffer) => (stderr += c.toString()))
+  child.stderr.on('data', (c: Buffer) => (stderr = keepTail(stderr + c.toString())))
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => child.kill('SIGTERM'), 5 * 60_000)
+    let timedOut = false
+    const timer = setTimeout(() => ((timedOut = true), stop(child)), 5 * 60_000)
     child.on('error', reject)
     child.on('close', (code) => {
       clearTimeout(timer)
+      if (timedOut) return reject(new Error('The brief took more than 5 minutes and was stopped. Try again later.'))
       const md = result.trim()
       if (!md.includes('## ')) return reject(new Error(stderr.trim().split('\n').slice(-2).join(' ') || `The brief run ended without a brief (code ${code}).`))
       resolve(md)

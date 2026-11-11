@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CalEvent, Preferences, Task, WeekData } from '@shared/types'
 import { plan } from '../electron/main/scheduler/plan'
+import { needsFullPlan, planningDay } from '../electron/main/scheduler/cadence'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
 import { parseTasks } from '../electron/main/vault/parser'
 import { applyVariant, planMetrics } from '../electron/main/scheduler/variants'
@@ -219,9 +220,9 @@ describe('plan', () => {
     expect(thisWeek('outside')).toBeLessThanOrEqual(120)
   })
 
-  it('plans the real todo list without crashing and schedules every open leaf task', () => {
+  it('plans a full todo list without crashing or overlapping blocks', () => {
     const today = new Date(2026, 10, 9)
-    const text = readFileSync(join(__dirname, 'fixtures/daily-todos.md'), 'utf8')
+    const text = readFileSync(join(__dirname, 'sample/daily-todos.md'), 'utf8')
     const { tasks } = parseTasks(text, 'f', DEFAULT_PREFERENCES.categories, today)
     const p = plan({ tasks, events: [], prefs: DEFAULT_PREFERENCES, weeks: {}, now })
     expect(p.blocks.length).toBeGreaterThan(10)
@@ -579,5 +580,25 @@ describe('manual block edits (weekly overrides)', () => {
     const p = plan({ tasks: [], events: [], prefs, now, weeks: week({ dismissed: [id] }) })
     expect(p.blocks.some((b) => b.id === id)).toBe(false)
     expect(p.blocks.some((b) => b.id === `break:2026-11-10:${br.label}`)).toBe(true)
+  })
+})
+
+describe('re-plan cadence', () => {
+  const base = { forced: false, hasPlan: true, lastFullDay: '2026-11-10', lastPrefsHash: 'p', prefsHash: 'p' }
+
+  it('rolls the planning day over at 04:00, not midnight', () => {
+    expect(planningDay(new Date(2026, 10, 11, 3, 59))).toBe('2026-11-10')
+    expect(planningDay(new Date(2026, 10, 11, 4, 0))).toBe('2026-11-11')
+  })
+
+  it('stays incremental within a planning day, late evening included', () => {
+    expect(needsFullPlan({ ...base, now: new Date(2026, 10, 11, 1, 30) })).toBe(false)
+  })
+
+  it('re-plans fully on a new day, changed preferences, on demand, or with no plan yet', () => {
+    expect(needsFullPlan({ ...base, now: new Date(2026, 10, 11, 7, 0) })).toBe(true)
+    expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), prefsHash: 'q' })).toBe(true)
+    expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), forced: true })).toBe(true)
+    expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), hasPlan: false })).toBe(true)
   })
 })

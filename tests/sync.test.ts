@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, CalEvent, CalendarInfo } from '@shared/types'
 import { buildSyncDiff } from '../electron/main/calendar/sync'
+import { calendarEdits } from '../electron/main/calendar/adopt'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
 
 const now = new Date(2026, 10, 9, 7, 0)
@@ -139,5 +140,39 @@ describe('buildSyncDiff for a single day', () => {
     const own = { ...tagged('x', '2026-11-10T09:00:00', '2026-11-10T10:00:00'), plannerBlockId: undefined, title: 'Dentist' }
     const { ops } = dayDiff('2026-11-10', [], [own])
     expect(ops).toEqual([])
+  })
+})
+
+describe('calendarEdits (your calendar edits win)', () => {
+  const from = new Date(2026, 10, 9)
+  const at = new Date(2026, 10, 10, 12, 0)
+  const synced = {
+    'b-moved': { eventId: 'e1', calendarId: 'study', start: '2026-11-11T09:00:00', end: '2026-11-11T10:00:00' },
+    'b-same': { eventId: 'e2', calendarId: 'study', start: '2026-11-11T14:00:00', end: '2026-11-11T15:00:00' },
+    'b-deleted': { eventId: 'e3', calendarId: 'study', start: '2026-11-12T09:00:00', end: '2026-11-12T10:00:00' },
+    'b-past-gone': { eventId: 'e4', calendarId: 'study', start: '2026-11-09T09:00:00', end: '2026-11-09T10:00:00' },
+    'b-offline': { eventId: 'e5', calendarId: 'sports', start: '2026-11-12T18:00:00', end: '2026-11-12T19:00:00' },
+    'b-old': { eventId: 'e6', calendarId: 'study', start: '2026-11-02T09:00:00', end: '2026-11-02T10:00:00' }
+  }
+  const ev = (id: string, blockId: string, start: string, end: string) => ({ id, calendarId: 'study', calendarName: 'Study Schedule', title: 'Thesis', start, end, allDay: false, plannerBlockId: blockId })
+  const events = [ev('e1', 'b-moved', '2026-11-11T10:00:00+01:00', '2026-11-11T11:30:00+01:00'), ev('e2', 'b-same', '2026-11-11T14:00:00+01:00', '2026-11-11T15:00:00+01:00')]
+  const out = calendarEdits(synced, events, from, ['study'], at)
+
+  it('pins a block moved or resized in the calendar, compared as instants', () => {
+    expect(out.moved.map((m) => m.blockId)).toEqual(['b-moved'])
+  })
+
+  it('dismisses a block deleted while still ahead, and only forgets a past one', () => {
+    expect(out.deleted.map((d) => d.blockId)).toEqual(['b-deleted'])
+    expect(out.forget.sort()).toEqual(['b-deleted', 'b-past-gone'])
+  })
+
+  it('leaves blocks alone when their calendar did not load (offline account)', () => {
+    expect([...out.deleted, ...out.moved].some((x) => x.blockId === 'b-offline')).toBe(false)
+    expect(out.forget).not.toContain('b-offline')
+  })
+
+  it('ignores blocks before the loaded window', () => {
+    expect(out.forget).not.toContain('b-old')
   })
 })
