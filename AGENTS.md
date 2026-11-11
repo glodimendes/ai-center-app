@@ -101,7 +101,7 @@ npm run sign          # scripts/sign-app.sh: signs dist with the local cert "AI 
 
 macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The calendar permission prompt needs the user's click: test calendar features in the packaged app with the user.
 
-## Status (2026-11-10)
+## Status (2026-11-11)
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
@@ -112,12 +112,20 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Watch out:** the window must be built with `parseDate(day)` from `shared/time.ts`, never `new Date(day)` — a bare `YYYY-MM-DD` parses as **UTC**, which in CET shifted the window to 01:00 and silently dropped blocks between midnight and 01:00. `tests/sync.test.ts` → "covers the whole local day, midnight included" fails if anyone reintroduces this.
 - **Verified:** 7 new unit tests (104 total) and live in the dev app over CDP — day-scoped previews are a strict subset of the full window (full 29 / Nov 10 → 6 / Nov 11 → 4 / unplanned day → 0), and the dialog renders "Sync Tuesday, Nov 10". The dev app has no calendar access, so **the real write path for a single day has not been exercised yet**: confirm on the installed app that syncing one day leaves the other days' planner events in place.
 
-**Added 2026-11-10 — skip one occurrence of a repeating task (dev-verified, not yet watched live):**
+**Added 2026-11-10 — skip one occurrence of a repeating task (installed 2026-11-11, NOT yet watched live):**
 - **Why:** a repeating task is a single line (`repeat:` + `due:`), so the Today trash called `deleteTask` and took the **whole series** with it. Reported by the user.
 - **What:** in **Today** the trash on an open repeating task now skips just that occurrence — `Controller.skipOccurrence` moves `due:` to `nextOccurrence` and clears `postpone:`, nothing is marked done, and the toast offers Undo. The **Tasks view is unchanged** and still deletes the series; that split was the user's choice (2026-11-10), with no confirm dialog anywhere. `TaskRow` takes a `skipRepeats` prop that only Today passes.
 - **Not a completion:** a skip must never write `[x]` or a log entry, or skipped occurrences would count as work done.
 - **Verified:** unit tests (107) plus a live dev run — skipping moved `due:2026-11-16` → `due:2026-11-23` in `daily-todos.md` as a **one-line** commit (`planner: skip one "…"`), the line count unchanged, and Today showed "Skip this one (every week — the series stays)" while the Tasks view kept plain "Delete".
 - **Design note:** `nextOccurrence` is a *catch-up* repeater (org-mode `++`): it steps from the current due date until past today, so a late check-off never spawns overdue copies. There is deliberately no "count from the completion date" style (org `.+` / Obsidian Tasks `when done`) — proposed in ROADMAP "Ideas", not approved.
+
+**Added 2026-11-11 — the packaged app is signed:**
+- **Why:** the bundle was only ad-hoc, linker-signed (`Identifier=Electron`, no sealed resources), so its code hash changed on every build. macOS TCC identifies an unsigned app by that hash, so every `install-app` looked like a new app and Calendar access had to be granted again.
+- **What:** `scripts/sign-app.sh` signs nested code bottom-up (frameworks, the four Electron helper apps, `calendar-helper`) and then the bundle, with the user's self-signed Code Signing certificate **"AI Center Dev"** in their login keychain (override with `AI_CENTER_SIGN_IDENTITY`). `install-app` = package → sign → copy; `npm run sign` signs `dist` alone.
+- **It signs with the certificate's SHA-1 hash, not its name**: a self-signed root is untrusted, so `security find-identity -v` hides it (`CSSMERR_TP_NOT_TRUSTED`) even though `codesign` uses it fine. Trusting the certificate is optional and was not done.
+- **Missing certificate is not an error:** the script warns and exits 0, so packaging still works on another machine. An *expired* certificate does fail the build — this one runs out **2027-11-11**.
+- **One-off cost:** changing the signing identity resets the TCC grant, so the user has to allow Calendar access once more after the 2026-11-11 install (not yet confirmed — they had not reopened the app). From the next install on it should persist; that persistence is the whole point and is itself unverified until a second signed install.
+- **Verified:** the installed bundle now reports `Identifier=local.aicenter.planner`, `Authority=AI Center Dev`, `Sealed Resources version=2 rules=13 files=13`, and passes `codesign --verify --strict`. Still not an Apple Developer ID, so Gatekeeper may ask for right-click → Open once per bundle.
 
 **Verified live with the user (real calendar):** Sync dry-run, syncing one block to Study Schedule, moving it in Calendar.app (became a pin). Deleting it exposed a bug (a moved-then-deleted block stayed as a pin), fixed and unit-tested; re-check it live once. Not yet confirmed: that the user's own and Codex's events stay untouched across a full Sync.
 
@@ -131,7 +139,7 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Subtasks in the Tasks view**: hover buttons add a subtask, nest a task under the one above, or move it out; Tab / ⇧Tab while editing a title. `indentTask` / `addSubtask` in `vault/edits.ts` change only the moved lines and use the file's indentation (tabs). Verified in the dev app and by tests.
 - **Hand edits of calendar events** (see Hard rule 4): the user confirmed editing works in the installed app with the real calendar (2026-11-09).
 
-**Git:** everything up to 2026-11-09 is committed and pushed to `git@github.com:glodimendes/ai-center-app.git`. The 2026-11-10 single-day sync is **committed on `main` but not pushed** — the user chose to hold the push until they have run Sync day against the real calendar. Push once they confirm; if it turns out wrong, it is the tip commit on `main` and nothing downstream depends on it.
+**Git:** everything is committed and pushed to `git@github.com:glodimendes/ai-center-app.git`, through `de9808c` (2026-11-11). The single-day sync (`22d34de`) and the repeating-task skip (`e7e1b61`) were held back for a day and pushed on the user's go-ahead before either had been watched against the real calendar — so `main` contains two features that are installed but still unconfirmed live (see above).
 
 **Real vault content added 2026-11-09:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 
