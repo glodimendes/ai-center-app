@@ -51,6 +51,11 @@ export class MacCalendar implements CalendarProvider {
     this.status = 'disabled'
   }
 
+  /** Asks macOS to fetch remote changes (a Google web edit) into its local store; true if anything changed. */
+  async pull(seconds = 10) {
+    return (await helper<{ changed: boolean }>(['refresh', String(seconds)])).changed
+  }
+
   async calendars(): Promise<CalendarInfo[]> {
     const list = await helper<{ id: string; name: string; color: string; writable: boolean; source: string }[]>(['calendars'])
     return list.map((c) => ({ id: c.id, name: c.name, color: c.color, writable: c.writable, source: c.source }))

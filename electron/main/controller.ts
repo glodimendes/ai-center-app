@@ -34,6 +34,8 @@ export class Controller implements Api {
   }
   private events: CalEvent[] = []
   private refreshTimer: NodeJS.Timeout | null = null
+  private pulling: Promise<boolean> | null = null
+  private lastPull = 0
   private context = new ContextSession(() => this.vault, () => this.settings.contextEngine, (line) => this.emit('context-progress', line))
   // Plan stability: full re-plans only on demand, once per day, or when preferences change.
   // Everything else is incremental (existing blocks stay put; only their contents refresh).
@@ -635,9 +637,25 @@ export class Controller implements Api {
       this.calendar = { ...this.calendar, error: String((err as Error).message ?? err) }
     }
     this.push()
+    void this.pullRemote().then((changed) => { if (changed) void this.refreshCalendar() })
+  }
+
+  /**
+   * macOS Calendar only holds what CalendarAgent last fetched, and it may not fetch until Calendar.app opens.
+   * Nudge it so edits made on the web show up; the refresh above then reads them. At most every 30 s;
+   * callers that need fresh data (Sync) await a pull already in flight.
+   */
+  private pullRemote(): Promise<boolean> {
+    if (this.cal !== this.mac || !this.mac.connected) return Promise.resolve(false)
+    if (this.pulling) return this.pulling
+    if (Date.now() - this.lastPull < 30_000) return Promise.resolve(false)
+    this.lastPull = Date.now()
+    this.pulling = this.mac.pull().catch(() => false).finally(() => (this.pulling = null))
+    return this.pulling
   }
 
   async syncPreview(day?: string) {
+    await this.pullRemote()
     await this.refreshCalendar()
     const v = this.vault.state()
     return buildSyncDiff(this.currentPlan().blocks, this.events, this.calendar.calendars, v.preferences, v.tasks, new Date(), day)

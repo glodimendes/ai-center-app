@@ -6,7 +6,7 @@
 // edit the user made by hand in the app (never from Sync), on one occurrence, and they refuse planner events.
 //
 //   status | request | calendars | events <fromISO> <toISO> | create (stdin) | update (stdin) | delete <eventId>
-//   user-update (stdin) | user-delete <eventId>
+//   user-update (stdin) | user-delete <eventId> | refresh [seconds]
 import EventKit
 import Foundation
 
@@ -185,6 +185,24 @@ case "user-delete":
   do { try store.remove(ev, span: .thisEvent, commit: true) } catch { fail("Delete failed: \(error.localizedDescription)") }
   out(["ok": true])
 
+// EventKit only reads the local Calendar database, which CalendarAgent fills on its own schedule (often only
+// while Calendar.app is open). Ask it to pull from the servers and wait until the store reports a change
+// (plus a short quiet period, since each account/calendar posts its own), or until the timeout.
+case "refresh":
+  requireAccess()
+  let a = Array(args)
+  let timeout = a.count >= 2 ? (Double(a[1]) ?? 10) : 10
+  var lastChange: Date? = nil
+  let token = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: nil) { _ in lastChange = Date() }
+  store.refreshSourcesIfNecessary()
+  let deadline = Date().addingTimeInterval(timeout)
+  while Date() < deadline {
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    if let t = lastChange, Date().timeIntervalSince(t) > 1.5 { break }
+  }
+  NotificationCenter.default.removeObserver(token)
+  out(["changed": lastChange != nil])
+
 default:
-  fail("usage: calendar-helper status|request|calendars|events|create|update|delete|user-update|user-delete")
+  fail("usage: calendar-helper status|request|calendars|events|create|update|delete|user-update|user-delete|refresh")
 }
