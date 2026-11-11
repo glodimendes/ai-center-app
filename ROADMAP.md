@@ -43,7 +43,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Docs editor** may normalize Markdown (e.g. `-` → `*` bullets); it shows a diff and asks first.
 - **Event hand edits:** container events (calendar blocks the planner fills, e.g. "Thesis Deep Work") are still not draggable or editable in the app; deleting an event has no Undo (it asks first); editing a repeating event changes only that occurrence.
 - **Urgent is a score, not a rule:** `!urgent` weighs 2 (high 1) in the weighted score, so it usually beats high-priority tasks and far deadlines but still comes after guarded deadlines. Making it a hard "first" rule was offered to the user, not decided.
-- **Block panel auto-log** uses the "Time actually spent" field as it stands (planned length by default), so checking a task mid-block logs the full planned time until the user edits it. A checked task shows "0m planned here" (also true after Save log before).
+- **Block panel auto-log** uses the "Time actually spent" field as it stands. For a block still running it defaults to the time elapsed so far (to 5 min); for a finished one, to the planned length. A checked task shows "0m planned here" (also true after Save log before).
 - **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses.
 
 ## Ideas (proposed, not approved)
@@ -51,8 +51,6 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Repeat counted from the completion date.** Today every rule is a *catch-up* repeater (org-mode `++`): the next due date is stepped from the current due date until it is past today, so the rhythm is anchored to the calendar. Org-mode's `.+` and Obsidian Tasks' `when done` instead count from when you actually did it, which suits "change the batteries" or a gym session where the *gap* matters more than the slot. Org's rationale for it: "if you forgot to call your father for 3 weeks, it does not make sense to call him 3 times in a single day to make up for it." Would need a token (e.g. `repeat:2w!`), a `nextOccurrence` branch and a RepeatPicker control. Offered to the user 2026-11-10; they chose not to do it then.
 - **An end to a repeat** (`until:` / a count). Series currently run forever; "delete the series" from the Tasks view is the only way to stop one.
 - **Skip history.** A skip leaves no trace, so a task skipped every week looks identical to one being done on time. A counter or a log line would surface repeats that are not working — worth it only if the user wants the Review screen to show it.
-- "No estimate" filter in Today, to add `~` estimates quickly.
-- Skip the auto daily brief in dev runs.
 - Docs editor: keep the file's bullet style.
 
 ## Ideas where AI could help (proposed, not approved)

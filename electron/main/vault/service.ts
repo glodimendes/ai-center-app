@@ -30,6 +30,8 @@ const sha = (s: string) => createHash('sha1').update(s).digest('hex')
 export class VaultService {
   private watcher: FSWatcher | null = null
   private changeTimer: NodeJS.Timeout | null = null
+  /** What the app itself last wrote per file: the watcher event that write causes is not news. */
+  private ownWrites = new Map<string, string>()
   readonly git: VaultGit
 
   constructor(
@@ -37,7 +39,7 @@ export class VaultService {
     autoCommit: () => boolean,
     private onChange: () => void
   ) {
-    this.git = new VaultGit(root, autoCommit)
+    this.git = new VaultGit(root, autoCommit, onChange)
   }
 
   private abs(rel: string) {
@@ -55,6 +57,7 @@ export class VaultService {
     const p = this.abs(rel)
     mkdirSync(dirname(p), { recursive: true })
     writeFileSync(p, text)
+    this.ownWrites.set(p, text)
     this.git.record(rel, message)
   }
 
@@ -391,6 +394,11 @@ export class VaultService {
     })
     this.watcher.on('all', (_ev, path) => {
       if (!path.endsWith('.md')) return
+      const own = this.ownWrites.get(path)
+      if (own !== undefined) {
+        this.ownWrites.delete(path)
+        if (existsSync(path) && readFileSync(path, 'utf8') === own) return
+      }
       if (this.changeTimer) clearTimeout(this.changeTimer)
       this.changeTimer = setTimeout(this.onChange, 200)
     })

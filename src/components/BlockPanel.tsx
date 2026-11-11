@@ -193,7 +193,9 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
     [block, state.vault.tasks]
   )
   const [status, setStatus] = useState<LogStatus>(existing?.status ?? 'done')
-  const [actual, setActual] = useState(String(existing?.actualMin ?? planned))
+  // A block still running is logged with the time spent so far (to 5 min), not its whole planned length.
+  const elapsed = Math.round((Date.now() - new Date(block.start).getTime()) / 300_000) * 5
+  const [actual, setActual] = useState(String(existing?.actualMin ?? (elapsed > 0 && elapsed < planned ? elapsed : planned)))
   const [note, setNote] = useState(existing?.note ?? '')
   const [taskState, setTaskState] = useState<Record<string, { done: boolean; remaining: string }>>({})
   const ended = new Date(block.end).getTime() <= Date.now()

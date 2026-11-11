@@ -223,6 +223,12 @@ export function removeInboxItem(text: string, file: string, itemId: string): str
   if (!item) throw new TargetMissingError('That inbox item changed or was removed.')
   const { lines, eol } = splitLines(text)
   lines.splice(item.line, 1)
+  // The last item under a date heading takes the now-empty heading with it.
+  let h = item.line - 1
+  while (h >= 0 && !lines[h].trim()) h--
+  let n = item.line
+  while (n < lines.length && !lines[n].trim()) n++
+  if (h >= 0 && /^##\s+\d{4}-\d{2}-\d{2}\s*$/.test(lines[h]) && (n === lines.length || /^#{1,2}\s/.test(lines[n]))) lines.splice(h, n - h)
   return lines.join(eol)
 }
 

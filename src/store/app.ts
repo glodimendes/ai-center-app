@@ -66,6 +66,11 @@ export async function act<T>(p: Promise<T>, ok?: string): Promise<T | undefined>
 }
 
 export async function bootstrap() {
+  // A failed call nobody awaited with act() still tells the user instead of vanishing.
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = (e.reason as Error)?.message ?? String(e.reason)
+    useStore.getState().toast(msg, 'error')
+  })
   const s = await api.getState()
   useStore.getState().setState(s)
   window.api.onState((next) => useStore.getState().setState(next))
