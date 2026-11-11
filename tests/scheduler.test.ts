@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { CalEvent, DayRule, Preferences, Task, WeekData } from '@shared/types'
 import { plan } from '../electron/main/scheduler/plan'
 import { needsFullPlan, planningDay } from '../electron/main/scheduler/cadence'
-import { sanitizeWish, weeksWithWish } from '../electron/main/scheduler/wish'
+import { focusPins, sanitizeWish, weeksWithWish } from '../electron/main/scheduler/wish'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
 import { parseTasks } from '../electron/main/vault/parser'
 import { applyVariant, planMetrics } from '../electron/main/scheduler/variants'
@@ -694,8 +694,27 @@ describe('plan with a wish', () => {
       prefs,
       at
     )
-    expect(w).toEqual({ summary: 'Light Friday', strategy: 'light', limits: [{ date: '2026-11-13', areas: ['thesis'], maxMinutes: 0, from: '13:00' }], hours: [{ date: '2026-11-16', area: 'thesis', hours: 6 }] })
+    expect(w).toEqual({ summary: 'Light Friday', strategy: 'light', limits: [{ date: '2026-11-13', areas: ['thesis'], maxMinutes: 0, from: '13:00' }], hours: [{ date: '2026-11-16', area: 'thesis', hours: 6 }], focus: [] })
     expect(sanitizeWish({ strategy: 'chaos' }, prefs, at).strategy).toBeUndefined()
+  })
+
+  it('turns a focus on a heading into pinned time for that heading\'s tasks only, around calendar events', () => {
+    const headings = ['BRASA', 'TAMANDUÁ (EDUCATION PROJECT)', 'Work › Mentoria']
+    const w = sanitizeWish({ summary: 'Tamanduá morning', focus: [{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'tamanduá' }, { date: '2026-11-10', from: '09:00', to: '08:00', heading: 'BRASA' }] }, prefs, at, headings)
+    expect(w.focus).toEqual([{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'TAMANDUÁ (EDUCATION PROJECT)' }])
+    const t1 = task('Lançar o MVP', 'outside', { section: ['TAMANDUÁ (EDUCATION PROJECT)'], estimateMin: 120, due: '2026-11-20' })
+    const t2 = task('Write the onboarding guide', 'outside', { section: ['TAMANDUÁ (EDUCATION PROJECT)'], estimateMin: 60 })
+    const other = task('Email a partner', 'outside', { section: ['BRASA'], estimateMin: 60 })
+    const busy = [{ s: new Date(2026, 10, 10, 10, 0).getTime(), e: new Date(2026, 10, 10, 11, 0).getTime() }]
+    const pins = focusPins(w, [other, t2, t1], busy, 's')
+    expect(pins.map((p) => [p.start.slice(11, 16), p.end.slice(11, 16), p.title])).toEqual([
+      ['08:00', '10:00', 'TAMANDUÁ (EDUCATION PROJECT)'],
+      ['11:00', '12:30', 'TAMANDUÁ (EDUCATION PROJECT)']
+    ])
+    expect(pins[0].taskIds).toEqual([t1.id, t2.id])
+    const p = plan({ tasks: [other, t1, t2], events: [], prefs, weeks: weeksWithWish({}, w, prefs, 's', pins), now: at })
+    const morning = p.blocks.filter((b) => b.start.startsWith('2026-11-10T08') || b.start.startsWith('2026-11-10T11'))
+    expect(morning.flatMap((b) => b.chunks.map((c) => c.taskId)).every((id) => id === t1.id || id === t2.id)).toBe(true)
   })
 
   it('writes date rules and that week\'s hours, and the planner follows them', () => {

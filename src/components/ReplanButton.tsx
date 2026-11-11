@@ -173,9 +173,14 @@ function WishBox({ onApplied }: { onApplied: () => void }) {
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ wish: Wish; changes: string[]; option: PlanOption } | null>(null)
   const today = isoDate(new Date())
-  const active = Object.entries(s.vault.weeks).flatMap(([week, w]) =>
-    (w.overrides?.dayRules ?? []).filter((r) => (r.dates ?? []).some((d) => d >= today)).map((r) => ({ week, rule: r }))
-  )
+  const active = Object.entries(s.vault.weeks).flatMap(([week, w]) => [
+    ...(w.overrides?.dayRules ?? [])
+      .filter((r) => (r.dates ?? []).some((d) => d >= today))
+      .map((r) => ({ id: r.id, when: (r.dates ?? []).join(', '), label: r.label, remove: () => api.removeWeekRule(week, r.id) })),
+    ...w.pins
+      .filter((p) => p.blockId.startsWith('wish:') && p.start.slice(0, 10) >= today)
+      .map((p) => ({ id: p.blockId, when: `${p.start.slice(0, 10)} ${p.start.slice(11, 16)}–${p.end.slice(11, 16)}`, label: `Focus: ${p.title}`, remove: () => api.unpin(p.blockId) }))
+  ])
 
   const ask = async () => {
     if (!text.trim()) return
@@ -229,11 +234,11 @@ function WishBox({ onApplied }: { onApplied: () => void }) {
       {active.length > 0 && (
         <div className="mt-3 text-[11.5px]">
           <div className="text-faint mb-1">Active wishes</div>
-          {active.map(({ week, rule }) => (
-            <div key={rule.id} className="flex items-center gap-2 min-w-0">
-              <span className="text-muted shrink-0">{(rule.dates ?? []).join(', ')}</span>
-              <span className="flex-1 min-w-0 truncate">{rule.label}</span>
-              <button onClick={() => void act(api.removeWeekRule(week, rule.id), 'Wish removed')} className="text-faint hover:text-danger" title="Remove">
+          {active.map((a) => (
+            <div key={a.id} className="flex items-center gap-2 min-w-0">
+              <span className="text-muted shrink-0">{a.when}</span>
+              <span className="flex-1 min-w-0 truncate">{a.label}</span>
+              <button onClick={() => void act(a.remove(), 'Wish removed')} className="text-faint hover:text-danger" title="Remove">
                 <X size={12} />
               </button>
             </div>

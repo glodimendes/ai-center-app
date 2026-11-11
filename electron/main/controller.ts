@@ -18,7 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { askJson } from './context/ask'
-import { describeWish, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
+import { describeWish, focusPins, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
 
 /** Owns vault, calendar and the current plan; implements the renderer API. */
@@ -227,15 +227,34 @@ export class Controller implements Api {
     return { ...meta, seed, plan: p, metrics: planMetrics(p, v.preferences, this.events, now) }
   }
 
+  /** Headings of the todo list as "A › B", for wishes that name a project. */
+  private headings(v: VaultState) {
+    return [...new Set(v.sections.map((sec) => sec.path.join(' › ')))]
+  }
+
+  /** Time already taken on the calendar (busy events) and by pinned blocks, in epoch ms. */
+  private busySpans(v: VaultState) {
+    const ignored = new Set(v.preferences.ignoreCalendars)
+    const free = (e: CalEvent) => {
+      const o = this.settings.eventAvailability?.[`${e.calendarId}:${e.id}`]
+      return o ? o === 'free' : Boolean(e.free) || ignored.has(e.calendarName)
+    }
+    const events = this.events.filter((e) => !e.allDay && !e.plannerBlockId && !free(e)).map((e) => ({ s: new Date(e.start).getTime(), e: new Date(e.end).getTime() }))
+    const pins = Object.values(v.weeks).flatMap((w) => w.pins.map((p) => ({ s: new Date(p.start).getTime(), e: new Date(p.end).getTime() })))
+    return [...events, ...pins]
+  }
+
   async planWish(text: string) {
     const v = this.vault.state()
     const now = new Date()
-    const wish = sanitizeWish(await askJson<unknown>(wishPrompt(text, v.preferences, now)), v.preferences, now)
-    if (!wish.limits.length && !wish.hours.length && !wish.strategy) throw new Error("Couldn't turn that into a change. Try naming days, areas or times.")
-    const weeks = weeksWithWish(v.weeks, wish, v.preferences, 'preview')
-    const free = Object.fromEntries(Object.entries(weeks).map(([k, w]) => [k, { ...w, overrides: w.overrides && { ...w.overrides, holds: [] } }]))
+    const headings = this.headings(v)
+    const wish = sanitizeWish(await askJson<unknown>(wishPrompt(text, v.preferences, now, headings)), v.preferences, now, headings)
+    const pins = focusPins(wish, v.tasks, this.busySpans(v), 'preview')
+    if (!wish.limits.length && !wish.hours.length && !pins.length && !wish.strategy) throw new Error("Couldn't turn that into a change. Try naming a day, a time, an area or a heading from your todo list.")
+    const weeks = weeksWithWish(v.weeks, wish, v.preferences, 'preview', pins)
+    const freed = Object.fromEntries(Object.entries(weeks).map(([k, w]) => [k, { ...w, overrides: w.overrides && { ...w.overrides, holds: [] } }]))
     const key = wish.strategy ?? this.variant.key
-    const p = this.runPlan({ ...v, weeks: free }, { key }, now, true)
+    const p = this.runPlan({ ...v, weeks: freed }, { key }, now, true)
     const meta = PLAN_VARIANTS.find((x) => x.key === key)!
     const option: PlanOption = { ...meta, label: 'Your wish', desc: wish.summary, plan: p, metrics: planMetrics(p, v.preferences, this.events, now) }
     return { wish, changes: describeWish(wish, v.preferences), option }
@@ -243,10 +262,15 @@ export class Controller implements Api {
 
   async applyWish(raw: Wish) {
     const v = this.vault.state()
-    const wish = sanitizeWish(raw, v.preferences, new Date())
-    const next = weeksWithWish(v.weeks, wish, v.preferences, String(Date.now()))
+    const headings = this.headings(v)
+    const wish = sanitizeWish(raw, v.preferences, new Date(), headings)
+    const stamp = String(Date.now())
+    const pins = focusPins(wish, v.tasks, this.busySpans(v), stamp)
+    const next = weeksWithWish(v.weeks, wish, v.preferences, stamp)
+    const label = `wish: ${wish.summary || 'plan change'}`.slice(0, 80)
     this.mutate(() => {
-      for (const [week, w] of Object.entries(next)) if (w !== v.weeks[week]) this.vault.setWeekPlanOverrides(week, { dayRules: w.overrides?.dayRules, grid: w.overrides?.grid }, `wish: ${wish.summary || 'plan change'}`.slice(0, 80))
+      for (const [week, w] of Object.entries(next)) if (w !== v.weeks[week]) this.vault.setWeekPlanOverrides(week, { dayRules: w.overrides?.dayRules, grid: w.overrides?.grid }, label)
+      for (const pin of pins) this.vault.pin(pin)
     })
     if (wish.strategy) this.variant = { key: wish.strategy }
     await this.replan()
