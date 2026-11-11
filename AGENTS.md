@@ -101,7 +101,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 141 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
+npm test              # 142 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
@@ -116,14 +116,20 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 ## Status (2026-11-11)
 
+**Start here next session:**
+1. Ask the user how the installed app behaved on real data, especially: archiving checked tasks in the weekly review, a day rule, a habit, a wish with focus, and the narrow-window drawer drag (ROADMAP "Next" has the full list).
+2. Nothing is pushed since `b573074`: push only when the user asks.
+3. The user still has setup to do in Settings and in Codex (ROADMAP "Next" → "User's own setup"); don't do it for them in code.
+4. If they want more features, the Sunsama-style list in ROADMAP is what was offered; ask which, and keep routine-specific behaviour configurable (Settings), not hard-coded.
+
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
-**Added 2026-11-11, second session — evaluation plan, phases 1–5** (plan: `~/.claude/plans/foamy-discovering-breeze.md`). All verified in the dev app over CDP and by tests (141). **Everything through the collapsed-sidebar fix is installed** in `/Applications/AI Center.app` (last install 2026-11-11 evening). **None watched live by the user yet** — see ROADMAP "Next".
+**Added 2026-11-11, second session — evaluation plan, phases 1–5** (plan: `~/.claude/plans/foamy-discovering-breeze.md`). All verified in the dev app over CDP and by tests (142). **Everything is installed** in `/Applications/AI Center.app` (last install 2026-11-11 ~22:05, `7a8d926`: wish focus on a heading). The user has tried only the collapsed sidebar (dev run) and "Plan with a wish" (which failed, then got fixed); **everything else is unwatched live** — see ROADMAP "Next".
 - **Small windows:** min window 640×480; container queries on `<main>`; icon sidebar under 900 px (84 px wide, expand button at the top; the macOS window buttons are pinned at x 12 via `trafficLightPosition` so they sit over the rail with 12 px on each side — change both together); header buttons drop labels; Today's list is a drawer and BlockPanel an overlay when narrow; Week columns ≥88 px with sideways scroll; popovers in a portal that flip; modals scroll. Untested: dragging a task from the narrow drawer onto the timeline (CDP can't drive HTML5 drag).
 - **Data safety:** Update context undo reverts only the agent's lines (`context/revert.ts`) and the app's background writes wait during a run; an offline calendar no longer dismisses synced blocks; IPC only accepts `API_METHODS`.
 - **Speed:** one push per change (was two), focus refresh at most once a minute, async plan cache, serialized git with retry and a banner on failure.
 - **Routine fit (user decisions 2026-11-11):** the app owns calendar blocks (ROADMAP decision 1); routine changes must be settings, not code. → Settings **Day rules** (weekdays / "one day a week, the lightest", no-work span or cap); **Review & plan the week** (archive checked tasks to `05_Tasks/archive/done-YYYY.md`, week focus, week grid, picks, re-plan, sync).
-- **Features the user picked:** projected finish per heading/task; habits `3x/week` (`scheduler/habits.ts`); **Wrap up** the day (Today); **Suggest estimates** and **Plan with a wish** (Haiku via `context/ask.ts`, no tools, approval first); **New in your todo list** (Inbox: tasks added outside the app, `seen-tasks.json`).
+- **Features the user picked:** projected finish per heading/task; habits `3x/week` (`scheduler/habits.ts`); **Wrap up** the day (Today); **Suggest estimates** and **Plan with a wish** (Haiku via `context/ask.ts`, no tools, approval first; a wish can be date limits, a day's area hours, a strategy, or **focus time on a todo heading** → pinned `wish:` blocks holding only that heading's tasks); **New in your todo list** (Inbox: tasks added outside the app, `seen-tasks.json`).
 - **Still for the user (not code):** in Settings move headings Work / Work application / Mentoria / Masters to Outside work, put Training's 07–09 window first, drop the DMS heading; turn off the Codex `plan-next-eth-week` and Saturday weekly-review automations once the in-app versions are trusted; turn on/edit the sample "Lighter half-day" rule. Vault docs to fix via Update context with the user's OK: `03_Workflows/daily-planning.md` ("no dated plan files"), the wrong vault path in `03_Workflows/daily-brief.md`, training Day 1 / Day 3 tasks missing.
 
 **Added 2026-11-10 — single-day sync (installed, NOT yet watched live):**
@@ -166,7 +172,7 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 - **Subtasks in the Tasks view**: hover buttons add a subtask, nest a task under the one above, or move it out; Tab / ⇧Tab while editing a title. `indentTask` / `addSubtask` in `vault/edits.ts` change only the moved lines and use the file's indentation (tabs). Verified in the dev app and by tests.
 - **Hand edits of calendar events** (see Hard rule 4): the user confirmed editing works in the installed app with the real calendar (2026-11-09).
 
-**Git:** pushed to `git@github.com:glodimendes/ai-center-app.git` through `b573074`; everything after (drag-and-drop reordering and the whole second 2026-11-11 session) is committed locally and **not pushed** — push only when the user asks. The single-day sync (`22d34de`) and the repeating-task skip (`e7e1b61`) were held back for a day and pushed on the user's go-ahead before either had been watched against the real calendar — so `main` contains two features that are installed but still unconfirmed live (see above).
+**Git:** pushed to `git@github.com:glodimendes/ai-center-app.git` through `b573074`; the 16 commits after it (drag-and-drop reordering and the whole second 2026-11-11 session, through the handoff commit) are local and **not pushed** — push only when the user asks. The single-day sync (`22d34de`) and the repeating-task skip (`e7e1b61`) were held back for a day and pushed on the user's go-ahead before either had been watched against the real calendar — so `main` contains two features that are installed but still unconfirmed live (see above).
 
 **Real vault content added 2026-11-09:** `## TRAINING` in `05_Tasks/daily-todos.md` (8 repeating sessions), `headings: [TRAINING]` for the training area in preferences, a dated "Scheduling" note in `02_Projects/hybrid-training.md`. The app no longer reads `hybrid-training.md`.
 
