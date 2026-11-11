@@ -28,6 +28,7 @@ export function cleanOverrides(o: WeekOverrides | undefined): WeekOverrides | un
   if (o.holds?.length) out.holds = o.holds
   if (o.dayPicks && Object.keys(o.dayPicks).length) out.dayPicks = o.dayPicks
   if (o.grid && Object.keys(o.grid).length) out.grid = o.grid
+  if (o.dayRules?.length) out.dayRules = o.dayRules
   return Object.keys(out).length ? out : undefined
 }
 

@@ -26,6 +26,16 @@ export interface EstimateSuggestion {
   why: string
 }
 
+/** "Plan with a wish": a sentence turned into concrete, checkable changes for the next two weeks. */
+export interface Wish {
+  summary: string
+  strategy?: PlanVariant
+  /** Keep areas (empty = all work) out of part of a date, or cap them that date. */
+  limits: { date: string; areas: string[]; maxMinutes: number; from?: string; to?: string }[]
+  /** Hours set aside for an area on a date (replaces the grid cell for that weekday, that week only). */
+  hours: { date: string; area: string; hours: number }[]
+}
+
 export type PlanVariant = 'balanced' | 'deadlines' | 'deep' | 'light'
 
 export interface PlanMetrics {
@@ -130,6 +140,12 @@ export interface Api {
   applyEstimates(minutesById: Record<string, number>): Promise<void>
   /** Marks tasks added outside the app as reviewed. */
   acknowledgeTasks(ids: string[]): Promise<void>
+  /** Claude Haiku turns a sentence into a Wish; previewed as a plan, nothing is saved. */
+  planWish(text: string): Promise<{ wish: Wish; changes: string[]; option: PlanOption }>
+  /** Saves a previewed wish into the weeks it touches and re-plans. */
+  applyWish(wish: Wish): Promise<void>
+  /** Removes a date rule (e.g. from a wish) from a week. */
+  removeWeekRule(week: string, ruleId: string): Promise<void>
   // docs
   listDocs(): Promise<DocInfo[]>
   readDoc(path: string): Promise<DocContent>
@@ -167,5 +183,5 @@ export const API_METHODS: Record<ApiMethod, true> = {
   listDocs: true, readDoc: true, writeDoc: true, savePreferences: true, saveSettings: true, chooseVault: true, revealVault: true,
   connectCalendar: true, disconnectCalendar: true, refreshCalendar: true, syncPreview: true, syncApply: true, closeCapture: true,
   contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true,
-  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true, suggestEstimates: true, applyEstimates: true, acknowledgeTasks: true
+  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true, suggestEstimates: true, applyEstimates: true, acknowledgeTasks: true, planWish: true, applyWish: true, removeWeekRule: true
 }

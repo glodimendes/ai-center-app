@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Api, AppState, EstimateSuggestion, PlanOption, PlanVariant } from '@shared/api'
+import type { Api, AppState, EstimateSuggestion, PlanOption, PlanVariant, Wish } from '@shared/api'
 import type { CalEvent, CalendarStatus, ContextResult, Plan, Settings, SyncOp, Task, VaultState } from '@shared/types'
 import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
 import { nextOccurrence } from '@shared/repeat'
@@ -18,6 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { askJson } from './context/ask'
+import { describeWish, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
 
 /** Owns vault, calendar and the current plan; implements the renderer API. */
@@ -224,6 +225,36 @@ export class Controller implements Api {
     const p = this.runPlan({ ...v, weeks }, { key, seed }, now, true)
     const meta = PLAN_VARIANTS.find((x) => x.key === key)!
     return { ...meta, seed, plan: p, metrics: planMetrics(p, v.preferences, this.events, now) }
+  }
+
+  async planWish(text: string) {
+    const v = this.vault.state()
+    const now = new Date()
+    const wish = sanitizeWish(await askJson<unknown>(wishPrompt(text, v.preferences, now)), v.preferences, now)
+    if (!wish.limits.length && !wish.hours.length && !wish.strategy) throw new Error("Couldn't turn that into a change. Try naming days, areas or times.")
+    const weeks = weeksWithWish(v.weeks, wish, v.preferences, 'preview')
+    const free = Object.fromEntries(Object.entries(weeks).map(([k, w]) => [k, { ...w, overrides: w.overrides && { ...w.overrides, holds: [] } }]))
+    const key = wish.strategy ?? this.variant.key
+    const p = this.runPlan({ ...v, weeks: free }, { key }, now, true)
+    const meta = PLAN_VARIANTS.find((x) => x.key === key)!
+    const option: PlanOption = { ...meta, label: 'Your wish', desc: wish.summary, plan: p, metrics: planMetrics(p, v.preferences, this.events, now) }
+    return { wish, changes: describeWish(wish, v.preferences), option }
+  }
+
+  async applyWish(raw: Wish) {
+    const v = this.vault.state()
+    const wish = sanitizeWish(raw, v.preferences, new Date())
+    const next = weeksWithWish(v.weeks, wish, v.preferences, String(Date.now()))
+    this.mutate(() => {
+      for (const [week, w] of Object.entries(next)) if (w !== v.weeks[week]) this.vault.setWeekPlanOverrides(week, { dayRules: w.overrides?.dayRules, grid: w.overrides?.grid }, `wish: ${wish.summary || 'plan change'}`.slice(0, 80))
+    })
+    if (wish.strategy) this.variant = { key: wish.strategy }
+    await this.replan()
+  }
+
+  async removeWeekRule(week: string, ruleId: string) {
+    this.forceFull = true
+    this.mutate(() => this.vault.removeWeekRule(week, ruleId))
   }
 
   async applyPlanOption(key: PlanVariant, seed?: number) {

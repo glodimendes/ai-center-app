@@ -126,9 +126,10 @@ export interface DayRule {
   id: string
   label: string
   enabled: boolean
-  /** 'weekdays': every listed weekday. 'pick': one of them per week, the one with the least calendar time (changeable per week in the weekly review). */
-  when: 'weekdays' | 'pick'
+  /** 'weekdays': every listed weekday. 'pick': one of them per week, the one with the least calendar time (changeable per week in the weekly review). 'dates': only on `dates` (e.g. from a wish). */
+  when: 'weekdays' | 'pick' | 'dates'
   weekdays: Weekday[]
+  dates?: string[]
   /** Areas it applies to; empty = every work area (training and No area excluded). */
   areas: string[]
   /** 0 = none of those areas between `from` and `to` (whole day when both are empty); above 0 = at most this many minutes of them that day. */
@@ -289,6 +290,8 @@ export interface WeekOverrides {
   holds?: { start: string; end: string }[]
   /** Day picked for a "pick one day per week" rule this week: ruleId → YYYY-MM-DD. */
   dayPicks?: Record<string, string>
+  /** Rules for specific dates this week (from "Plan with a wish"). */
+  dayRules?: DayRule[]
   /** This week's hours per area per weekday, replacing the Settings grid for this week only. */
   grid?: Record<string, Partial<Record<Weekday, number>>>
 }

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { CalEvent, DayRule, Preferences, Task, WeekData } from '@shared/types'
 import { plan } from '../electron/main/scheduler/plan'
 import { needsFullPlan, planningDay } from '../electron/main/scheduler/cadence'
+import { sanitizeWish, weeksWithWish } from '../electron/main/scheduler/wish'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
 import { parseTasks } from '../electron/main/vault/parser'
 import { applyVariant, planMetrics } from '../electron/main/scheduler/variants'
@@ -673,5 +674,37 @@ describe('habits (3x/week)', () => {
     const p = plan({ tasks: [run], events: [], prefs, weeks, now: new Date(2026, 10, 9, 7, 0) })
     expect(days(p, run.id, '2026-11-16')).toHaveLength(2)
     expect(days(p, run.id, '2026-11-23')).toHaveLength(5)
+  })
+})
+
+describe('plan with a wish', () => {
+  const at = new Date(2026, 10, 9, 7, 0)
+
+  it('keeps only known dates, areas, times and sane numbers', () => {
+    const w = sanitizeWish(
+      {
+        summary: 'Light Friday',
+        strategy: 'light',
+        limits: [
+          { date: '2026-11-13', areas: ['thesis', 'nope'], maxMinutes: 0, from: '13:00', to: '25:00' },
+          { date: '2027-01-01', areas: [], maxMinutes: 0 }
+        ],
+        hours: [{ date: '2026-11-16', area: 'thesis', hours: 6.2 }, { date: '2026-11-16', area: 'ghost', hours: 2 }]
+      },
+      prefs,
+      at
+    )
+    expect(w).toEqual({ summary: 'Light Friday', strategy: 'light', limits: [{ date: '2026-11-13', areas: ['thesis'], maxMinutes: 0, from: '13:00' }], hours: [{ date: '2026-11-16', area: 'thesis', hours: 6 }] })
+    expect(sanitizeWish({ strategy: 'chaos' }, prefs, at).strategy).toBeUndefined()
+  })
+
+  it('writes date rules and that week\'s hours, and the planner follows them', () => {
+    const wish = sanitizeWish({ summary: 'No work Friday afternoon', limits: [{ date: '2026-11-13', areas: [], maxMinutes: 0, from: '13:00' }], hours: [] }, prefs, at)
+    const weeks = weeksWithWish({}, wish, prefs, 't')
+    expect(weeks['2026-W46'].overrides?.dayRules?.[0]).toMatchObject({ when: 'dates', dates: ['2026-11-13'], from: '13:00' })
+    const lots = Array.from({ length: 12 }, (_, i) => task(`Outside ${i}`, 'outside', { estimateMin: 60 }))
+    const p = plan({ tasks: lots, events: [], prefs, weeks, now: at })
+    expect(p.blocks.filter((b) => b.start.startsWith('2026-11-13') && b.kind !== 'break').every((b) => b.end.slice(11, 16) <= '13:00')).toBe(true)
+    expect(p.ruleDays?.some((r) => r.day === '2026-11-13')).toBe(true)
   })
 })

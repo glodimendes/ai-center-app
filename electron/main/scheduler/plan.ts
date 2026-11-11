@@ -348,7 +348,11 @@ export function plan(input: PlanInput): Plan {
     return picks.get(key)
   }
   const rulesOn = (day: Date) =>
-    (prefs.dayRules ?? []).filter((r) => r.enabled && (r.when === 'pick' ? pickedDay(r, day) === isoDate(day) : r.weekdays.includes(WEEKDAYS[day.getDay()] as Weekday)))
+    [...(prefs.dayRules ?? []), ...(weeks[isoWeek(day)]?.overrides?.dayRules ?? [])].filter(
+      (r) =>
+        r.enabled &&
+        (r.when === 'dates' ? (r.dates ?? []).includes(isoDate(day)) : r.when === 'pick' ? pickedDay(r, day) === isoDate(day) : r.weekdays.includes(WEEKDAYS[day.getDay()] as Weekday))
+    )
   const ruleAffects = (r: DayRule, key: string) => (r.areas.length ? r.areas.includes(key) : key !== tc.key && key !== NO_AREA && key !== 'break')
   /** Time this area must stay out of on this day. */
   const ruleSpans = (c: CategoryPref, day: Date) =>
