@@ -52,8 +52,12 @@ export function ContextUpdate({ onClose }: { onClose: () => void }) {
     onClose()
   }
   const undo = async () => {
-    await api.contextUndo()
-    toast('Changes undone. The files are back to how they were.')
+    const skipped = await api.contextUndo()
+    toast(
+      skipped.length
+        ? `Undone, except ${skipped.join(', ')}: changed since in a way that can't be separated from the AI's edit, so left as is (the diff above shows what it did).`
+        : 'Changes undone. The files are back to how they were.'
+    )
     onClose()
   }
 

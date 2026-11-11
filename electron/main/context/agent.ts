@@ -65,7 +65,9 @@ export interface AgentRun {
 }
 
 /**
- * Runs the chosen CLI headlessly inside the vault with file tools only (no shell, no web).
+ * Runs the chosen CLI headlessly inside the vault. Claude gets file tools only (no shell, no web).
+ * Codex has no switch to turn its shell off: it runs in its workspace-write sandbox, which keeps
+ * writes inside the vault and has no network. Either way only text files are diffed and undoable.
  * Progress lines (e.g. "Editing 04_Context_Docs/current-priorities.md") are reported as they happen.
  */
 export async function runContextAgent(engine: ContextEngine, vault: string, instruction: string, onProgress: (line: string) => void): Promise<AgentRun> {

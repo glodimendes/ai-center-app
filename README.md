@@ -104,7 +104,8 @@ The next day is tried only after all of that fails, subject to the daily, deep-w
 - Vault edits change only the affected lines, re-located by task id on the current file, so concurrent edits elsewhere survive.
 - Every save is committed to the vault's git history under your identity (`planner: …`), batched every few seconds; this can be turned off.
 - Docs refuse to save over a file changed on disk since opening and show a diff before reformatting untouched Markdown.
-- Update context never keeps anything without **Keep**; Undo restores files byte-for-byte.
+- Update context never keeps anything without **Keep**. Undo takes back only the AI's own edits, so changes you (or the app) made to the same files since are kept; if a file can't be separated cleanly it's left alone and named.
+- A calendar account that's offline or missing doesn't count as "you deleted those events": synced blocks are only dismissed when their calendar actually loaded.
 
 ## Develop
 

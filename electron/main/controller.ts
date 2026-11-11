@@ -14,6 +14,7 @@ import { plan } from './scheduler/plan'
 import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { runContextAgent, snapshotVault, type AgentRun } from './context/agent'
+import { revertEdits } from './context/revert'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
 
 /** Owns vault, calendar and the current plan; implements the renderer API. */
@@ -30,6 +31,8 @@ export class Controller implements Api {
   private events: CalEvent[] = []
   private refreshTimer: NodeJS.Timeout | null = null
   private agent: AgentRun | null = null
+  /** Set for the whole Update context run, so the app's own vault writes wait instead of mixing into its diff. */
+  private agentRun: Promise<unknown> | null = null
   private pendingContext: ContextResult | null = null
   // Plan stability: full re-plans only on demand, once per day, or when preferences change.
   // Everything else is incremental (existing blocks stay put; only their contents refresh).
@@ -103,14 +106,17 @@ export class Controller implements Api {
   /**
    * Your calendar edits win over the plan. A planner event moved or resized in the calendar becomes a
    * pin at its new time; one deleted there is dismissed and its work is planned elsewhere.
+   * Only calendars that actually loaded count: an account that is offline or briefly gone hides its
+   * events without anyone deleting them.
    */
-  private adoptCalendarEdits(from: Date) {
+  private adoptCalendarEdits(from: Date, loadedCalendarIds: string[]) {
     let changed = false
     const same = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime()
     for (const [blockId, s] of Object.entries(this.synced)) {
       if (new Date(s.start) < from) continue
       const ev = this.events.find((e) => e.plannerBlockId === blockId)
       if (!ev) {
+        if (!loadedCalendarIds.includes(s.calendarId)) continue
         if (new Date(s.end).getTime() > Date.now()) {
           this.dismissed.push(blockId)
           // Like removing it in the app: its time stays empty until Re-plan.
@@ -327,6 +333,8 @@ export class Controller implements Api {
     this.mutate(() => this.vault.deleteTask(taskId, title))
   }
   async addInbox(text: string) {
+    // Quick capture works while Update context runs; the line is written once it's done.
+    await this.agentRun?.catch(() => {})
     this.mutate(() => this.vault.addInbox(text))
   }
   async inboxToTask(itemId: string, text: string, section: string[]) {
@@ -358,7 +366,7 @@ export class Controller implements Api {
   /** First open of the planning day (and on focus): generate the brief once if today's file is missing. */
   async maybeRunBrief() {
     const day = this.planningDay()
-    if (!this.settings.briefAuto || this.briefRunning || this.briefAttemptDay === day) return
+    if (!this.settings.briefAuto || this.briefRunning || this.agentRun || this.briefAttemptDay === day) return
     if (this.vault.read(`05_Tasks/briefs/${isoDate(new Date())}.md`) !== null) return
     this.briefAttemptDay = day
     await this.generateBrief().catch(() => {})
@@ -453,7 +461,7 @@ export class Controller implements Api {
       const from = addDays(weekStart(new Date()), -7)
       const to = addDays(startOfDay(new Date()), prefs.horizonDays + 7)
       this.events = await this.cal.events(calendars, from, to)
-      this.adoptCalendarEdits(from)
+      if (!this.agentRun) this.adoptCalendarEdits(from, calendars.map((c) => c.id))
       this.calendar = { provider: this.cal.kind, connected: true, configured: true, calendars, lastRefresh: new Date().toISOString() }
     } catch (err) {
       this.calendar = { ...this.calendar, error: String((err as Error).message ?? err) }
@@ -500,6 +508,8 @@ export class Controller implements Api {
     await this.vault.git.flush()
     const root = this.vault.root
     const before = snapshotVault(root)
+    let finished!: () => void
+    this.agentRun = new Promise<void>((r) => (finished = r))
     try {
       this.agent = await runContextAgent(this.settings.contextEngine, root, instruction, (line) => this.emit('context-progress', line))
       const summary = await this.agent.done
@@ -514,21 +524,39 @@ export class Controller implements Api {
       return { instruction, summary, changes }
     } catch (err) {
       // A cancelled or failed run must not leave half-made edits behind.
-      this.restore(before, snapshotVault(root))
+      const after = snapshotVault(root)
+      const paths = new Set([...before.keys(), ...after.keys()])
+      this.revertChanges([...paths].map((path) => ({ path, before: before.get(path) ?? null, after: after.get(path) ?? null })).filter((c) => c.before !== c.after))
       throw err
     } finally {
       this.agent = null
+      this.agentRun = null
+      finished()
       this.push()
     }
   }
 
-  private restore(before: Map<string, string>, after: Map<string, string>) {
-    for (const [path, text] of after) {
-      const prev = before.get(path)
-      if (prev === text) continue
-      if (prev === undefined) rmSync(join(this.vault.root, path), { force: true })
-      else writeFileSync(join(this.vault.root, path), prev)
+  /**
+   * Puts the agent's edits back, file by file, without losing anything written since (in Obsidian,
+   * by the app, by an automation): only the agent's own lines are reverted. Returns the files left
+   * as they are because that couldn't be done with certainty.
+   */
+  private revertChanges(changes: { path: string; before: string | null; after: string | null }[]): string[] {
+    const skipped: string[] = []
+    for (const c of changes) {
+      const abs = join(this.vault.root, c.path)
+      const current = existsSync(abs) ? readFileSync(abs, 'utf8') : null
+      if (current === c.before) continue
+      if (current === c.after) {
+        if (c.before === null) rmSync(abs, { force: true })
+        else writeFileSync(abs, c.before)
+        continue
+      }
+      const merged = c.before !== null && c.after !== null && current !== null ? revertEdits(c.before, c.after, current) : null
+      if (merged === null) skipped.push(c.path)
+      else writeFileSync(abs, merged)
     }
+    return skipped
   }
 
   async contextCancel() {
@@ -548,16 +576,13 @@ export class Controller implements Api {
     this.push()
   }
 
-  async contextUndo() {
+  async contextUndo(): Promise<string[]> {
     const p = this.pendingContext
-    if (!p) return
+    if (!p) return []
     this.pendingContext = null
-    for (const c of p.changes) {
-      const abs = join(this.vault.root, c.path)
-      if (c.before === null) rmSync(abs, { force: true })
-      else writeFileSync(abs, c.before)
-    }
+    const skipped = this.revertChanges(p.changes)
     this.push()
+    return skipped
   }
 
   // --- brief prompt, calendar display, block editing --------------------------
