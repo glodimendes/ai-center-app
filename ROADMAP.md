@@ -5,7 +5,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 ## Open decisions (waiting for the user)
 
 1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.
-2. **Plan options.** Built (2026-11-09): four strategies + Shuffle (README "When the plan changes"). Not built: the optional **"Plan with a wish"** box (Haiku turns a sentence into temporary planner settings). Waiting for the user.
+2. **Plan options.** Done: four strategies + Shuffle (2026-11-09), and **Plan with a wish** (2026-11-11; README "When the plan changes").
 3. **Braindump feature.** The user will explain it. **Don't design or build it before the spec.** It's related to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
 
 ## Later (agreed with the user, not now)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Dices, Loader2, RotateCcw } from 'lucide-react'
-import type { PlanOption, PlanVariant } from '@shared/api'
+import { Dices, Loader2, RotateCcw, Sparkles, X } from 'lucide-react'
+import type { PlanOption, PlanVariant, Wish } from '@shared/api'
 import { addDays, isoDate, minutesOfDay, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -64,6 +64,7 @@ function ReplanDialog({ onClose }: { onClose: () => void }) {
           Pick how to rearrange everything that isn't pinned or already started. Each option is the same planner under a different strategy; Shuffle gives another arrangement with the same
           strategy. Next 7 days shown. Applying also frees time you kept empty.
         </p>
+        <WishBox onApplied={onClose} />
         <div className="grid grid-cols-1 min-[760px]:grid-cols-2 gap-3 mt-4">
           {VARIANTS.map((k) => {
             const o = options[k]
@@ -164,3 +165,82 @@ function Metrics({ option }: { option: PlanOption }) {
     </div>
   )
 }
+
+/** "Plan with a wish": a sentence becomes concrete changes (Claude Haiku), previewed as a plan before anything is saved. */
+function WishBox({ onApplied }: { onApplied: () => void }) {
+  const s = useStore((st) => st.state!)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [preview, setPreview] = useState<{ wish: Wish; changes: string[]; option: PlanOption } | null>(null)
+  const today = isoDate(new Date())
+  const active = Object.entries(s.vault.weeks).flatMap(([week, w]) =>
+    (w.overrides?.dayRules ?? []).filter((r) => (r.dates ?? []).some((d) => d >= today)).map((r) => ({ week, rule: r }))
+  )
+
+  const ask = async () => {
+    if (!text.trim()) return
+    setBusy(true)
+    setPreview(null)
+    const r = await act(api.planWish(text.trim()))
+    if (r) setPreview(r)
+    setBusy(false)
+  }
+  const apply = async () => {
+    await act(api.applyWish(preview!.wish), 'Wish applied and re-planned')
+    onApplied()
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-line p-3">
+      <div className="flex items-center gap-1.5 text-[13px] font-semibold mb-1.5">
+        <Sparkles size={14} className="text-accent" /> Plan with a wish
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void ask()}
+          placeholder="e.g. light Friday, thesis-heavy Monday, no work after 18:00 this week"
+          className="flex-1 min-w-48 h-8 px-2.5 rounded-md border border-line bg-bg text-[12.5px] outline-none focus:border-accent"
+        />
+        <Button onClick={() => void ask()} disabled={busy || !text.trim()}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : null} Preview
+        </Button>
+      </div>
+      <p className="text-[11px] text-faint mt-1">Claude Haiku turns it into changes for the next 14 days (it sees only this sentence and your areas and hours). You see the plan before anything is saved.</p>
+      {preview && (
+        <div className="mt-3 rounded-lg border border-accent p-3 flex flex-col">
+          <div className="text-[13px] font-semibold">{preview.wish.summary || 'Your wish'}</div>
+          <ul className="text-[11.5px] text-muted my-1.5 list-disc pl-4">
+            {preview.changes.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+          <WeekStrip option={preview.option} />
+          <Metrics option={preview.option} />
+          <div className="flex gap-2 mt-3">
+            <Button kind="primary" onClick={() => void apply()}>
+              Apply the wish
+            </Button>
+            <Button onClick={() => setPreview(null)}>Discard</Button>
+          </div>
+        </div>
+      )}
+      {active.length > 0 && (
+        <div className="mt-3 text-[11.5px]">
+          <div className="text-faint mb-1">Active wishes</div>
+          {active.map(({ week, rule }) => (
+            <div key={rule.id} className="flex items-center gap-2 min-w-0">
+              <span className="text-muted shrink-0">{(rule.dates ?? []).join(', ')}</span>
+              <span className="flex-1 min-w-0 truncate">{rule.label}</span>
+              <button onClick={() => void act(api.removeWeekRule(week, rule.id), 'Wish removed')} className="text-faint hover:text-danger" title="Remove">
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+

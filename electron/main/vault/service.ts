@@ -309,6 +309,15 @@ export class VaultService {
     this.updateWeek(week, (w) => (w.overrides = { ...w.overrides, grid: grid ?? undefined }), grid ? `hours for ${week}` : `${week} uses the usual hours`)
   }
 
+  /** Day rules and grid of a week, as written by "Plan with a wish". */
+  setWeekPlanOverrides(week: string, o: Pick<WeekOverrides, 'dayRules' | 'grid'>, message: string) {
+    this.updateWeek(week, (w) => (w.overrides = { ...w.overrides, dayRules: o.dayRules, grid: o.grid }), message)
+  }
+
+  removeWeekRule(week: string, ruleId: string) {
+    this.updateWeek(week, (w) => (w.overrides = { ...w.overrides, dayRules: (w.overrides?.dayRules ?? []).filter((r) => r.id !== ruleId) }), 'remove a wish')
+  }
+
   setWeekNotes(week: string, notes: string) {
     this.updateWeek(week, (w) => (w.notes = notes.trim() || undefined), `focus for ${week}`)
   }
