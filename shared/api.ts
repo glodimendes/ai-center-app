@@ -126,7 +126,8 @@ export interface Api {
   contextUpdate(instruction: string): Promise<ContextResult>
   contextCancel(): Promise<void>
   contextKeep(): Promise<void>
-  contextUndo(): Promise<void>
+  /** Returns files left untouched because they changed since in a way that can't be safely separated. */
+  contextUndo(): Promise<string[]>
 }
 
 export type ApiMethod = keyof Api
