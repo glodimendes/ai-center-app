@@ -133,8 +133,8 @@ export function AddBlockButton({ day, onOpen }: { day: string; onOpen: (d: Block
     onOpen({ start: `${day}T${fmtHM(startMin)}:00`, end: `${day}T${fmtHM(startMin + 60)}:00` })
   }
   return (
-    <Button onClick={open} title="Add a block (or drag on empty time in the calendar)">
-      <Plus size={13} /> Block
+    <Button onClick={open} label="Block" title="Add a block (or drag on empty time in the calendar)">
+      <Plus size={13} />
     </Button>
   )
 }

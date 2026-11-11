@@ -36,6 +36,8 @@ interface Props {
 }
 
 const HOUR_PX = 52
+/** Below this, day columns stop shrinking and the week scrolls sideways. */
+const MIN_COL_PX = 88
 const SNAP = 15
 
 interface Placed extends GridItem {
@@ -164,40 +166,44 @@ export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24
   const nowTop = ((minutesOfDay(now) - startHour * 60) / 60) * HOUR_PX
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {days.length > 1 && (
-        <div className="flex border-b border-line pl-14 pr-[10px]">
-          {days.map((d, i) => {
-            const date = parseDate(d)
-            return (
-              <button key={d} onClick={() => onDayClick?.(d)} className="flex-1 py-2 text-center hover:bg-sunken">
-                <div className={cx('text-[11px] uppercase tracking-wide', i === todayIdx ? 'text-accent font-semibold' : 'text-muted')}>
-                  {date.toLocaleDateString(undefined, { weekday: 'short' })}
-                </div>
-                <div className={cx('text-[15px] font-semibold', i === todayIdx && 'text-accent')}>{date.getDate()}</div>
-              </button>
-            )
-          })}
-        </div>
-      )}
-      {allDay.length > 0 && (
-        <div className="flex border-b border-line pl-14 pr-[10px] py-1">
-          {days.map((d) => (
-            <div key={d} className="flex-1 px-0.5 flex flex-col gap-0.5">
-              {allDay
-                .filter((a) => a.day === d)
-                .map((a, i) => (
-                  <div key={i} className="truncate text-[11px] px-1.5 rounded" style={{ background: a.color + '22', color: a.color }}>
-                    {a.title}
-                  </div>
-                ))}
+    <div ref={scroller} className="flex-1 min-h-0 min-w-0 overflow-auto relative" onMouseDown={(e) => e.target === e.currentTarget && onSelect?.(null)}>
+      <div style={{ minWidth: days.length > 1 ? 56 + days.length * MIN_COL_PX : undefined }}>
+        <div className="sticky top-0 z-30 bg-bg">
+          {days.length > 1 && (
+            <div className="flex border-b border-line">
+              <div className="w-14 shrink-0 sticky left-0 bg-bg" />
+              {days.map((d, i) => {
+                const date = parseDate(d)
+                return (
+                  <button key={d} onClick={() => onDayClick?.(d)} className="flex-1 min-w-0 py-2 text-center hover:bg-sunken">
+                    <div className={cx('text-[11px] uppercase tracking-wide', i === todayIdx ? 'text-accent font-semibold' : 'text-muted')}>
+                      {date.toLocaleDateString(undefined, { weekday: 'short' })}
+                    </div>
+                    <div className={cx('text-[15px] font-semibold', i === todayIdx && 'text-accent')}>{date.getDate()}</div>
+                  </button>
+                )
+              })}
             </div>
-          ))}
+          )}
+          {allDay.length > 0 && (
+            <div className="flex border-b border-line py-1">
+              <div className="w-14 shrink-0 sticky left-0 bg-bg" />
+              {days.map((d) => (
+                <div key={d} className="flex-1 min-w-0 px-0.5 flex flex-col gap-0.5">
+                  {allDay
+                    .filter((a) => a.day === d)
+                    .map((a, i) => (
+                      <div key={i} className="truncate text-[11px] px-1.5 rounded" style={{ background: a.color + '22', color: a.color }}>
+                        {a.title}
+                      </div>
+                    ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-      <div ref={scroller} className="flex-1 overflow-y-auto relative" onMouseDown={(e) => e.target === e.currentTarget && onSelect?.(null)}>
         <div className="flex relative" style={{ height: hours.length * HOUR_PX }}>
-          <div className="w-14 shrink-0 relative">
+          <div className="w-14 shrink-0 sticky left-0 z-[25] bg-bg">
             {hours.map((h) => (
               <div key={h} className="absolute right-2 text-[10.5px] text-faint -translate-y-1/2" style={{ top: (h - startHour) * HOUR_PX }}>
                 {h > startHour ? fmtHM(h * 60) : ''}
@@ -217,7 +223,7 @@ export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24
               return (
                 <div
                   key={d}
-                  className={cx('flex-1 relative border-l border-line/70', di === todayIdx && days.length > 1 && 'bg-accent-soft/30')}
+                  className={cx('flex-1 min-w-0 relative border-l border-line/70', di === todayIdx && days.length > 1 && 'bg-accent-soft/30')}
                   onMouseDown={(e) => e.target === e.currentTarget && onSelect?.(null)}
                   onPointerDown={(e) => startDraw(e, di)}
                   style={onCreate ? { cursor: 'crosshair' } : undefined}

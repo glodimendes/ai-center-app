@@ -171,7 +171,7 @@ export function TaskRow({
           {task.estimateMin ? fmtDuration(task.estimateMin) : fmtDuration(cat.defaultEstimateMinutes)}
         </button>
         {pop === 'est' && (
-          <Popover onClose={() => setPop(null)} className="right-0 w-48">
+          <Popover onClose={() => setPop(null)} align="right" className="w-56">
             <div className="text-[11px] text-muted mb-1.5">Estimate (remaining)</div>
             <div className="grid grid-cols-4 gap-1 mb-2">
               {[15, 30, 45, 60, 90, 120, 180, 240].map((m) => (
@@ -220,7 +220,7 @@ export function TaskRow({
           </button>
         )}
         {pop === 'due' && (
-          <Popover onClose={() => setPop(null)} className="right-0 w-52">
+          <Popover onClose={() => setPop(null)} align="right" className="w-52">
             <input
               type="date"
               autoFocus
@@ -259,7 +259,7 @@ export function TaskRow({
           {postponed && !compact && relDay(postponed)}
         </button>
         {pop === 'postpone' && (
-          <Popover onClose={() => setPop(null)} className="right-0 w-52">
+          <Popover onClose={() => setPop(null)} align="right" className="w-52">
             <div className="text-[11px] text-muted mb-1.5">Postpone until</div>
             <div className="grid grid-cols-2 gap-1 mb-2">
               {postponeChoices().map(([label, days]) => (
@@ -295,7 +295,7 @@ export function TaskRow({
           {task.repeat && !compact && <span className="max-w-20 truncate">{describeRepeat(task.repeat).replace(/^Every /, '')}</span>}
         </button>
         {pop === 'repeat' && (
-          <Popover onClose={() => setPop(null)} className="right-0 w-60">
+          <Popover onClose={() => setPop(null)} align="right" className="w-60">
             <RepeatPicker value={task.repeat} onPick={(rule) => (patch({ repeat: rule }), setPop(null))} />
           </Popover>
         )}

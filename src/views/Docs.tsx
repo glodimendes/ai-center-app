@@ -24,7 +24,7 @@ export function Docs() {
 
   return (
     <div className="flex-1 min-h-0 flex">
-      <aside className="w-64 shrink-0 border-r border-line flex flex-col min-h-0">
+      <aside className="w-64 @max-4xl:w-48 shrink-0 border-r border-line flex flex-col min-h-0">
         <div className="drag-region h-14 shrink-0 flex items-end px-3 pb-2">
           <input
             value={query}

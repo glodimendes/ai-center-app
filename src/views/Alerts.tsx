@@ -73,7 +73,8 @@ export function Alerts() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <Header title="Alerts" sub={items.length ? `${items.length} to look at` : 'All clear'}>
+      <Header title="Alerts" sub={items.length ? `${items.length} to look at` : 'All clear'} />
+      <div className="px-5 @max-3xl:px-3 py-2 border-b border-line">
         <div className="flex flex-wrap gap-1">
           <Chip active={!area} onClick={() => setArea(null)}>
             All areas
@@ -84,9 +85,9 @@ export function Alerts() {
             </Chip>
           ))}
         </div>
-      </Header>
+      </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-5 flex flex-col gap-6">
+        <div className="max-w-4xl mx-auto px-6 @max-3xl:px-3 py-5 flex flex-col gap-6">
           {!shown.length && (
             <Empty>
               <CheckCircle2 size={22} className="mx-auto mb-2 text-ok" />

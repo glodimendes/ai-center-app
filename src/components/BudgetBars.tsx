@@ -16,17 +16,17 @@ export function BudgetBars({ week, wide }: { week: string; wide?: boolean }) {
     .filter((r) => r.actual || r.planned || r.c.budget)
 
   return (
-    <div className={wide ? 'grid grid-cols-2 gap-x-8 gap-y-3' : 'flex flex-wrap gap-x-6 gap-y-2'}>
+    <div className={wide ? 'grid grid-cols-2 @max-2xl:grid-cols-1 gap-x-8 gap-y-3' : 'max-w-full flex flex-wrap @max-3xl:flex-nowrap @max-3xl:overflow-x-auto @max-3xl:pb-1 gap-x-6 gap-y-2'}>
       {rows.map(({ c, actual, planned }) => {
         const max = Math.max(planned, actual, (c.budget?.maxHours ?? c.budget?.minHours ?? 0) * 60, 60)
         const pct = (m: number) => `${Math.min(100, (m / max) * 100)}%`
         return (
-          <div key={c.key} className={wide ? '' : 'w-44'}>
+          <div key={c.key} className={wide ? 'min-w-0' : 'w-44 shrink-0'}>
             <div className="flex items-center gap-1.5 text-[11.5px]">
               <Dot color={c.color} />
-              <span className="font-medium">{c.label}</span>
+              <span className="font-medium truncate">{c.label}</span>
               <span className="flex-1" />
-              <span className="text-muted" title="actual / planned">
+              <span className="text-muted whitespace-nowrap" title="actual / planned">
                 {fmtDuration(actual)} / {fmtDuration(planned)}
               </span>
             </div>

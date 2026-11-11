@@ -101,9 +101,9 @@ export function AreaSettings({ prefs, setPrefs, calendars }: { prefs: Preference
         const removable = !isTraining && c.key !== 'other'
         return (
           <div key={c.key} className="rounded-lg border border-line p-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input className={`${input} w-36 font-medium`} value={c.label} onChange={(e) => setCat(c.key, { label: e.target.value })} />
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {SWATCHES.map((col) => (
                   <button
                     key={col}
@@ -115,26 +115,28 @@ export function AreaSettings({ prefs, setPrefs, calendars }: { prefs: Preference
                 ))}
               </div>
               <span className="flex-1" />
-              <span className="text-[11.5px] text-muted">Calendar</span>
-              {calendars.length ? (
-                <select className={input} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })}>
-                  {!writable.some((k) => k.name === c.calendar) && <option>{c.calendar}</option>}
-                  {writable.map((k) => (
-                    <option key={k.id}>{k.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <input className={`${input} w-40`} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })} />
-              )}
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="text-[11.5px] text-muted">Calendar</span>
+                {calendars.length ? (
+                  <select className={`${input} min-w-0 max-w-48`} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })}>
+                    {!writable.some((k) => k.name === c.calendar) && <option>{c.calendar}</option>}
+                    {writable.map((k) => (
+                      <option key={k.id}>{k.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className={`${input} w-40`} value={c.calendar} onChange={(e) => setCat(c.key, { calendar: e.target.value })} />
+                )}
+              </span>
               {removable && (
                 <Button kind="danger" onClick={() => removeArea(c.key)} title="Remove this area (its headings fall back to Other; takes effect when you save)">
                   <Trash2 size={13} />
                 </Button>
               )}
             </div>
-            <div className="grid grid-cols-[150px_1fr_150px_1fr] gap-x-3 gap-y-2 mt-3 items-center text-[12px]">
+            <div className="grid grid-cols-[150px_1fr_150px_1fr] @max-4xl:grid-cols-[120px_1fr] gap-x-3 gap-y-2 mt-3 items-center text-[12px]">
               <span className="text-muted">Fill these events</span>
-              <div className="col-span-3">
+              <div className="col-span-3 @max-4xl:col-span-1 min-w-0">
                 <ContainerPicker cat={c} onChange={(containers) => setCat(c.key, { containers })} />
               </div>
               {(
@@ -154,7 +156,7 @@ export function AreaSettings({ prefs, setPrefs, calendars }: { prefs: Preference
                     <input type="time" className={input} value={c.window?.[1] ?? ''} onChange={(e) => setCat(c.key, { window: e.target.value ? [c.window?.[0] ?? '08:00', e.target.value] : undefined })} />
                   </div>
                   <span className="text-muted self-start mt-1.5">Preferred windows</span>
-                  <div className="col-span-3">
+                  <div className="col-span-3 @max-4xl:col-span-1 min-w-0">
                     <WindowList windows={c.preferredWindows ?? []} onChange={(preferredWindows) => setCat(c.key, { preferredWindows })} fallback={c.window ?? ['08:00', '12:00']} />
                   </div>
                   <span className="text-muted">Weekly target (h)</span>
@@ -174,14 +176,14 @@ export function AreaSettings({ prefs, setPrefs, calendars }: { prefs: Preference
                   <span className="text-muted">Shortest new block</span>
                   <DurationInput optional value={c.minBlockMinutes} onChange={(v) => setCat(c.key, { minBlockMinutes: v })} />
                   <span className="text-muted">Keep tasks whole</span>
-                  <label className="flex items-center gap-1.5 col-span-3">
+                  <label className="flex items-center gap-1.5 col-span-3 @max-4xl:col-span-1">
                     <input type="checkbox" checked={Boolean(c.wholeTasks)} onChange={(e) => setCat(c.key, { wholeTasks: e.target.checked })} /> each task goes into one block, never split across blocks or days
                   </label>
                   {isTraining ? (
                     <>
                       <span className="text-muted">Gap around training</span>
                       <DurationInput value={prefs.trainingBufferMinutes} onChange={(v) => setPrefs({ ...prefs, trainingBufferMinutes: v ?? 0 })} />
-                      <p className="col-span-4 text-faint text-[11px]">
+                      <p className="col-span-4 @max-4xl:col-span-2 text-faint text-[11px]">
                         Training is planned from your tasks under its headings, like any area (use 🔁 repeat, e.g. “every Monday”). It doesn't count toward the daily work cap.
                       </p>
                     </>

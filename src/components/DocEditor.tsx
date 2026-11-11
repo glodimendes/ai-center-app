@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Crepe } from '@milkdown/crepe'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
-import { Loader2 } from 'lucide-react'
+import { FolderOpen, Loader2 } from 'lucide-react'
 import type { DocContent } from '@shared/types'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
@@ -121,14 +121,14 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
 
   return (
     <div className={cx('flex flex-col min-h-0', compact ? '' : 'flex-1')}>
-      <div className="flex items-center gap-2 px-5 h-9 text-[11.5px] text-muted border-b border-line shrink-0">
-        <span className="truncate flex-1">{path}</span>
+      <div className="flex items-center gap-2 px-5 @max-3xl:px-3 h-9 text-[11.5px] text-muted border-b border-line shrink-0">
+        <span className="truncate flex-1 min-w-0" title={path}>{path}</span>
         {status === 'loading' && <Loader2 size={12} className="animate-spin" />}
-        {status === 'saved' && <span>Saved</span>}
-        {status === 'saving' && <span>Saving…</span>}
+        {status === 'saved' && <span className="whitespace-nowrap">Saved</span>}
+        {status === 'saving' && <span className="whitespace-nowrap">Saving…</span>}
         {status === 'dirty' && (
           <>
-            <span className="text-warn">Unsaved</span>
+            <span className="text-warn whitespace-nowrap">Unsaved</span>
             <Button kind="primary" onClick={save}>
               Save ⌘S
             </Button>
@@ -136,15 +136,17 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
         )}
         {status === 'conflict' && (
           <>
-            <span className="text-danger">Changed on disk by another app</span>
-            <Button onClick={() => setReloadKey((k) => k + 1)}>Reload (discard mine)</Button>
+            <span className="text-danger truncate min-w-0" title="Changed on disk by another app">Changed on disk by another app</span>
+            <Button onClick={() => setReloadKey((k) => k + 1)} title="Reload (discard mine)">
+              Reload
+            </Button>
           </>
         )}
-        <Button kind="ghost" onClick={() => api.revealVault(path)}>
-          Show in Finder
+        <Button kind="ghost" onClick={() => api.revealVault(path)} label="Show in Finder">
+          <FolderOpen size={13} />
         </Button>
       </div>
-      <div className="doc-editor flex-1 overflow-y-auto px-8">
+      <div className="doc-editor flex-1 overflow-y-auto px-8 @max-3xl:px-4">
         <div ref={host} />
       </div>
       {review && (

@@ -24,7 +24,7 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
         <p className="text-muted mb-3">
           Score = (deadline weight × how close the deadline is + priority weight × priority) × area weight. Tasks due within the guard window always go first.
         </p>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+        <div className="grid grid-cols-2 @max-4xl:grid-cols-1 gap-x-8 gap-y-3">
           <Slider label="Deadline weight" value={st.deadlineWeight} min={0} max={5} step={0.5} onChange={(v) => setSt({ deadlineWeight: v })} />
           <Slider label="Priority weight" value={st.priorityWeight} min={0} max={5} step={0.5} onChange={(v) => setSt({ priorityWeight: v })} />
           <Slider label="Deadline guard (days)" value={st.deadlineGuardDays} min={0} max={7} step={1} onChange={(v) => setSt({ deadlineGuardDays: v })} />
@@ -34,11 +34,11 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
 
       <section>
         <h3 className="font-medium mb-2">Per area</h3>
-        <div className="grid grid-cols-[150px_1fr_170px_150px] gap-y-2 items-center">
+        <div className="grid grid-cols-[150px_1fr_170px_150px] @max-4xl:grid-cols-[110px_1fr_auto_auto] gap-x-2 gap-y-2 items-center">
           <span className="text-faint">Area</span>
           <span className="text-faint">Weight</span>
           <span className="text-faint">Timing</span>
-          <span className="text-faint">Reserve grid hours</span>
+          <span className="text-faint truncate" title="Reserve grid hours">Reserve grid hours</span>
           {areas.map((c) => (
             <div key={c.key} className="contents">
               <span className="flex items-center gap-1.5 font-medium">
@@ -77,43 +77,45 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
           </label>
         </div>
         <p className="text-muted mb-3">Hours set aside for each area per weekday. An area never goes past its hours (except deadlines due within the guard). A 0 sets nothing aside: that area (and Other, which has no row) only gets time left over once areas with hours that day are planned, by task priority.</p>
-        <div className={cx('grid grid-cols-[150px_repeat(7,1fr)_60px] gap-1 items-center', !grid.enabled && 'opacity-40 pointer-events-none')}>
-          <span />
-          {DAYS.map((d) => (
-            <span key={d} className="text-center text-faint capitalize">{d}</span>
-          ))}
-          <span className="text-right text-faint">week</span>
-          {areas.map((c) => (
-            <div key={c.key} className="contents">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.color }} /> {c.label}
-              </span>
-              {DAYS.map((d) => {
-                const h = hours(c.key, d)
-                return (
-                  <div key={d} className="flex items-center justify-center gap-0.5">
-                    <button onClick={() => setHours(c.key, d, h - 0.5)} className="w-5 h-6 rounded text-muted hover:bg-sunken">−</button>
-                    <span className="w-9 h-6 grid place-items-center rounded text-[11.5px] font-medium" style={{ background: h ? c.color + '26' : undefined, color: h ? undefined : 'var(--color-faint)' }}>
-                      {h ? fmt(h) : '–'}
-                    </span>
-                    <button onClick={() => setHours(c.key, d, h + 0.5)} className="w-5 h-6 rounded text-muted hover:bg-sunken">+</button>
-                  </div>
-                )
-              })}
-              <span className="text-right font-medium">{fmt(rowTotal(c.key))}</span>
-            </div>
-          ))}
-          <span className="text-faint">Total</span>
-          {DAYS.map((d) => {
-            const t = dayTotal(d)
-            const cap = (d === 'sat' || d === 'sun' ? prefs.dailyMaxMinutes.weekend : prefs.dailyMaxMinutes.weekday) / 60
-            return (
-              <span key={d} className={cx('text-center font-medium', t > cap && 'text-warn')} title={t > cap ? `Above the daily cap of ${cap}h` : undefined}>
-                {fmt(t)}
-              </span>
-            )
-          })}
-          <span className="text-right font-semibold">{fmt(DAYS.reduce((s, d) => s + dayTotal(d), 0))}</span>
+        <div className="overflow-x-auto pb-1">
+          <div className={cx('grid grid-cols-[150px_repeat(7,1fr)_60px] @max-4xl:grid-cols-[110px_repeat(7,1fr)_48px] min-w-[700px] gap-1 items-center', !grid.enabled && 'opacity-40 pointer-events-none')}>
+            <span className="sticky left-0 z-10 bg-panel self-stretch" />
+            {DAYS.map((d) => (
+              <span key={d} className="text-center text-faint capitalize">{d}</span>
+            ))}
+            <span className="text-right text-faint">week</span>
+            {areas.map((c) => (
+              <div key={c.key} className="contents">
+                <span className="sticky left-0 z-10 bg-panel self-stretch flex items-center gap-1.5 font-medium min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} /> <span className="truncate">{c.label}</span>
+                </span>
+                {DAYS.map((d) => {
+                  const h = hours(c.key, d)
+                  return (
+                    <div key={d} className="flex items-center justify-center gap-0.5">
+                      <button onClick={() => setHours(c.key, d, h - 0.5)} className="w-5 h-6 rounded text-muted hover:bg-sunken">−</button>
+                      <span className="w-9 h-6 grid place-items-center rounded text-[11.5px] font-medium" style={{ background: h ? c.color + '26' : undefined, color: h ? undefined : 'var(--color-faint)' }}>
+                        {h ? fmt(h) : '–'}
+                      </span>
+                      <button onClick={() => setHours(c.key, d, h + 0.5)} className="w-5 h-6 rounded text-muted hover:bg-sunken">+</button>
+                    </div>
+                  )
+                })}
+                <span className="text-right font-medium">{fmt(rowTotal(c.key))}</span>
+              </div>
+            ))}
+            <span className="sticky left-0 z-10 bg-panel self-stretch flex items-center text-faint">Total</span>
+            {DAYS.map((d) => {
+              const t = dayTotal(d)
+              const cap = (d === 'sat' || d === 'sun' ? prefs.dailyMaxMinutes.weekend : prefs.dailyMaxMinutes.weekday) / 60
+              return (
+                <span key={d} className={cx('text-center font-medium', t > cap && 'text-warn')} title={t > cap ? `Above the daily cap of ${cap}h` : undefined}>
+                  {fmt(t)}
+                </span>
+              )
+            })}
+            <span className="text-right font-semibold">{fmt(DAYS.reduce((s, d) => s + dayTotal(d), 0))}</span>
+          </div>
         </div>
       </section>
     </div>
@@ -123,7 +125,7 @@ export function StrategySettings({ prefs, setPrefs }: { prefs: Preferences; setP
 function Slider({ label, value, min, max, step, onChange, compact }: { label?: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; compact?: boolean }) {
   return (
     <label className={cx('flex items-center gap-3', compact && 'pr-6')}>
-      {label && <span className="text-muted w-48">{label}</span>}
+      {label && <span className="text-muted w-48 @max-3xl:w-32 shrink-0">{label}</span>}
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="flex-1 accent-[var(--color-accent)]" />
       <span className="w-10 text-right font-medium">{value}</span>
     </label>

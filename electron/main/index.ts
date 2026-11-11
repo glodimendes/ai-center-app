@@ -26,8 +26,8 @@ function createMain() {
   main = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 640,
+    minHeight: 480,
     title: 'AI Center',
     titleBarStyle: 'hiddenInset',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f7f7f8',

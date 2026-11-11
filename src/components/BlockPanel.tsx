@@ -172,7 +172,7 @@ function EventAvailability({ ev }: { ev: CalEvent }) {
 
 function Shell({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <aside className="w-80 shrink-0 border-l border-line bg-panel overflow-y-auto">
+    <aside className="w-80 shrink-0 border-l border-line bg-panel overflow-y-auto @max-6xl:absolute @max-6xl:inset-y-0 @max-6xl:right-0 @max-6xl:z-30 @max-6xl:max-w-[92%] @max-6xl:shadow-2xl">
       <div className="flex justify-end p-2">
         <Button kind="ghost" onClick={onClose} title="Close">
           <X size={14} />
@@ -333,7 +333,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
                     {st.done && <Check size={11} strokeWidth={3} />}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <div className={cx('text-[12.5px]', st.done && 'line-through text-muted')} dangerouslySetInnerHTML={{ __html: inlineMd(task.title) }} />
+                    <div className={cx('text-[12.5px] [overflow-wrap:anywhere]', st.done && 'line-through text-muted')} dangerouslySetInnerHTML={{ __html: inlineMd(task.title) }} />
                     <div className="text-[11px] text-faint">{fmtDuration(chunk.minutes)} planned here</div>
                     {!st.done && started && (
                       <label className="flex items-center gap-1.5 mt-1 text-[11px] text-muted">
@@ -452,7 +452,7 @@ function PostponeBlock({ block }: { block: Block }) {
         <MoonZzz size={13} /> Postpone tasks
       </Button>
       {open && (
-        <Popover onClose={() => setOpen(false)} className="left-0 w-52">
+        <Popover onClose={() => setOpen(false)} className="w-52">
           <div className="text-[11px] text-muted mb-1.5">Postpone every task here until</div>
           <div className="grid grid-cols-2 gap-1 mb-2">
             {postponeChoices().map(([label, days]) => (

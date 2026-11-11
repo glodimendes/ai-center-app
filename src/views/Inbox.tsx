@@ -21,7 +21,7 @@ export function InboxView() {
     <div className="flex-1 min-h-0 flex flex-col">
       <Header title="Inbox" sub="Braindump: raw ideas from 05_Tasks/braindump-inbox.md. Triage them into tasks. ⌘⇧Space captures from anywhere while the app is open." />
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-5 py-5">
+        <div className="max-w-3xl mx-auto px-5 @max-3xl:px-3 py-5">
           <div className="flex gap-2">
             <input
               autoFocus
@@ -58,21 +58,21 @@ function Item({ item }: { item: InboxItem }) {
   return (
     <div className="group py-1.5 px-2 -mx-2 rounded-md hover:bg-sunken/70">
       <div className="flex items-center gap-2">
-        <span className="flex-1 text-[13px]">
+        <span className="flex-1 min-w-0 break-words text-[13px]">
           {item.text}
           {item.topic && <span className="ml-2 text-[11px] text-faint">{item.topic}</span>}
         </span>
-        <Button kind="ghost" onClick={() => setMoving(!moving)} className="opacity-0 group-hover:opacity-100">
-          <ArrowRight size={13} /> Make task
+        <Button kind="ghost" onClick={() => setMoving(!moving)} label="Make task" className="opacity-0 group-hover:opacity-100">
+          <ArrowRight size={13} />
         </Button>
         <Button kind="danger" onClick={() => act(api.removeInbox(item.id))} className="opacity-0 group-hover:opacity-100" title="Remove">
           <Trash2 size={13} />
         </Button>
       </div>
       {moving && (
-        <div className="flex gap-2 mt-2">
-          <input value={text} onChange={(e) => setText(e.target.value)} className="flex-1 h-7 px-2 rounded border border-line bg-bg text-[12.5px]" />
-          <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-7 px-1 rounded border border-line bg-bg text-[12px] max-w-56">
+        <div className="flex flex-wrap gap-2 mt-2">
+          <input value={text} onChange={(e) => setText(e.target.value)} className="flex-1 min-w-48 h-7 px-2 rounded border border-line bg-bg text-[12.5px]" />
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-7 px-1 rounded border border-line bg-bg text-[12px] min-w-0 max-w-56">
             {sections.map((s) => (
               <option key={s.path.join('>')} value={s.path.join('>')}>
                 {s.path.join(' › ')}

@@ -32,8 +32,8 @@ export function HeadingMap({ prefs, setPrefs }: { prefs: Preferences; setPrefs: 
         const resolvedCat = prefs.categories.find((c) => c.key === resolved)
         const count = sec.taskIds.length
         return (
-          <div key={sec.path.join('>')} className="flex items-center gap-2 py-1 border-b border-line/50 last:border-0">
-            <span className={cx('text-[12.5px] w-60 shrink-0 truncate', sec.path.length === 1 && 'font-semibold')} style={{ paddingLeft: (sec.path.length - 1) * 18 }} title={sec.path.join(' › ')}>
+          <div key={sec.path.join('>')} className="flex flex-wrap items-center gap-2 py-1 border-b border-line/50 last:border-0">
+            <span className={cx('text-[12.5px] w-60 @max-3xl:w-40 shrink-0 truncate', sec.path.length === 1 && 'font-semibold')} style={{ paddingLeft: (sec.path.length - 1) * 18 }} title={sec.path.join(' › ')}>
               {name}
             </span>
             <span className="text-[10.5px] text-faint w-10">{count ? `${count}` : ''}</span>
@@ -55,7 +55,7 @@ export function HeadingMap({ prefs, setPrefs }: { prefs: Preferences; setPrefs: 
               })}
             </div>
             {!direct && (
-              <span className="text-[11px] text-faint ml-1 flex items-center gap-1">
+              <span className="text-[11px] text-faint ml-1 flex items-center gap-1 whitespace-nowrap">
                 → <span className="w-2 h-2 rounded-full inline-block" style={{ background: resolvedCat?.color }} /> {resolvedCat?.label ?? 'Other'} {sec.path.length > 1 ? '(inherited)' : '(default)'}
               </span>
             )}

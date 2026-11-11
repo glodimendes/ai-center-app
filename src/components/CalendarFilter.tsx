@@ -28,10 +28,10 @@ export function CalendarFilter() {
         disabled={!connected}
         title={connected ? 'Choose which calendars are shown and which block planning time' : 'Connect a calendar in Settings'}
       >
-        <CalendarDays size={13} /> Calendars{hidden.size > 0 && <span className="text-faint">({calendars.length - hidden.size}/{calendars.length})</span>}
+        <CalendarDays size={13} /> <span className="@max-4xl:hidden">Calendars</span>{hidden.size > 0 && <span className="text-faint">({calendars.length - hidden.size}/{calendars.length})</span>}
       </Button>
       {open && (
-        <Popover onClose={() => setOpen(false)} className="right-0 w-80 max-h-[70vh] overflow-y-auto">
+        <Popover onClose={() => setOpen(false)} align="right" className="w-80">
           <p className="px-1.5 pb-2 text-[11px] text-faint leading-snug">
             Show hides a calendar here only. Busy: its events block time and the planner works around them. Free: shown, but the planner may schedule over them.
           </p>
