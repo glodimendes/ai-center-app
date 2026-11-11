@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CalEvent, Preferences, Task, WeekData } from '@shared/types'
+import type { CalEvent, DayRule, Preferences, Task, WeekData } from '@shared/types'
 import { plan } from '../electron/main/scheduler/plan'
 import { needsFullPlan, planningDay } from '../electron/main/scheduler/cadence'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
@@ -600,5 +600,52 @@ describe('re-plan cadence', () => {
     expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), prefsHash: 'q' })).toBe(true)
     expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), forced: true })).toBe(true)
     expect(needsFullPlan({ ...base, now: new Date(2026, 10, 10, 12, 0), hasPlan: false })).toBe(true)
+  })
+})
+
+describe('day rules', () => {
+  const work = (p: ReturnType<typeof plan>, day: string) => p.blocks.filter((b) => b.start.startsWith(day) && b.kind !== 'break')
+  const lots = () => [
+    ...Array.from({ length: 8 }, (_, i) => task(`Thesis ${i}`, 'thesis', { estimateMin: 90 })),
+    ...Array.from({ length: 8 }, (_, i) => task(`Outside ${i}`, 'outside', { estimateMin: 60 }))
+  ]
+  const halfDay = (extra: Partial<DayRule> = {}): DayRule => ({ id: 'half', label: 'Lighter half-day', enabled: true, when: 'weekdays', weekdays: ['wed'], areas: [], maxMinutes: 0, from: '13:00', ...extra })
+
+  it('keeps work areas out after the rule time on its days, and leaves other days alone', () => {
+    const p = plan({ tasks: lots(), events: [], prefs: { ...prefs, dayRules: [halfDay()] }, weeks: {}, now })
+    expect(work(p, '2026-11-11').every((b) => b.end.slice(11, 16) <= '13:00')).toBe(true)
+    expect(work(p, '2026-11-10').some((b) => b.end.slice(11, 16) > '13:00')).toBe(true)
+    expect(p.ruleDays).toContainEqual({ day: '2026-11-11', ruleId: 'half', label: 'Lighter half-day' })
+  })
+
+  it('does nothing when switched off', () => {
+    const p = plan({ tasks: lots(), events: [], prefs: { ...prefs, dayRules: [halfDay({ enabled: false })] }, weeks: {}, now })
+    expect(work(p, '2026-11-11').some((b) => b.end.slice(11, 16) > '13:00')).toBe(true)
+  })
+
+  it('"pick" takes the lightest candidate day, and a weekly choice overrides it', () => {
+    const busyDays = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-13'].map((d) => ev('Class', 'ETH Classes', `${d}T09:00:00`, `${d}T11:00:00`))
+    const rule = halfDay({ when: 'pick', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'] })
+    const p = plan({ tasks: lots(), events: busyDays, prefs: { ...prefs, dayRules: [rule] }, weeks: {}, now })
+    expect(p.ruleDays?.filter((r) => r.day < '2026-11-16').map((r) => r.day)).toEqual(['2026-11-12'])
+    const weeks: Record<string, WeekData> = { '2026-W46': { week: '2026-W46', log: [], pins: [], overrides: { dayPicks: { half: '2026-11-10' } } } }
+    const q = plan({ tasks: lots(), events: busyDays, prefs: { ...prefs, dayRules: [rule] }, weeks, now })
+    expect(q.ruleDays?.filter((r) => r.day < '2026-11-16').map((r) => r.day)).toEqual(['2026-11-10'])
+    expect(work(q, '2026-11-10').every((b) => b.end.slice(11, 16) <= '13:00')).toBe(true)
+  })
+
+  it('caps the listed areas for the day', () => {
+    const rule = halfDay({ areas: ['outside'], maxMinutes: 60, from: undefined })
+    const p = plan({ tasks: lots(), events: [], prefs: { ...prefs, dayRules: [rule] }, weeks: {}, now })
+    const outside = work(p, '2026-11-11').filter((b) => b.category === 'outside').reduce((s, b) => s + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60000, 0)
+    expect(outside).toBeLessThanOrEqual(60)
+  })
+
+  it('a week can carry its own grid hours', () => {
+    const gridPrefs: Preferences = { ...prefs, allocation: { enabled: true, hours: { thesis: { mon: 4, tue: 4, wed: 4, thu: 4, fri: 4 } } } }
+    const weeks: Record<string, WeekData> = { '2026-W46': { week: '2026-W46', log: [], pins: [], overrides: { grid: { thesis: { tue: 1 } } } } }
+    const p = plan({ tasks: lots(), events: [], prefs: gridPrefs, weeks, now })
+    const thesisTue = work(p, '2026-11-10').filter((b) => b.category === 'thesis').reduce((s, b) => s + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60000, 0)
+    expect(thesisTue).toBeLessThanOrEqual(60)
   })
 })

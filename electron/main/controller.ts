@@ -201,6 +201,22 @@ export class Controller implements Api {
     this.mutate(() => this.vault.releaseHold(start, end))
   }
 
+  // Day picks and week grids change where blocks go, so they re-plan fully (like a preference change).
+  async setDayPick(week: string, ruleId: string, day: string | null) {
+    this.forceFull = true
+    this.mutate(() => this.vault.setDayPick(week, ruleId, day))
+  }
+  async setWeekGrid(week: string, grid: Parameters<Api['setWeekGrid']>[1]) {
+    this.forceFull = true
+    this.mutate(() => this.vault.setWeekGrid(week, grid))
+  }
+  async setWeekNotes(week: string, notes: string) {
+    this.mutate(() => this.vault.setWeekNotes(week, notes))
+  }
+  async archiveDone() {
+    return this.mutate(() => this.vault.archiveDone(new Date()))
+  }
+
   async getState(): Promise<AppState> {
     const vault = this.vault.state()
     const p = this.computePlan(vault)

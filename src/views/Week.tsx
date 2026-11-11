@@ -23,6 +23,8 @@ export function Week() {
   const { items, allDay } = useMemo(() => gridItems(s, days), [s, day]) // eslint-disable-line react-hooks/exhaustive-deps
   const week = isoWeek(start)
   const warnings = s.plan.warnings
+  const badges: Record<string, string[]> = {}
+  for (const r of s.plan.ruleDays ?? []) (badges[r.day] ??= []).push(r.label)
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -68,6 +70,7 @@ export function Week() {
           selectedId={selectedBlockId}
           onSelect={selectBlock}
           onDayClick={(d) => (setDay(d), go('today'))}
+          dayBadges={badges}
           onCreate={(start, end) => setDraft({ start, end })}
           onMove={async (id, st, en) => {
             if (await moveEvent(s, id, st, en)) return

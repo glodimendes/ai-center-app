@@ -11,6 +11,7 @@ export function parseWeekly(text: string, week: string): WeekData {
   const m = text.match(DATA_RE)
   const data = (m ? load(m[1]) : null) as Partial<WeekData> | null
   const out: WeekData = { week, log: data?.log ?? [], pins: data?.pins ?? [] }
+  if (data?.notes) out.notes = data.notes
   const o = cleanOverrides(data?.overrides)
   if (o) out.overrides = o
   return out
@@ -25,12 +26,14 @@ export function cleanOverrides(o: WeekOverrides | undefined): WeekOverrides | un
   if (assignments.length) out.assignments = assignments
   if (o.exclusions?.length) out.exclusions = o.exclusions
   if (o.holds?.length) out.holds = o.holds
+  if (o.dayPicks && Object.keys(o.dayPicks).length) out.dayPicks = o.dayPicks
+  if (o.grid && Object.keys(o.grid).length) out.grid = o.grid
   return Object.keys(out).length ? out : undefined
 }
 
 function yamlData(data: WeekData) {
   const overrides = cleanOverrides(data.overrides)
-  return overrides ? { log: data.log, pins: data.pins satisfies Pin[], overrides } : { log: data.log, pins: data.pins satisfies Pin[] }
+  return { ...(data.notes ? { notes: data.notes } : {}), log: data.log, pins: data.pins satisfies Pin[], ...(overrides ? { overrides } : {}) }
 }
 
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
@@ -58,6 +61,7 @@ export function serializeWeekly(data: WeekData, categories: CategoryPref[]): str
     '',
     'Written by the AI Center app: planned vs actual time per logged block. The YAML block at the end is what the app reads; edit it carefully.',
     '',
+    ...(data.notes ? ['## Focus', '', data.notes.trim(), ''] : []),
     '## Totals',
     '',
     '| Category | Planned | Actual |',

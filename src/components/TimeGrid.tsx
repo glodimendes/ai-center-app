@@ -33,6 +33,8 @@ interface Props {
   onDayClick?: (day: string) => void
   /** Drag on empty time to draw a new block. */
   onCreate?: (start: string, end: string) => void
+  /** Short labels under a day's date (e.g. a day rule). */
+  dayBadges?: Record<string, string[]>
 }
 
 const HOUR_PX = 52
@@ -73,7 +75,7 @@ function layout(items: GridItem[], startHour: number): Placed[] {
   return out
 }
 
-export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24, selectedId, onSelect, onMove, onDropTask, onDropTaskOnBlock, onDayClick, onCreate }: Props) {
+export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24, selectedId, onSelect, onMove, onDropTask, onDropTaskOnBlock, onDayClick, onCreate, dayBadges }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const cols = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ id: string; dy: number; dDay: number; resize: boolean } | null>(null)
@@ -180,6 +182,11 @@ export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24
                       {date.toLocaleDateString(undefined, { weekday: 'short' })}
                     </div>
                     <div className={cx('text-[15px] font-semibold', i === todayIdx && 'text-accent')}>{date.getDate()}</div>
+                    {dayBadges?.[d]?.map((b) => (
+                      <div key={b} className="mx-1 truncate text-[10px] text-warn" title={b}>
+                        {b}
+                      </div>
+                    ))}
                   </button>
                 )
               })}

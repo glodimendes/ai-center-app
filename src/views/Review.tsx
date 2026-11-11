@@ -1,14 +1,17 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, ClipboardCheck } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, isoWeek, parseDate, weekStart } from '@shared/time'
 import { useStore } from '@/store/app'
 import { categoryOf, cx, inlineMd } from '@/lib/util'
 import { BudgetBars } from '@/components/BudgetBars'
 import { DocEditor } from '@/components/DocEditor'
 import { Button, Dot, Empty, Header } from '@/components/ui'
+import { WeeklyReview } from '@/components/WeeklyReview'
 
 export function Review() {
   const { state, day, setDay } = useStore()
   const s = state!
+  const [reviewing, setReviewing] = useState(false)
   const start = weekStart(parseDate(day))
   const week = isoWeek(start)
   const log = [...(s.vault.weeks[week]?.log ?? [])].sort((a, b) => a.start.localeCompare(b.start))
@@ -22,6 +25,9 @@ export function Review() {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <Header title={`Weekly review · ${week}`} sub="How the week went, compared with the plan. Adjust priorities on the right.">
+        <Button kind="primary" onClick={() => setReviewing(true)} label="Review & plan the week" title="Guided weekly review: last week, tidy, focus, hours, re-plan and sync">
+          <ClipboardCheck size={13} />
+        </Button>
         <Button onClick={() => setDay(isoDate(addDays(start, -7)))}>
           <ChevronLeft size={14} />
         </Button>
@@ -90,6 +96,7 @@ export function Review() {
           <DocEditor path="04_Context_Docs/current-priorities.md" />
         </div>
       </div>
+      {reviewing && <WeeklyReview onClose={() => setReviewing(false)} />}
     </div>
   )
 }

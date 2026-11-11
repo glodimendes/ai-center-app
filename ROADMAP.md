@@ -4,15 +4,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 
 ## Open decisions (waiting for the user)
 
-1. **Calendar ownership.** Today the user's weekly Codex automation (`~/.codex/automations/plan-next-eth-week`) proposes the week in chat and, after approval, creates blocks (thesis 18–22 h, outside work 12 h, six sport sessions, one lighter half-day). The user edits blocks afterwards. Options:
-   1. **App owns the blocks** from the weekly grid; Sync is the approval; Codex stops creating blocks. This is the recommended option.
-   2. App proposes, Codex applies.
-   3. Codex owns the blocks, the app only fills them.
-   4. Split by area.
-   5. Mixed (current behaviour).
-   6. No blocks: the plan lives only in the app.
-
-   Edit adoption ("calendar edits win") is built and works with all of them. **Don't change container behaviour until the user decides.** Since 2026-11-09 the app also plans training sessions itself (TRAINING tasks), so the Codex automation's "six sport sessions" would duplicate them; raise this with the user.
+1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.
 2. **Plan options.** Built (2026-11-09): four strategies + Shuffle (README "When the plan changes"). Not built: the optional **"Plan with a wish"** box (Haiku turns a sentence into temporary planner settings). Waiting for the user.
 3. **Braindump feature.** The user will explain it. **Don't design or build it before the spec.** It's related to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
 
@@ -26,7 +18,6 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
 - **Verify single-day sync live** (installed, never run against the real calendar; pushed anyway on 2026-11-11 at the user's go-ahead). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
 - **Watch the repeating-task skip live** (installed 2026-11-11). Today's trash on an open repeating task should move its `due:` on and keep the series; the Tasks view should still delete the whole thing. Verified in the dev vault only.
-- **Lighter half-day rule.** The user's planning routine asks for one per week; the planner has no such rule yet (e.g. "no work after 13:00 on a chosen day").
 - **The user's Codex `daily-brief` automation** still runs alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
 ## Known limitations
@@ -35,7 +26,7 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 - **Overrides** (assignments, exclusions, dismissals) stay in the weekly files permanently.
 - **Blocks that don't take new tasks:** logged or past blocks.
 - **Brief ribbon:** "In meetings / classes" counts events that are free only by a per-event override or the calendar's own free flag.
-- **Duplicate blocks:** new blocks may be created next to Codex-made ones for areas without matching containers. That goes away if the user picks ownership option 1.
+- **Duplicate blocks:** new blocks may be created next to Codex-made ones for areas without matching containers, until the user turns the Sunday Codex automation off (ownership decided 2026-11-11: the app owns blocks).
 - **Packaging:** the app is signed with a local self-signed certificate (`scripts/sign-app.sh`, identity "AI Center Dev"), not an Apple Developer ID, so first launch may still need right-click → Open. `install-app` packages, signs, then replaces the bundle (and removes the old "AI Center Planner.app"); the user must restart the app. The certificate exists to keep the Calendar permission across rebuilds — an ad-hoc bundle's code hash changes every build, so macOS asked for access again each time.
 - **Vault auto-commits take whole files:** a manual edit to a file the app later writes (e.g. `daily-todos.md`) is included in the app's next `planner: …` commit.
 - **Kept-free slots** are released only by Re-plan or "Let the planner use it"; the morning re-plan keeps them.

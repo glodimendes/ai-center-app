@@ -13,7 +13,8 @@ import type {
   Settings,
   SyncOp,
   TaskPatch,
-  VaultState
+  VaultState,
+  Weekday
 } from './types'
 
 export type PlanVariant = 'balanced' | 'deadlines' | 'deep' | 'light'
@@ -105,6 +106,13 @@ export interface Api {
   restoreBlock(block: Block): Promise<void>
   /** Let the planner use time that was held empty after a removal. */
   releaseHold(start: string, end: string): Promise<void>
+  /** "One day per week" day rule: this week's day; null lets the planner pick. */
+  setDayPick(week: string, ruleId: string, day: string | null): Promise<void>
+  /** This week's own hours per area per weekday; null goes back to the Settings grid. */
+  setWeekGrid(week: string, grid: Record<string, Partial<Record<Weekday, number>>> | null): Promise<void>
+  setWeekNotes(week: string, notes: string): Promise<void>
+  /** Weekly review: moves checked tasks to 05_Tasks/archive/done-YYYY.md. Returns how many moved. */
+  archiveDone(): Promise<number>
   // docs
   listDocs(): Promise<DocInfo[]>
   readDoc(path: string): Promise<DocContent>
@@ -141,5 +149,6 @@ export const API_METHODS: Record<ApiMethod, true> = {
   addTaskToBlock: true, removeTaskFromBlock: true, removeBlock: true, postponeBlock: true, restoreBlock: true, releaseHold: true,
   listDocs: true, readDoc: true, writeDoc: true, savePreferences: true, saveSettings: true, chooseVault: true, revealVault: true,
   connectCalendar: true, disconnectCalendar: true, refreshCalendar: true, syncPreview: true, syncApply: true, closeCapture: true,
-  contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true
+  contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true,
+  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true
 }

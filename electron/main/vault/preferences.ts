@@ -136,6 +136,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
       color: '#94a3b8'
     }
   ],
+  // Off until the user turns it on: shows the shape of a rule in Settings.
+  dayRules: [{ id: 'half-day', label: 'Lighter half-day', enabled: false, when: 'pick', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], areas: [], maxMinutes: 0, from: '13:00' }],
   training: { category: 'training' }
 }
 
@@ -153,6 +155,7 @@ export function parsePreferences(text: string): Preferences {
     strategy: { ...DEFAULT_PREFERENCES.strategy, ...(data.strategy ?? {}) },
     allocation: { ...DEFAULT_PREFERENCES.allocation, ...(data.allocation ?? {}) },
     training: { category: data.training?.category ?? DEFAULT_PREFERENCES.training.category },
+    dayRules: Array.isArray(data.dayRules) ? data.dayRules : DEFAULT_PREFERENCES.dayRules,
     categories: data.categories?.length ? data.categories.map((c) => migrateTraining(migrateCategory(c), data.training)) : DEFAULT_PREFERENCES.categories
   }
 }
@@ -178,6 +181,7 @@ Read by the AI Center app to auto-schedule tasks. Edit here or in the app's Sett
 
 - \`workingHours\`: per weekday window the scheduler may use (\`null\` = day off).
 - \`categories\`: how todo headings in \`05_Tasks/daily-todos.md\` map to categories. \`headings\` are case-insensitive substrings (deepest heading wins). \`calendar\` is the Google calendar blocks are written to; \`containers\` are existing event titles in that calendar that the planner fills with tasks instead of creating new blocks. \`budget\` sets weekly min/max hours.
+- \`dayRules\`: rules for some days. \`when: weekdays\` applies on every listed weekday; \`when: pick\` on one of them per week (the one with the least calendar time; changeable per week in the weekly review). \`maxMinutes: 0\` keeps the listed \`areas\` (empty = all work areas) out between \`from\` and \`to\`; above 0 caps them for the day.
 - \`training.category\`: the training area. Its tasks (e.g. under a Training heading, with \`repeat:\` rules) are planned like any other area's, with a gap around them and outside the daily work cap.
 - Task lines may carry optional metadata: \`~2h\` estimate, \`due:2026-11-12\` or \`by 12/11\` deadline, \`!urgent\` / \`!high\` / \`!low\` priority.
 - Weekly logs (planned vs actual time) live in \`05_Tasks/weekly/\`.

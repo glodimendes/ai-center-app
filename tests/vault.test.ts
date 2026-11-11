@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseInbox, parseTasks } from '../electron/main/vault/parser'
-import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, reorderTask } from '../electron/main/vault/edits'
+import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, reorderTask, takeDone } from '../electron/main/vault/edits'
 import { editTokens, inferYear, parseTokens } from '../electron/main/vault/tokens'
 import { DEFAULT_PREFERENCES, parsePreferences, serializePreferences } from '../electron/main/vault/preferences'
 import { parseWeekly, serializeWeekly } from '../electron/main/vault/weekly'
@@ -195,6 +195,26 @@ describe('reordering', () => {
   it('refuses across sections or levels', () => {
     expect(() => reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'D').id, 'before', cats, today)).toThrow()
     expect(() => reorderTask(md, FILE, byTitle(md, 'A').id, byTitle(md, 'B1').id, 'before', cats, today)).toThrow()
+  })
+})
+
+describe('takeDone (weekly review tidy)', () => {
+  const md = ['## ETH', '### Thesis', '- [x] A', '- [ ] B', '\t- [x] B1', '\t- [ ] B2', '- [x] C', '\t- [x] C1', '- [x] D', '\t- [ ] D1', '', '## Other', '- [x] E', ''].join('\n')
+
+  it('takes fully done subtrees, and done subtasks of open parents, and nothing else', () => {
+    const { text, taken } = takeDone(md, FILE, cats, today)
+    expect(text.split('\n')).toEqual(['## ETH', '### Thesis', '- [ ] B', '\t- [ ] B2', '- [x] D', '\t- [ ] D1', '', '## Other', ''])
+    expect(taken).toEqual([
+      { section: ['ETH', 'Thesis'], lines: ['- [x] A'] },
+      { section: ['ETH', 'Thesis'], lines: ['- [x] B1'] },
+      { section: ['ETH', 'Thesis'], lines: ['- [x] C', '\t- [x] C1'] },
+      { section: ['Other'], lines: ['- [x] E'] }
+    ])
+  })
+
+  it('leaves a file with nothing done untouched', () => {
+    const open = md.replace(/\[x\]/g, '[ ]')
+    expect(takeDone(open, FILE, cats, today)).toEqual({ text: open, taken: [] })
   })
 })
 

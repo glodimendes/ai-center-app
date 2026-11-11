@@ -7,6 +7,7 @@ import { Button, Header } from '@/components/ui'
 import { HeadingMap } from './settings/HeadingMap'
 import { AreaSettings, DurationInput, input } from './settings/AreaSettings'
 import { StrategySettings } from './settings/StrategySettings'
+import { DayRules } from './settings/DayRules'
 import { BriefPromptEditor } from './settings/BriefPrompt'
 
 const DAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
@@ -220,6 +221,10 @@ export function Settings() {
 
           <Card title="Scheduling strategy" desc="How tasks are ranked and how time is divided between areas.">
             <StrategySettings prefs={prefs} setPrefs={setPrefs} />
+          </Card>
+
+          <Card title="Day rules" desc="Rules for some days, e.g. a lighter half-day or no evening work. Change them here whenever your routine changes; the planner applies them on the next re-plan.">
+            <DayRules prefs={prefs} setPrefs={setPrefs} />
           </Card>
 
           <Card title="Planning rules" desc="How the planner fills your days. The plan stays put during the day; it's fully re-planned each morning (from 04:00), when these settings change, or when you click Re-plan.">
