@@ -1,6 +1,6 @@
 # Roadmap
 
-Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-10.
+Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-11.
 
 ## Open decisions (waiting for the user)
 
@@ -23,7 +23,8 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 ## Next (agreed or obvious)
 
 - **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
-- **Verify single-day sync live** (built and installed 2026-11-10, never run against the real calendar). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
+- **Verify single-day sync live** (installed, never run against the real calendar; pushed anyway on 2026-11-11 at the user's go-ahead). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
+- **Watch the repeating-task skip live** (installed 2026-11-11). Today's trash on an open repeating task should move its `due:` on and keep the series; the Tasks view should still delete the whole thing. Verified in the dev vault only.
 - **Lighter half-day rule.** The user's planning routine asks for one per week; the planner has no such rule yet (e.g. "no work after 13:00 on a chosen day").
 - **The user's Codex `daily-brief` automation** still runs alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
 
@@ -97,4 +98,5 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
 - **Update context (⌘U):** Codex Luna (default) or Claude Haiku, with diff review and Keep/Undo.
 - **2026-11-10:** skip one occurrence of a repeating task — Today's trash moves a repeating task's `due:` on (`Controller.skipOccurrence`) instead of deleting the line; the Tasks view still deletes the series. Prior art checked: org-mode repeaters (`+` / `++` / `.+`), Obsidian Tasks (`every week` vs `when done`), iCalendar `EXDATE` / `RECURRENCE-ID`.
 - **2026-11-10:** single-day sync — **Sync day** in Today's header syncs only the day on screen, through the same approval dialog (`buildSyncDiff(..., day?)` → `syncPreview(day?)` → `SyncDialog day`). The week's Sync still covers the whole window. Other days are never touched by a day sync. Unit-tested (104 tests) and checked in the dev app; not yet run against the real calendar.
+- **2026-11-11:** the packaged app is signed with the user's self-signed "AI Center Dev" certificate (`scripts/sign-app.sh`, run by `install-app`), so macOS stops asking for Calendar access after every rebuild. Not an Apple Developer ID: Gatekeeper can still ask for right-click → Open.
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.
