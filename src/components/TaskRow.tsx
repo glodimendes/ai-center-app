@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Calendar, Check, IndentDecrease, IndentIncrease, ListPlus, Clock, Flag, GripVertical, MoveHorizontal, Repeat, Trash2, Zap } from 'lucide-react'
 import type { Priority, Task } from '@shared/types'
-import { fmtDuration, isoDate } from '@shared/time'
+import { fmtDuration, isoDate, isoWeek } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { categoryOf, cx, inlineMd, parseMinutes, relDay } from '@/lib/util'
@@ -41,6 +41,9 @@ export function TaskRow({
   const finish = state.plan.taskFinish[task.id]
   const firstBlock = state.plan.blocks.find((b) => b.chunks.some((c) => c.taskId === task.id) && new Date(b.end) > new Date())
   const atRisk = state.plan.warnings.some((w) => w.taskId === task.id && w.kind === 'deadline')
+  const late = Boolean(finish && task.due && finish.slice(0, 10) > task.due)
+  const habitDone = task.perWeek ? (state.vault.weeks[isoWeek(new Date())]?.log ?? []).filter((l) => l.status !== 'skipped' && (l.taskIds ?? []).includes(task.id)).length : 0
+  const habitMet = Boolean(task.perWeek && habitDone >= task.perWeek)
   const overdue = task.due && task.due < isoDate(new Date())
   // Lists with the section line (Today, Alerts) are narrow: the title gets the room, metadata shrinks.
   const compact = Boolean(showSection)
@@ -107,10 +110,10 @@ export function TaskRow({
     >
       {draggable && <GripVertical size={12} className="text-faint opacity-0 group-hover:opacity-100 -ml-1 shrink-0 cursor-grab" />}
       <button
-        onClick={() => (task.done ? patch({ done: false }) : act(api.completeTask(task.id)))}
+        onClick={() => (task.done ? patch({ done: false }) : act(api.completeTask(task.id), task.perWeek ? `Session logged (${habitDone + 1}/${task.perWeek} this week)` : undefined))}
         className={cx('w-4 h-4 rounded-full border grid place-items-center shrink-0 transition-colors', task.done ? 'bg-accent border-accent text-white' : 'hover:border-accent')}
         style={{ borderColor: task.done ? undefined : cat.color }}
-        title={task.done ? 'Reopen' : 'Complete'}
+        title={task.done ? 'Reopen' : task.perWeek ? 'Log a session (the habit stays open)' : 'Complete'}
       >
         {task.done && <Check size={10} strokeWidth={3} />}
       </button>
@@ -153,8 +156,12 @@ export function TaskRow({
       </div>
 
       {!showSection && !task.done && firstBlock && (
-        <span className="text-[10.5px] text-muted whitespace-nowrap" title={finish ? `Done by ${finish.replace('T', ' ').slice(0, 16)}` : undefined}>
+        <span
+          className={cx('text-[10.5px] whitespace-nowrap', late ? 'text-warn' : 'text-muted')}
+          title={finish ? `Starts ${firstBlock.start.replace('T', ' ').slice(0, 16)}, done by ${finish.replace('T', ' ').slice(0, 16)}${late ? `, after its deadline (${task.due})` : ''}` : undefined}
+        >
           {relDay(firstBlock.start.slice(0, 10))} {firstBlock.start.slice(11, 16)}
+          {finish && finish.slice(0, 10) !== firstBlock.start.slice(0, 10) && ` → ${relDay(finish.slice(0, 10))}`}
         </span>
       )}
 
@@ -288,15 +295,26 @@ export function TaskRow({
       <div className="relative">
         <button
           onClick={() => setPop(pop === 'repeat' ? null : 'repeat')}
-          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', task.repeat ? 'bg-sunken text-muted' : 'text-faint hidden group-hover:flex')}
-          title={task.repeat ? describeRepeat(task.repeat) : 'Repeat'}
+          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', task.repeat || task.perWeek ? 'bg-sunken text-muted' : 'text-faint hidden group-hover:flex', habitMet && 'text-ok')}
+          title={task.perWeek ? `Habit: ${habitDone} of ${task.perWeek} sessions this week` : task.repeat ? describeRepeat(task.repeat) : 'Repeat'}
         >
           <Repeat size={11} />
-          {task.repeat && !compact && <span className="max-w-20 truncate">{describeRepeat(task.repeat).replace(/^Every /, '')}</span>}
+          {task.perWeek ? (
+            <span>
+              {habitDone}/{task.perWeek}
+            </span>
+          ) : (
+            task.repeat && !compact && <span className="max-w-20 truncate">{describeRepeat(task.repeat).replace(/^Every /, '')}</span>
+          )}
         </button>
         {pop === 'repeat' && (
           <Popover onClose={() => setPop(null)} align="right" className="w-60">
-            <RepeatPicker value={task.repeat} onPick={(rule) => (patch({ repeat: rule }), setPop(null))} />
+            <RepeatPicker
+              value={task.repeat}
+              onPick={(rule) => (patch(task.perWeek ? { repeat: rule, perWeek: null } : { repeat: rule }), setPop(null))}
+              perWeek={task.perWeek}
+              onHabit={(times) => (patch(times ? { perWeek: times, repeat: null } : { perWeek: null }), setPop(null))}
+            />
           </Popover>
         )}
       </div>

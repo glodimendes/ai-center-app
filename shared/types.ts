@@ -22,6 +22,8 @@ export interface Task {
   repeat?: string
   /** Postponed (`postpone:` token): not planned before this date. */
   postponed?: string
+  /** Habit (`3x/week`): that many sessions a week on different days; checking it off logs one and keeps the line open. */
+  perWeek?: number
   parentId?: string
   childIds: string[]
 }
@@ -36,6 +38,7 @@ export interface TaskPatch {
   timing?: Timing | null
   repeat?: string | null
   postponed?: string | null
+  perWeek?: number | null
   done?: boolean
 }
 

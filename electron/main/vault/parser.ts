@@ -95,6 +95,7 @@ export function parseTasks(
       timing: tokens.timing,
       repeat: tokens.repeat,
       postponed: tokens.postponed,
+      perWeek: tokens.perWeek,
       parentId: parent?.id,
       childIds: []
     }

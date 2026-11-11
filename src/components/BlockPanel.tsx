@@ -148,6 +148,11 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
       // Logged first: that pins the block with its tasks, so a checked task stays listed here.
       await writeLog(auto)
     }
+    // A habit's line stays open: the block log above is what counts as a session.
+    if (task.perWeek) {
+      if (!started) useStore.getState().toast('Habit sessions count once their block has started.', 'info')
+      return
+    }
     await act(api.patchTask(task.id, { done: !st.done }))
   }
 

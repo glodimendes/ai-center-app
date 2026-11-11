@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { Task } from '@shared/types'
 import { fmtDuration } from '@shared/time'
 import { useStore } from '@/store/app'
-import { categoryOf, cx } from '@/lib/util'
+import { categoryOf, cx, relDay } from '@/lib/util'
+import { projection } from '@/lib/plan'
 import { TaskTree } from '@/components/TaskRow'
 import { QuickAdd } from '@/components/QuickAdd'
 import { Dot, Header } from '@/components/ui'
@@ -86,6 +87,7 @@ export function Tasks() {
                   </button>
                   <Dot color={c.color} className="ml-1" />
                   <span className="text-[11px] text-faint">{roots.filter((t) => !t.done).length || ''}</span>
+                  <Eta tasks={s.vault.tasks.filter((t) => t.section.join('>') === key || t.section.join('>').startsWith(key + '>'))} />
                   <button onClick={() => setAdding(key)} className="ml-1 text-faint hover:text-ink opacity-0 group-hover:opacity-100" title="Add task here">
                     <Plus size={13} />
                   </button>
@@ -104,5 +106,19 @@ export function Tasks() {
         </div>
       </div>
     </div>
+  )
+}
+
+/** A heading's projected finish from the current plan, and what won't make it. */
+function Eta({ tasks }: { tasks: Task[] }) {
+  const s = useStore((st) => st.state)!
+  const p = projection(s, tasks)
+  if (!p.open) return null
+  return (
+    <span className="ml-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-faint" title="When the last planned task under this heading finishes, in the current plan">
+      {p.finish && <span>→ {relDay(p.finish.slice(0, 10))}</span>}
+      {p.late > 0 && <span className="text-warn">{p.late} late</span>}
+      {p.unplanned > 0 && <span>{p.unplanned} not planned</span>}
+    </span>
   )
 }

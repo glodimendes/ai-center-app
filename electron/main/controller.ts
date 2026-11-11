@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Api, AppState, PlanOption, PlanVariant } from '@shared/api'
-import type { CalEvent, CalendarStatus, ContextResult, Plan, Settings, SyncOp, VaultState } from '@shared/types'
+import type { CalEvent, CalendarStatus, ContextResult, Plan, Settings, SyncOp, Task, VaultState } from '@shared/types'
 import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
 import { nextOccurrence } from '@shared/repeat'
 import { VaultService } from './vault/service'
@@ -271,6 +271,7 @@ export class Controller implements Api {
     const task = this.vault.state().tasks.find((t) => t.id === taskId)
     if (!task) throw new Error('That task changed or was removed. Try again.')
     const now = new Date()
+    if (task.perWeek) return this.logHabitSession(task, now)
     const minutes = this.vault.preferences.completedTaskMinutes
     const running = this.currentPlan().blocks.some((b) => b.chunks.some((c) => c.taskId === taskId) && new Date(b.start) <= now && now < new Date(b.end))
     this.mutate(() => {
@@ -284,6 +285,31 @@ export class Controller implements Api {
       const taskIds = task.repeat ? [] : [taskId]
       const pin = { blockId, category: task.category, title, start, end: localISO(end), taskIds }
       this.vault.logBlock({ blockId, date: isoDate(now), category: task.category, title, start, plannedMin: minutes, actualMin: minutes, status: 'done', taskIds }, pin)
+    })
+  }
+
+  /**
+   * A habit (`3x/week`) is never checked off: each check logs one session and the line stays open.
+   * Inside a block running now, that block is logged; otherwise a block of the session's length ending now.
+   */
+  private logHabitSession(task: Task, now: Date) {
+    const block = this.currentPlan().blocks.find((b) => b.chunks.some((c) => c.taskId === task.id) && new Date(b.start) <= now && now < new Date(b.end))
+    this.mutate(() => {
+      if (block) {
+        const planned = Math.round((new Date(block.end).getTime() - new Date(block.start).getTime()) / 60_000)
+        const elapsed = Math.min(planned, Math.max(5, Math.round((now.getTime() - new Date(block.start).getTime()) / 300_000) * 5))
+        const taskIds = block.chunks.map((c) => c.taskId)
+        const entry = { blockId: block.id, date: block.start.slice(0, 10), category: block.category, title: block.title, start: block.start, plannedMin: planned, actualMin: elapsed, status: 'done' as const, taskIds }
+        this.vault.logBlock(entry, { blockId: block.id, category: block.category, title: block.title, start: block.start, end: block.end, taskIds })
+        return
+      }
+      const minutes = task.estimateMin ?? this.vault.preferences.categories.find((c) => c.key === task.category)?.defaultEstimateMinutes ?? 30
+      const end = new Date(Math.floor(now.getTime() / 300_000) * 300_000)
+      const start = localISO(new Date(end.getTime() - minutes * 60_000))
+      const blockId = `done:${isoDate(now)}:${task.id}:${end.getTime()}`
+      const title = doneTitle(task.title)
+      const pin = { blockId, category: task.category, title, start, end: localISO(end), taskIds: [task.id] }
+      this.vault.logBlock({ blockId, date: isoDate(now), category: task.category, title, start, plannedMin: minutes, actualMin: minutes, status: 'done', taskIds: [task.id] }, pin)
     })
   }
 

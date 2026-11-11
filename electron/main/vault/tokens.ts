@@ -9,6 +9,7 @@ import { parseRepeat } from '@shared/repeat'
 //   @spread  @asap                  timing override (spread evenly until the deadline / as soon as possible)
 //   repeat:weekly  repeat:3d  repeat:mon,thu   repeating task (shared/repeat.ts)
 //   postpone:2026-11-20             not planned before that date
+//   3x/week  2x/w                   habit: that many sessions a week, on different days, any days
 
 const ESTIMATE_RE = /(^|\s)~(\d+(?:\.\d+)?h(?:\d+m)?|\d+m)(?=\s|$)/
 const DUE_ISO_RE = /(^|\s)due:(\d{4}-\d{2}-\d{2})(?=\s|$)/
@@ -17,6 +18,7 @@ const PRIORITY_RE = /(^|\s)!(urgent|high|medium|low)(?=\s|$)/i
 const TIMING_RE = /(^|\s)@(spread|asap)(?=\s|$)/i
 const REPEAT_RE = /(^|\s)repeat:([a-z0-9,:]+)(?=\s|$)/i
 const POSTPONE_RE = /(^|\s)postpone:(\d{4}-\d{2}-\d{2})(?=\s|$)/
+const HABIT_RE = /(^|\s)([1-7])x\/(?:week|w)(?=\s|$)/i
 
 export interface ParsedTokens {
   title: string
@@ -27,6 +29,7 @@ export interface ParsedTokens {
   timing?: Timing
   repeat?: string
   postponed?: string
+  perWeek?: number
 }
 
 export function parseDuration(token: string): number | undefined {
@@ -111,6 +114,12 @@ export function parseTokens(text: string, today: Date): ParsedTokens {
     title = title.replace(POSTPONE_RE, '$1')
   }
 
+  const habit = title.match(HABIT_RE)
+  if (habit) {
+    out.perWeek = Number(habit[2])
+    title = title.replace(HABIT_RE, '$1')
+  }
+
   out.title = title.replace(/\s{2,}/g, ' ').trim()
   return out
 }
@@ -132,6 +141,7 @@ export interface TokenEdit {
   timing?: Timing | null
   repeat?: string | null
   postponed?: string | null
+  perWeek?: number | null
 }
 
 /**
@@ -155,6 +165,8 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
     if (rep) parts.push(`repeat:${rep}`)
     const post = edit.postponed === undefined ? parsed.postponed : edit.postponed ?? undefined
     if (post) parts.push(`postpone:${post}`)
+    const per = edit.perWeek === undefined ? parsed.perWeek : edit.perWeek ?? undefined
+    if (per) parts.push(`${per}x/week`)
     return parts.join(' ')
   }
 
@@ -192,6 +204,11 @@ export function editTokens(body: string, edit: TokenEdit, today: Date): string {
   if (edit.postponed !== undefined) {
     const token = edit.postponed ? `postpone:${edit.postponed}` : ''
     if (POSTPONE_RE.test(out)) out = out.replace(POSTPONE_RE, token ? `$1${token}` : '$1')
+    else if (token) out = `${out.trimEnd()} ${token}`
+  }
+  if (edit.perWeek !== undefined) {
+    const token = edit.perWeek ? `${edit.perWeek}x/week` : ''
+    if (HABIT_RE.test(out)) out = out.replace(HABIT_RE, token ? `$1${token}` : '$1')
     else if (token) out = `${out.trimEnd()} ${token}`
   }
   return out.replace(/[ \t]{2,}/g, ' ').trimEnd()
