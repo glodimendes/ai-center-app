@@ -649,3 +649,29 @@ describe('day rules', () => {
     expect(thesisTue).toBeLessThanOrEqual(60)
   })
 })
+
+describe('habits (3x/week)', () => {
+  const days = (p: ReturnType<typeof plan>, id: string, before: string) =>
+    p.blocks.filter((b) => b.start < before && b.chunks.some((c) => c.taskId === id)).map((b) => b.start.slice(0, 10))
+
+  it('plans that many sessions this week, on different days, spread out, under the task\'s own id', () => {
+    const run = task('Run Z2', 'personal', { estimateMin: 45, perWeek: 3 })
+    const p = plan({ tasks: [run], events: [], prefs, weeks: {}, now })
+    const d = days(p, run.id, '2026-11-16')
+    expect(d).toHaveLength(3)
+    expect(new Set(d).size).toBe(3)
+    expect(d[0] < '2026-11-11' && d[2] >= '2026-11-13').toBe(true)
+    expect(p.blocks.every((b) => b.chunks.every((c) => !c.taskId.includes('@')))).toBe(true)
+    expect(p.taskFinish[run.id]).toBeDefined()
+  })
+
+  it('counts sessions already logged this week', () => {
+    const run = task('Run Z2', 'personal', { estimateMin: 45, perWeek: 3 })
+    const weeks: Record<string, WeekData> = {
+      '2026-W46': { week: '2026-W46', pins: [], log: [{ blockId: 'done:x', date: '2026-11-09', category: 'personal', title: '✓ Run Z2', start: '2026-11-09T06:00:00', plannedMin: 45, actualMin: 45, status: 'done', taskIds: [run.id] }] }
+    }
+    const p = plan({ tasks: [run], events: [], prefs, weeks, now: new Date(2026, 10, 9, 7, 0) })
+    expect(days(p, run.id, '2026-11-16')).toHaveLength(2)
+    expect(days(p, run.id, '2026-11-23')).toHaveLength(5)
+  })
+})

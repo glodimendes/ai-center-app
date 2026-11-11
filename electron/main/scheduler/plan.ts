@@ -1,6 +1,7 @@
 import type { Block, CalEvent, CategoryPref, DayRule, Plan, PlanWarning, Preferences, Task, WeekData, Weekday } from '@shared/types'
 import { WEEKDAYS, addDays, atMinutes, isoDate, isoWeek, localISO, startOfDay, toHM, weekStart } from '@shared/time'
 import { earliestFor } from '@shared/repeat'
+import { baseTaskId, expandHabits } from './habits'
 import { NO_AREA, noAreaCategory } from '@shared/categories'
 
 // Deterministic Motion-style planner. Pure: same input, same plan.
@@ -79,7 +80,13 @@ function subtract(spans: { s: number; e: number }[], busy: { s: number; e: numbe
 }
 
 export function plan(input: PlanInput): Plan {
-  const { tasks, events, prefs, weeks, now, previous } = input
+  const { events, prefs, weeks, now, previous } = input
+  // Habits (`3x/week`) are planned as separate sessions; ids are mapped back before returning.
+  const tasks = expandHabits(input.tasks, weeks, now, prefs.horizonDays)
+  const sessionsOf = new Map<string, Task[]>()
+  for (const t of tasks) if (t.id !== baseTaskId(t.id)) sessionsOf.set(baseTaskId(t.id), [...(sessionsOf.get(baseTaskId(t.id)) ?? []), t])
+  /** One session per habit per day: base task id → days that have one. */
+  const habitDays = new Map<string, Set<string>>()
   const anchorFuture = Boolean(previous) && input.anchorFuture !== false
   const slot = prefs.slotMinutes * MIN
   const nowMs = Math.ceil(now.getTime() / slot) * slot
@@ -184,7 +191,11 @@ export function plan(input: PlanInput): Plan {
     m.set(dayKey(b.s), (m.get(dayKey(b.s)) ?? 0) + minutes)
     perDay.set(taskId, m)
     taskFinish[taskId] = Math.max(taskFinish[taskId] ?? 0, b.e)
+    if (sessionsOf.has(baseTaskId(taskId))) habitDays.set(baseTaskId(taskId), (habitDays.get(baseTaskId(taskId)) ?? new Set()).add(dayKey(b.s)))
   }
+  /** A pin or assignment that names a habit gets one of that week's open sessions. */
+  const resolve = (id: string, s: number) =>
+    sessionsOf.get(id)?.find((x) => isoWeek(new Date(s)) === x.id.slice(x.id.indexOf('@') + 1, x.id.indexOf('#')) && (remaining.get(x.id) ?? 0) > 0 && !habitDays.get(id)?.has(dayKey(s)))?.id ?? id
 
   // A task postponed past a block's day leaves that block (pinned or assigned).
   const postponedTo = new Map(tasks.filter((t) => t.postponed).map((t) => [t.id, t.postponed!]))
@@ -198,7 +209,8 @@ export function plan(input: PlanInput): Plan {
     if (e <= today.getTime() || s >= horizonEnd || excluded.has(p.blockId)) continue
     const block: Working = { id: p.blockId, kind: 'pinned', category: p.category, title: p.title, start: p.start, end: p.end, calendarName: catOf(p.category).calendar, chunks: [], pinned: true, s, e, free: 0 }
     let cap = (e - Math.max(s, nowMs)) / MIN
-    for (const id of p.taskIds) {
+    for (const pid of p.taskIds) {
+      const id = e > nowMs ? resolve(pid, s) : pid
       if (postponedPast(id, s)) continue
       const rem = remaining.get(id)
       if (rem === undefined) {
@@ -247,7 +259,8 @@ export function plan(input: PlanInput): Plan {
     for (const a of o.assignments ?? []) {
       const b = blocks.find((x) => x.id === a.blockId)
       if (!b || b.frozen || excluded.has(b.id)) continue
-      for (const id of a.taskIds) {
+      for (const aid of a.taskIds) {
+        const id = resolve(aid, b.s)
         if (postponedPast(id, b.s)) continue
         const use = Math.min(remaining.get(id) ?? 0, b.free)
         if (use > 0 && !isExcluded(b.id, id)) assign(b, id, use)
@@ -492,8 +505,9 @@ export function plan(input: PlanInput): Plan {
   const placeTask = (t: Task, leftover = false) => {
     const c = catOf(t.category)
     const guarded = isGuarded(t)
-    // Whole tasks (e.g. a training session) go into one block or not at all that day.
-    const whole = Boolean(c.wholeTasks)
+    // Whole tasks (e.g. a training session, any habit session) go into one block or not at all that day.
+    const habit = baseTaskId(t.id) !== t.id ? baseTaskId(t.id) : null
+    const whole = Boolean(c.wholeTasks) || Boolean(habit)
     const spread = !leftover && !whole && !guarded && (t.timing ?? c.timing ?? 'asap') === 'spread'
     const spreadSet = spread ? spreadDaysFor(t, c).map(isoDate) : []
     const minChunk = () => (whole ? remaining.get(t.id)! : Math.min(prefs.minChunkMinutes, remaining.get(t.id)!))
@@ -501,6 +515,7 @@ export function plan(input: PlanInput): Plan {
     for (const day of days) {
       const dk = isoDate(day)
       if (earliest && dk < earliest) continue
+      if (habit && habitDays.get(habit)?.has(dk)) continue
       if (leftover && (quota(c, day) ?? 0) > 0) continue
       const lastSpreadDay = spreadSet[spreadSet.length - 1]
       // Spread: skip days outside the set until it's over; then fall back to as-soon-as-possible for leftovers.
@@ -634,12 +649,32 @@ export function plan(input: PlanInput): Plan {
     }
   }
 
+  // Habit sessions back to their task: the rest of the app only knows the line in the file.
+  for (const b of out) {
+    const merged = new Map<string, number>()
+    for (const c of b.chunks) merged.set(baseTaskId(c.taskId), (merged.get(baseTaskId(c.taskId)) ?? 0) + c.minutes)
+    b.chunks = [...merged].map(([taskId, minutes]) => ({ taskId, minutes }))
+  }
+  for (const [id, ms] of Object.entries(taskFinish)) {
+    const base = baseTaskId(id)
+    if (base !== id) {
+      taskFinish[base] = Math.max(taskFinish[base] ?? 0, ms)
+      delete taskFinish[id]
+    }
+  }
+  for (const w of warnings) if (w.taskId) w.taskId = baseTaskId(w.taskId)
+  const seen = new Set<string>()
+  const uniqueWarnings = warnings.filter((w) => {
+    const k = `${w.kind}\n${w.taskId ?? ''}\n${w.message}`
+    return seen.has(k) ? false : (seen.add(k), true)
+  })
+
   return {
     generatedAt: now.toISOString(),
     mode: anchorFuture ? 'incremental' : 'full',
     fullPlannedAt: input.fullPlannedAt ?? now.toISOString(),
     blocks: out.sort((a, b) => a.s - b.s).map(({ s: _s, e: _e, free: _f, anchored: _a, frozen: _z, ...b }) => b),
-    warnings,
+    warnings: uniqueWarnings,
     taskFinish: Object.fromEntries(Object.entries(taskFinish).map(([k, v]) => [k, localISO(new Date(v))])),
     ruleDays: days.flatMap((d) => rulesOn(d).map((r) => ({ day: isoDate(d), ruleId: r.id, label: r.label, ...(r.when === 'pick' ? { picked: true } : {}) })))
   }

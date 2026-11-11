@@ -198,6 +198,16 @@ describe('reordering', () => {
   })
 })
 
+describe('habit token', () => {
+  it('reads and edits 3x/week', () => {
+    expect(parseTokens('Run Z2 ~45m 3x/week', today)).toMatchObject({ title: 'Run Z2', estimateMin: 45, perWeek: 3 })
+    expect(parseTokens('Gym 2x/w', today).perWeek).toBe(2)
+    expect(editTokens('Run Z2 ~45m 3x/week', { perWeek: 4 }, today)).toBe('Run Z2 ~45m 4x/week')
+    expect(editTokens('Run Z2 ~45m 3x/week', { perWeek: null }, today)).toBe('Run Z2 ~45m')
+    expect(editTokens('Run Z2', { perWeek: 2 }, today)).toBe('Run Z2 2x/week')
+  })
+})
+
 describe('takeDone (weekly review tidy)', () => {
   const md = ['## ETH', '### Thesis', '- [x] A', '- [ ] B', '\t- [x] B1', '\t- [ ] B2', '- [x] C', '\t- [x] C1', '- [x] D', '\t- [ ] D1', '', '## Other', '- [x] E', ''].join('\n')
 

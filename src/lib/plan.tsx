@@ -1,5 +1,5 @@
 import type { AppState } from '@shared/api'
-import type { Block, CalEvent, LogEntry, Pin } from '@shared/types'
+import type { Block, CalEvent, LogEntry, Pin, Task } from '@shared/types'
 import { diffMin, isoWeek, localISO } from '@shared/time'
 import type { GridItem } from '@/components/TimeGrid'
 import { api } from '@/lib/api'
@@ -123,4 +123,26 @@ export async function moveEvent(state: AppState, id: string, start: string, end:
     run: () => void act(api.editEvent(ev.calendarId, newId, { start: ev.start, end: ev.end }), 'Move undone')
   })
   return true
+}
+
+/**
+ * Where a set of tasks stands in the current plan (Motion-style ETA): when its last planned chunk
+ * ends, how many open tasks would finish after their deadline, and how many aren't planned at all.
+ */
+export function projection(state: AppState, tasks: Task[]) {
+  const openIds = new Set(state.vault.tasks.filter((t) => !t.done).map((t) => t.id))
+  const leaves = tasks.filter((t) => !t.done && !t.childIds.some((id) => openIds.has(id)))
+  let finish: string | null = null
+  let late = 0
+  let unplanned = 0
+  for (const t of leaves) {
+    const f = state.plan.taskFinish[t.id]
+    if (!f) {
+      unplanned++
+      continue
+    }
+    if (!finish || f > finish) finish = f
+    if (t.due && f.slice(0, 10) > t.due) late++
+  }
+  return { finish, late, unplanned, open: leaves.length }
 }
