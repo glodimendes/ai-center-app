@@ -81,13 +81,13 @@ export function Brief() {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <Header title={greeting} sub={new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}>
-        <Button kind="ghost" disabled={s.brief.running} onClick={() => act(api.generateBrief())} title="Run the daily brief now (Claude Haiku, read-only)">
-          {s.brief.running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Run daily brief
+        <Button kind="ghost" disabled={s.brief.running} onClick={() => act(api.generateBrief())} label="Run daily brief" title="Run the daily brief now (Claude Haiku, read-only)">
+          {s.brief.running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
         </Button>
         <Button onClick={() => (setDay(today), go('today'))}>Open Today</Button>
       </Header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col gap-5">
+        <div className="max-w-6xl mx-auto px-6 @max-3xl:px-4 py-5 flex flex-col gap-5">
           {s.brief.running && (
             <div className="rounded-lg bg-accent-soft px-4 py-2.5 text-[12.5px] flex items-center gap-2">
               <Loader2 size={14} className="animate-spin text-accent" />
@@ -97,11 +97,11 @@ export function Brief() {
           )}
           {s.brief.error && !s.brief.running && (
             <div className="rounded-lg bg-warn-soft text-warn px-4 py-2.5 text-[12.5px] flex items-center gap-2">
-              <AlertTriangle size={14} /> <span className="flex-1">Brief failed: {s.brief.error}</span>
+              <AlertTriangle size={14} className="shrink-0" /> <span className="flex-1 min-w-0 break-words">Brief failed: {s.brief.error}</span>
               <Button onClick={() => act(api.generateBrief())}>Try again</Button>
             </div>
           )}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 @max-3xl:grid-cols-2 gap-3">
             <Stat icon={<Timer size={14} />} label="Planned work" value={fmtDuration(plannedMin)}>
               <div className="flex h-1.5 rounded-full overflow-hidden mt-2 bg-sunken">
                 {[...byArea].map(([k, m]) => (
@@ -120,7 +120,7 @@ export function Brief() {
             {!s.calendar.connected && <div className="mt-2 text-[11.5px] text-faint">Calendar not connected: showing planned blocks only (Settings → Calendar).</div>}
           </Card>
 
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-2 @max-3xl:grid-cols-1 gap-5">
             <Card title="Emails / attention" icon={<Mail size={14} />} source={attention ? 'AI brief' : undefined}>
               {attention ? <Md text={attention.body} /> : <NoBrief running={s.brief.running} />}
             </Card>
@@ -140,7 +140,7 @@ export function Brief() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-3 gap-5">
+          <div className="grid grid-cols-3 @max-5xl:grid-cols-2 @max-3xl:grid-cols-1 gap-5">
             <Card title="Due" icon={<Flag size={14} />}>
               <TaskList title="Overdue" tasks={overdue} tone="danger" />
               <TaskList title="Today" tasks={dueToday} />
@@ -171,8 +171,8 @@ export function Brief() {
                   .filter((w) => w.kind !== 'unscheduled' && w.kind !== 'stale')
                   .slice(0, 6)
                   .map((w, i) => (
-                    <div key={i} className="flex gap-1.5 text-[11.5px] text-warn">
-                      <AlertTriangle size={11} className="mt-0.5 shrink-0" /> {w.message}
+                    <div key={i} className="flex gap-1.5 text-[11.5px] text-warn min-w-0 break-words">
+                      <AlertTriangle size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{w.message}</span>
                     </div>
                   ))}
                 {staleIds.size > 0 && (
@@ -288,8 +288,8 @@ function Card({ title, icon, source, children }: { title: string; icon: ReactNod
     <section className="rounded-xl border border-line bg-panel p-4 min-w-0">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-accent">{icon}</span>
-        <h2 className="text-[13px] font-semibold flex-1">{title}</h2>
-        {source && <span className="text-[10.5px] text-faint">{source}</span>}
+        <h2 className="text-[13px] font-semibold flex-1 min-w-0 truncate">{title}</h2>
+        {source && <span className="text-[10.5px] text-faint truncate max-w-[50%]" title={source}>{source}</span>}
       </div>
       {children}
     </section>

@@ -18,13 +18,13 @@ export function ReplanButton() {
   const at = new Date(plan.fullPlannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-faint" title="Blocks keep their place until the next full re-plan (each morning, after a preference change, or when you click Re-plan). Adding or finishing tasks only changes what's inside them.">
+      <span className="text-[11px] text-faint whitespace-nowrap @max-6xl:hidden" title="Blocks keep their place until the next full re-plan (each morning, after a preference change, or when you click Re-plan). Adding or finishing tasks only changes what's inside them.">
         Planned {at}
         {variant.key !== 'balanced' && ` · ${variant.label}`}
         {variant.seed !== undefined && ' (shuffled)'}
       </span>
-      <Button onClick={() => setOpen(true)} title="Compare strategies and rearrange everything that isn't pinned or already started">
-        <RotateCcw size={13} /> Re-plan
+      <Button onClick={() => setOpen(true)} label="Re-plan" title={`Re-plan: compare strategies and rearrange everything that isn't pinned or already started. Planned ${at}${variant.key !== 'balanced' ? ` · ${variant.label}` : ''}`}>
+        <RotateCcw size={13} />
       </Button>
       {open && <ReplanDialog onClose={() => setOpen(false)} />}
     </div>
@@ -64,13 +64,13 @@ function ReplanDialog({ onClose }: { onClose: () => void }) {
           Pick how to rearrange everything that isn't pinned or already started. Each option is the same planner under a different strategy; Shuffle gives another arrangement with the same
           strategy. Next 7 days shown. Applying also frees time you kept empty.
         </p>
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-1 min-[760px]:grid-cols-2 gap-3 mt-4">
           {VARIANTS.map((k) => {
             const o = options[k]
             const isCurrent = current.key === k
             return (
               <div key={k} className={cx('rounded-lg border p-3 flex flex-col', isCurrent ? 'border-accent' : 'border-line')}>
-                <div className="flex items-baseline gap-2">
+                <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-[13px] font-semibold">{o?.label ?? k}</span>
                   {isCurrent && <span className="text-[10.5px] text-accent">current strategy</span>}
                   {o?.seed !== undefined && <span className="text-[10.5px] text-faint">shuffled</span>}

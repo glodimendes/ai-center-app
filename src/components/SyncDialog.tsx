@@ -97,7 +97,7 @@ export function SyncDialog({ onClose, day }: { onClose: () => void; day?: string
                   />
                   <span
                     className={cx(
-                      'w-14 text-[10.5px] font-semibold uppercase',
+                      'w-14 shrink-0 text-[10.5px] font-semibold uppercase',
                       o.op === 'create' && 'text-ok',
                       o.op === 'update' && 'text-accent',
                       o.op === 'delete' && 'text-danger'
@@ -105,8 +105,8 @@ export function SyncDialog({ onClose, day }: { onClose: () => void; day?: string
                   >
                     {o.op === 'create' ? 'Add' : o.op === 'update' ? 'Move' : 'Remove'}
                   </span>
-                  <span className="font-medium flex-1 truncate">{o.title}</span>
-                  <span className="text-muted text-[11.5px] flex items-center gap-1">
+                  <span className="font-medium flex-1 min-w-0 truncate" title={o.title}>{o.title}</span>
+                  <span className="text-muted text-[11.5px] flex shrink-0 items-center gap-1 whitespace-nowrap">
                     {o.previous && (
                       <>
                         <span className="line-through">{when(o.previous.start, o.previous.end)}</span>

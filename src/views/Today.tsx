@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, RefreshCw } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -23,6 +23,9 @@ export function Today() {
   const [view, setView] = useTaskView()
   const [draft, setDraft] = useState<BlockDraft | null>(null)
   const [sync, setSync] = useState(false)
+  // Narrow windows: the task list is a drawer over the timeline, hidden while a task is dragged out of it.
+  const [listOpen, setListOpen] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const filter = view.q
   const { items, allDay } = useMemo(() => gridItems(s, [day]), [s, day])
   const date = parseDate(day)
@@ -66,6 +69,9 @@ export function Today() {
         title={isToday ? 'Today' : date.toLocaleDateString(undefined, { weekday: 'long' })}
         sub={date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
       >
+        <Button kind={listOpen ? 'default' : 'ghost'} onClick={() => setListOpen(!listOpen)} className="@3xl:hidden" title="Show the task list">
+          <ListChecks size={14} />
+        </Button>
         {alertCount > 0 && (
           <Button kind="ghost" onClick={() => go('alerts')} className="text-warn" title="Open Alerts">
             <AlertTriangle size={13} /> {alertCount}
@@ -90,15 +96,26 @@ export function Today() {
           kind="primary"
           onClick={() => setSync(true)}
           disabled={!s.calendar.connected}
-          title={s.calendar.connected ? 'Review and push this day\'s blocks' : 'Connect your calendar in Settings'}
+          label="Sync day"
+          title={s.calendar.connected ? 'Sync day: review and push this day\'s blocks' : 'Connect your calendar in Settings'}
         >
-          <CloudUpload size={13} /> Sync day
+          <CloudUpload size={13} />
         </Button>
       </Header>
 
 
-      <div className="flex-1 min-h-0 flex">
-        <section className="w-[380px] shrink-0 border-r border-line flex flex-col min-h-0">
+      <div className="relative flex-1 min-h-0 flex">
+        {listOpen && <div className={cx('hidden @max-3xl:block absolute inset-0 z-20 bg-black/20', dragging && 'pointer-events-none opacity-0')} onMouseDown={() => setListOpen(false)} />}
+        <section
+          onDragStart={() => setDragging(true)}
+          onDragEnd={() => (setDragging(false), setListOpen(false))}
+          className={cx(
+            'w-[380px] shrink-0 border-r border-line flex flex-col min-h-0 bg-bg',
+            '@max-3xl:absolute @max-3xl:inset-y-0 @max-3xl:left-0 @max-3xl:z-30 @max-3xl:w-[min(380px,92%)] @max-3xl:shadow-2xl',
+            !listOpen && '@max-3xl:hidden',
+            dragging && '@max-3xl:opacity-0 @max-3xl:pointer-events-none'
+          )}
+        >
           <div className="px-4 pt-3 pb-2 flex flex-wrap gap-x-3 gap-y-1">
             {[...plannedByCat].map(([k, m]) => (
               <span key={k} className="flex items-center gap-1.5 text-[11.5px] text-muted">

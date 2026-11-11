@@ -43,7 +43,7 @@ export function Settings() {
         )}
       </Header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-6 flex flex-col gap-8">
+        <div className="max-w-4xl mx-auto px-6 @max-3xl:px-4 py-6 flex flex-col gap-8">
           <Card title="Vault" desc="Where tasks, docs and logs are read from and written to.">
             <div className="flex items-center gap-2">
               <code className="flex-1 text-[12px] bg-sunken px-2 py-1.5 rounded-md truncate">{s.vault.vaultPath}</code>
@@ -187,7 +187,7 @@ export function Settings() {
           </Card>
 
           <Card title="Working hours & rules" desc="The scheduler only places work inside these hours (training uses its own windows).">
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 @max-5xl:grid-cols-4 @max-2xl:grid-cols-2 gap-2">
               {DAYS.map((d) => {
                 const wh = prefs.workingHours[d]
                 return (
@@ -210,7 +210,7 @@ export function Settings() {
                 )
               })}
             </div>
-            <div className="grid grid-cols-4 gap-3 mt-4 text-[12px]">
+            <div className="grid grid-cols-4 @max-4xl:grid-cols-2 gap-3 mt-4 text-[12px]">
               <Dur label="Buffer between blocks" value={prefs.bufferMinutes} onChange={(v) => setPrefs({ ...prefs, bufferMinutes: v })} />
               <Dur label="Shortest chunk" value={prefs.minChunkMinutes} onChange={(v) => setPrefs({ ...prefs, minChunkMinutes: v })} />
               <Dur label="Max deep work / day" value={prefs.maxDeepWorkMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxDeepWorkMinutesPerDay: v })} />
@@ -223,7 +223,7 @@ export function Settings() {
           </Card>
 
           <Card title="Planning rules" desc="How the planner fills your days. The plan stays put during the day; it's fully re-planned each morning (from 04:00), when these settings change, or when you click Re-plan.">
-            <div className="grid grid-cols-4 gap-3 text-[12px]">
+            <div className="grid grid-cols-4 @max-4xl:grid-cols-2 gap-3 text-[12px]">
               <Dur label="Max work / weekday" value={prefs.dailyMaxMinutes.weekday} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekday: v } })} />
               <Dur label="Max work / weekend day" value={prefs.dailyMaxMinutes.weekend} onChange={(v) => setPrefs({ ...prefs, dailyMaxMinutes: { ...prefs.dailyMaxMinutes, weekend: v } })} />
               <Dur label="Max on one task / day" value={prefs.maxTaskMinutesPerDay} onChange={(v) => setPrefs({ ...prefs, maxTaskMinutesPerDay: v })} />
@@ -238,7 +238,7 @@ export function Settings() {
               {prefs.breaks.map((b, i) => {
                 const setBreak = (patch: Partial<typeof b>) => setPrefs({ ...prefs, breaks: prefs.breaks.map((x, j) => (j === i ? { ...x, ...patch } : x)) })
                 return (
-                  <div key={i} className="flex items-center gap-2 mb-1.5">
+                  <div key={i} className="flex flex-wrap items-center gap-2 mb-1.5">
                     <input className={`${input} w-28`} value={b.label} onChange={(e) => setBreak({ label: e.target.value })} />
                     <input type="time" className={input} value={b.window[0]} onChange={(e) => setBreak({ window: [e.target.value, b.window[1]] })} />–
                     <input type="time" className={input} value={b.window[1]} onChange={(e) => setBreak({ window: [b.window[0], e.target.value] })} />
@@ -263,7 +263,7 @@ function Card({ title, desc, children }: { title: string; desc?: string; childre
     <section>
       <h2 className="text-[14px] font-semibold">{title}</h2>
       {desc && <p className="text-[12px] text-muted mt-0.5 mb-3">{desc}</p>}
-      <div className="rounded-xl border border-line bg-panel p-4">{children}</div>
+      <div className="rounded-xl border border-line bg-panel p-4 @max-3xl:p-3 min-w-0">{children}</div>
     </section>
   )
 }

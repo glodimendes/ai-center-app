@@ -36,25 +36,31 @@ export function Week() {
         <Button onClick={() => setDay(isoDate(addDays(start, -7)))}>
           <ChevronLeft size={14} />
         </Button>
-        <Button onClick={() => setDay(isoDate(new Date()))}>This week</Button>
+        <Button onClick={() => setDay(isoDate(new Date()))} title="This week">
+          <span className="@max-3xl:hidden">This week</span>
+          <span className="@3xl:hidden">Now</span>
+        </Button>
         <Button onClick={() => setDay(isoDate(addDays(start, 7)))}>
           <ChevronRight size={14} />
         </Button>
-        <Button kind="primary" onClick={() => setSync(true)} disabled={!s.calendar.connected} title={s.calendar.connected ? 'Review and push planned blocks' : 'Connect Google Calendar in Settings'}>
-          <CloudUpload size={13} /> Sync to calendar
+        <Button kind="primary" onClick={() => setSync(true)} disabled={!s.calendar.connected} label="Sync to calendar" title={s.calendar.connected ? 'Sync to calendar: review and push planned blocks' : 'Connect your calendar in Settings'}>
+          <CloudUpload size={13} />
         </Button>
       </Header>
 
-      <div className="border-b border-line px-5 py-3 flex gap-6 items-start">
-        <BudgetBars week={week} />
+      <div className="border-b border-line px-5 @max-3xl:px-3 py-3 flex gap-x-6 @max-3xl:gap-x-3 items-start">
+        <div className="min-w-0 flex-1">
+          <BudgetBars week={week} />
+        </div>
         {warnings.length > 0 && (
-          <button onClick={() => go('alerts')} className="ml-auto flex items-center gap-1.5 text-[12px] text-warn hover:underline">
-            <AlertTriangle size={12} /> {warnings.length} alert{warnings.length > 1 ? 's' : ''}: view and fix
+          <button onClick={() => go('alerts')} className="ml-auto shrink-0 flex items-center gap-1.5 text-[12px] text-warn hover:underline whitespace-nowrap" title="View and fix alerts">
+            <AlertTriangle size={12} /> {warnings.length}
+            <span className="@max-3xl:hidden">alert{warnings.length > 1 ? 's' : ''}: view and fix</span>
           </button>
         )}
       </div>
 
-      <div className="flex-1 min-h-0 flex">
+      <div className="relative flex-1 min-h-0 flex">
         <TimeGrid
           days={days}
           items={items}

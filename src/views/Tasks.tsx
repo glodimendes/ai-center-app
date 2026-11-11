@@ -35,13 +35,13 @@ export function Tasks() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search…"
-          className="h-7 w-52 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
+          className="h-7 w-52 @max-4xl:w-36 @max-2xl:w-28 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
         />
-        <label className="flex items-center gap-1.5 text-[12px] text-muted">
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
+        <label className="flex items-center gap-1.5 text-[12px] text-muted whitespace-nowrap" title="Show done">
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> <span className="@max-2xl:hidden">Show done</span>
         </label>
       </Header>
-      <div className="px-5 py-2 border-b border-line flex gap-1.5 flex-wrap">
+      <div className="px-5 @max-3xl:px-3 py-2 border-b border-line flex gap-1.5 flex-wrap">
         <button onClick={() => setCat(null)} className={cx('px-2.5 h-6 rounded-full text-[11.5px] border', !cat ? 'bg-ink text-bg border-ink' : 'border-line text-muted')}>
           All
         </button>
@@ -60,7 +60,7 @@ export function Tasks() {
         })}
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-5 py-4">
+        <div className="max-w-4xl mx-auto px-5 @max-3xl:px-2 py-4">
           <QuickAdd />
           {s.vault.sections.map((sec) => {
             const key = sec.path.join('>')
