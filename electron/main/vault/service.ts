@@ -31,6 +31,8 @@ const sha = (s: string) => createHash('sha1').update(s).digest('hex')
 export class VaultService {
   private watcher: FSWatcher | null = null
   private changeTimer: NodeJS.Timeout | null = null
+  /** Called with the ids of tasks the app's own edits create, so only lines added elsewhere count as new. */
+  onOwnTaskIds: (ids: string[]) => void = () => {}
   /** What the app itself last wrote per file: the watcher event that write causes is not news. */
   private ownWrites = new Map<string, string>()
   readonly git: VaultGit
@@ -67,7 +69,13 @@ export class VaultService {
     const text = this.read(rel)
     if (text === null) throw new Error(`${rel} not found in the vault.`)
     const next = fn(text)
-    if (next !== text) this.write(rel, next, message)
+    if (next === text) return
+    this.write(rel, next, message)
+    if (rel === TODOS_FILE) {
+      const cats = this.preferences.categories
+      const before = new Set(parseTasks(text, TODOS_FILE, cats, new Date()).tasks.map((t) => t.id))
+      this.onOwnTaskIds(parseTasks(next, TODOS_FILE, cats, new Date()).tasks.map((t) => t.id).filter((id) => !before.has(id)))
+    }
   }
 
   get preferences(): Preferences {

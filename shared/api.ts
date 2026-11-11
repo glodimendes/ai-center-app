@@ -60,6 +60,8 @@ export interface AppState {
   planVariant: { key: PlanVariant; label: string; seed?: number }
   settings: Settings
   brief: { running: boolean; error?: string }
+  /** Open tasks that appeared in the todo file from outside the app (an automation, Codex, Obsidian) and aren't reviewed yet. */
+  newTaskIds: string[]
 }
 
 /** Everything the renderer can ask the main process to do. */
@@ -126,6 +128,8 @@ export interface Api {
   suggestEstimates(): Promise<EstimateSuggestion[]>
   /** Writes the estimates the user accepted. */
   applyEstimates(minutesById: Record<string, number>): Promise<void>
+  /** Marks tasks added outside the app as reviewed. */
+  acknowledgeTasks(ids: string[]): Promise<void>
   // docs
   listDocs(): Promise<DocInfo[]>
   readDoc(path: string): Promise<DocContent>
@@ -163,5 +167,5 @@ export const API_METHODS: Record<ApiMethod, true> = {
   listDocs: true, readDoc: true, writeDoc: true, savePreferences: true, saveSettings: true, chooseVault: true, revealVault: true,
   connectCalendar: true, disconnectCalendar: true, refreshCalendar: true, syncPreview: true, syncApply: true, closeCapture: true,
   contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true,
-  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true, suggestEstimates: true, applyEstimates: true
+  setDayPick: true, setWeekGrid: true, setWeekNotes: true, archiveDone: true, suggestEstimates: true, applyEstimates: true, acknowledgeTasks: true
 }
