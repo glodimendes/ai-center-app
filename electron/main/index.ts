@@ -1,6 +1,6 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeTheme } from 'electron'
 import { join } from 'node:path'
-import type { ApiMethod, AppState } from '@shared/api'
+import { API_METHODS, type ApiMethod, type AppState } from '@shared/api'
 import { Controller } from './controller'
 
 // App data stays in the folder from before the rename to "AI Center" (settings, plan cache, sync state).
@@ -66,8 +66,9 @@ app.whenReady().then(() => {
   controller = new Controller(broadcast, (channel, payload) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(channel, payload)))
 
   ipcMain.handle('api', async (_e, method: ApiMethod, ...args: unknown[]) => {
+    // Only the public API: the controller's internal methods (restore, computePlan…) are not reachable.
+    if (!Object.hasOwn(API_METHODS, method)) throw new Error(`Unknown method ${method}`)
     const fn = controller[method] as (...a: unknown[]) => Promise<unknown>
-    if (typeof fn !== 'function') throw new Error(`Unknown method ${method}`)
     return fn.apply(controller, args)
   })
 

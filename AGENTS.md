@@ -45,27 +45,31 @@ AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style r
 
 ```
 electron/main/
-  index.ts              windows, ⌘⇧Space quick capture, IPC dispatch (ipcMain 'api' → Controller method)
-  controller.ts         implements Api (shared/api.ts): vault, calendar provider, plan cache (full vs incremental),
-                        calendar-edit adoption, brief runs, context runs, block editing
+  index.ts              windows, ⌘⇧Space quick capture, IPC dispatch (ipcMain 'api' → Controller method, only names in API_METHODS)
+  controller.ts         implements Api (shared/api.ts): vault, calendar provider, plan cache, applying calendar
+                        edits, brief runs, block editing; delegates Update context to context/session.ts
   settings.ts           userData/settings.json (vault path, autoCommit, calendarProvider, OAuth client, contextEngine,
                         briefAuto/briefEmail, hiddenCalendars, eventAvailability)
   vault/                parser.ts (tasks, inbox), tokens.ts (~2h, due:/by 31/10, !high, @spread/@asap, repeat:, postpone:),
                         edits.ts (line patches), service.ts (read/write/watch, brief, overrides), git.ts (batched commits),
                         preferences.ts (defaults + frontmatter, migrations), weekly.ts (log/pins/overrides/holds)
-  scheduler/plan.ts     pure planner (README "Planning rules"); variants.ts: Re-plan strategies + metrics
+  scheduler/plan.ts     pure planner (README "Planning rules"); variants.ts: Re-plan strategies + metrics;
+                        cadence.ts: planning day (04:00 rollover) and full-vs-incremental decision
   calendar/             provider.ts (interface), macos.ts (→ native/calendar-helper, Swift/EventKit),
-                        google.ts (OAuth loopback), sync.ts (pure diff)
-  context/              agent.ts (Update context + CLI resolution), brief.ts (daily brief prompt + runner)
+                        google.ts (OAuth loopback), sync.ts (pure diff), adopt.ts (pure: which calendar edits win)
+  context/              agent.ts (CLI runs + resolution), session.ts (Update context: snapshot, diff, Keep/Undo),
+                        revert.ts (undo only the agent's lines), brief.ts (daily brief prompt + runner)
 electron/preload/       window.api.call / onState / onProgress / onBriefProgress
 native/calendar-helper/ main.swift → resources/calendar-helper (npm run build:helper; bundled via electron-builder.yml)
 shared/                 types.ts, api.ts (renderer↔main contract), time.ts, categories.ts (heading → area, NO_AREA),
                         repeat.ts (repeat rules: next occurrence, earliest plannable day)
 src/                    React 19 + Tailwind 4 + zustand
   views/                Brief (landing), Today, Week, Tasks, Alerts, Inbox, Docs, Review, Settings (+ settings/*), Capture
-  components/           TimeGrid (own grid: drag, resize, draw), BlockPanel, TaskRow, RepeatPicker, NewBlock, ReplanButton
-                        (Re-plan options dialog), CalendarFilter, SyncDialog, DocEditor (Milkdown), ui
-tests/                  vitest: vault, scheduler, sync, brief (fixtures = copies of real vault files, gitignored)
+  components/           TimeGrid (own grid: drag, resize, draw), BlockPanel (+ block-panel/: event editing, block tools),
+                        TaskRow, RepeatPicker, NewBlock, ReplanButton (Re-plan options dialog), CalendarFilter, SyncDialog,
+                        DocEditor (Milkdown), ui (Button, Header, Modal, Popover in a portal, useEscape)
+tests/                  vitest: vault, scheduler, sync, brief, context, inbox. sample/ = synthetic files (committed);
+                        fixtures/ = copies of real vault files (gitignored, optional: their tests skip when absent)
 scripts/cdp.mjs         screenshot / eval in the running app over the DevTools protocol (port 9333)
 scripts/make-icon.swift app icon → build/icon.png/.icns (npm run build:icon; electron-builder picks up build/icon.icns)
 ```
@@ -88,7 +92,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 97 tests; must stay green
+npm test              # 129 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Minus, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
-import type { Block, CalEvent, LogStatus, Task } from '@shared/types'
-import { fmtDuration, fmtHM, localISO, minutesOfDay } from '@shared/time'
+import type { Block, LogStatus, Task } from '@shared/types'
+import { fmtDuration, fmtHM, minutesOfDay } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
-import { ACCEPTS_TASKS, REMOVABLE, blockMinutes, blockTitle, eventAvailability, eventKey, eventLock, heldSlots, holdKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
+import { ACCEPTS_TASKS, REMOVABLE, blockMinutes, blockTitle, eventKey, heldSlots, holdKey, isSynced, logFor, pinFromBlock } from '@/lib/plan'
 import { categoryOf, cx, inlineMd, parseMinutes } from '@/lib/util'
-import { Button, Dot, MoonZzz, Popover } from './ui'
-import { inDays, postponeChoices } from './TaskRow'
+import { Button, Dot } from './ui'
+import { EventEditor, EventAvailability } from './block-panel/EventPanel'
+import { PostponeBlock, Duration, AddTask } from './block-panel/BlockTools'
 
 const timeRange = (s: string, e: string) => `${fmtHM(minutesOfDay(new Date(s)))}–${fmtHM(minutesOfDay(new Date(e)))}`
 
@@ -60,113 +61,6 @@ export function BlockPanel() {
       <EventEditor key={eventKey(ev)} ev={ev} />
       <EventAvailability ev={ev} />
     </Shell>
-  )
-}
-
-const hhmm = (iso: string) => fmtHM(minutesOfDay(new Date(iso)))
-const dayOf = (iso: string) => localISO(new Date(iso)).slice(0, 10)
-
-/** Hand edits of the user's own event (this occurrence only). Saved only on Save / Delete; nothing else changes events. */
-function EventEditor({ ev }: { ev: CalEvent }) {
-  const state = useStore((s) => s.state)!
-  const selectBlock = useStore((s) => s.selectBlock)
-  const lock = eventLock(state, ev)
-  const [title, setTitle] = useState(ev.title)
-  const [day, setDay] = useState(dayOf(ev.start))
-  const [from, setFrom] = useState(hhmm(ev.start))
-  const [to, setTo] = useState(hhmm(ev.end))
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  if (lock) return <p className="mt-4 text-[11.5px] text-faint">{lock}</p>
-
-  const at = (d: string, t: string) => (/^\d{1,2}:\d{2}$/.test(t) ? `${d}T${t.padStart(5, '0')}:00` : null)
-  const start = ev.allDay ? null : at(day, from)
-  // An end before the start means it runs past midnight.
-  const endSameDay = ev.allDay ? null : at(day, to)
-  const end = start && endSameDay && endSameDay <= start ? localISO(new Date(new Date(endSameDay).getTime() + 86_400_000)) : endSameDay
-  const timeChanged = !ev.allDay && start !== null && end !== null && (new Date(start).getTime() !== new Date(ev.start).getTime() || new Date(end).getTime() !== new Date(ev.end).getTime())
-  const titleChanged = title.trim() !== ev.title
-  const dirty = titleChanged || timeChanged
-
-  const save = async () => {
-    if (!ev.allDay && (!start || !end)) return useStore.getState().toast('Times look like 09:30.', 'error')
-    const change = { ...(titleChanged ? { title: title.trim() } : {}), ...(timeChanged ? { start: start!, end: end! } : {}) }
-    const id = await act(api.editEvent(ev.calendarId, ev.id, change), `Saved in ${ev.calendarName}`)
-    if (typeof id === 'string') selectBlock(`ev:${ev.calendarId}:${id}`)
-  }
-  const remove = async () => {
-    const ok = await act(api.deleteEvent(ev.calendarId, ev.id).then(() => true), `Deleted from ${ev.calendarName}`)
-    if (ok) selectBlock(null)
-  }
-
-  const field = 'h-7 px-2 rounded-md border border-line bg-bg text-[12.5px]'
-  return (
-    <div className="mt-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint mb-1.5">Edit event</div>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} className={cx(field, 'w-full')} />
-      {!ev.allDay && (
-        <div className="flex items-center gap-1.5 mt-1.5">
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={cx(field, 'flex-1 min-w-0')} />
-          <input value={from} onChange={(e) => setFrom(e.target.value)} className={cx(field, 'w-14 text-center')} />
-          <span className="text-faint">–</span>
-          <input value={to} onChange={(e) => setTo(e.target.value)} className={cx(field, 'w-14 text-center')} />
-        </div>
-      )}
-      <div className="flex items-center gap-2 mt-2">
-        <Button kind="primary" onClick={save} disabled={!dirty}>
-          Save
-        </Button>
-        {!confirmDelete ? (
-          <Button kind="ghost" onClick={() => setConfirmDelete(true)} className="text-danger">
-            <Trash2 size={13} /> Delete
-          </Button>
-        ) : (
-          <span className="flex items-center gap-1.5 text-[11.5px]">
-            Delete it?
-            <Button kind="danger" onClick={remove}>
-              Yes, delete
-            </Button>
-            <Button kind="ghost" onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </Button>
-          </span>
-        )}
-      </div>
-      <p className="mt-1.5 text-[11px] text-faint">Changes go to {ev.calendarName} (this occurrence only). You can also drag the event, or its bottom edge, on the grid.</p>
-    </div>
-  )
-}
-
-const AVAILABILITY_OPTIONS = [
-  { value: 'busy', label: 'Busy' },
-  { value: 'free', label: 'Free' },
-  { value: null, label: 'Calendar default' }
-] as const
-
-/** Busy · Free · Calendar default, like Google/Apple's "show as busy/free"; the override lives in Settings, the event is never changed. */
-function EventAvailability({ ev }: { ev: CalEvent }) {
-  const state = useStore((s) => s.state)!
-  const { value, overridden } = eventAvailability(state, ev)
-  const key = `${ev.calendarId}:${ev.id}`
-  const selected = overridden ? value : null
-  return (
-    <div className="mt-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint mb-1.5">Show as</div>
-      <div className="flex rounded-md border border-line overflow-hidden text-[12px]">
-        {AVAILABILITY_OPTIONS.map((o) => (
-          <button
-            key={o.label}
-            onClick={() => act(api.setEventAvailability(key, o.value))}
-            className={cx('flex-1 px-2 h-7 border-r border-line last:border-r-0 transition-colors', selected === o.value ? 'bg-accent text-white' : 'hover:bg-sunken text-muted')}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      <p className="mt-2 text-[11.5px] text-faint">
-        {value === 'busy' ? 'Busy · plan around it.' : 'Free · may plan over it.'}
-        {overridden ? ' Set here, overriding the calendar.' : ` From the calendar${ev.free ? '' : value === 'free' ? ` (${ev.calendarName} is set to Free)` : ''}.`} The planner never changes the event itself.
-      </p>
-    </div>
   )
 }
 
@@ -442,119 +336,3 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
 }
 
 /** Postpone every open task in the block; the planner moves them out until that date. */
-function PostponeBlock({ block }: { block: Block }) {
-  const [open, setOpen] = useState(false)
-  const go = (until: string | null) => {
-    setOpen(false)
-    void act(api.postponeBlock(block.id, until), until ? `Tasks postponed to ${until}` : 'No longer postponed')
-  }
-  return (
-    <div className="relative mt-2">
-      <Button onClick={() => setOpen(!open)} title="Postpone all tasks in this block">
-        <MoonZzz size={13} /> Postpone tasks
-      </Button>
-      {open && (
-        <Popover onClose={() => setOpen(false)} className="w-52">
-          <div className="text-[11px] text-muted mb-1.5">Postpone every task here until</div>
-          <div className="grid grid-cols-2 gap-1 mb-2">
-            {postponeChoices().map(([label, days]) => (
-              <button key={label} onClick={() => go(inDays(days))} className="h-6 rounded border border-line text-[11px] hover:bg-sunken">
-                {label}
-              </button>
-            ))}
-          </div>
-          <input type="date" min={inDays(1)} onChange={(e) => e.target.value && go(e.target.value)} className="w-full px-2 h-7 rounded border border-line bg-bg text-[12px]" />
-          <p className="text-[10.5px] text-faint mt-1.5">They leave this block and aren't planned before that date.</p>
-        </Popover>
-      )}
-    </div>
-  )
-}
-
-/** Change the block's length (end moves; the block is pinned like after a drag). Also: drag its bottom edge. */
-function Duration({ block }: { block: Block }) {
-  const minutes = blockMinutes(block)
-  const [text, setText] = useState(fmtHM(minutes))
-  useEffect(() => setText(fmtHM(minutes)), [minutes])
-  const set = (m: number | null) => {
-    if (m === null || m < 15) return setText(fmtHM(minutes))
-    const len = Math.round(m / 15) * 15
-    if (len === minutes) return setText(fmtHM(minutes))
-    const end = localISO(new Date(new Date(block.start).getTime() + len * 60_000))
-    void act(api.pin(pinFromBlock(block, block.start, end)), `Now ${fmtDuration(len)}`)
-  }
-  return (
-    <div className="flex items-center gap-1" title="Duration (hh:mm)">
-      <Button onClick={() => set(minutes - 15)} title="−15 min">
-        <Minus size={13} />
-      </Button>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => set(parseMinutes(text))}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        className="w-14 h-7 text-center rounded-md border border-line bg-bg text-[12.5px] font-medium"
-      />
-      <Button onClick={() => set(minutes + 15)} title="+15 min">
-        <Plus size={13} />
-      </Button>
-    </div>
-  )
-}
-
-/** Searchable picker: open leaf tasks not already here, the block's own area first. */
-function AddTask({ block }: { block: Block }) {
-  const state = useStore((s) => s.state)!
-  const [open, setOpen] = useState(false)
-  const [q, setQ] = useState('')
-  const options = useMemo(() => {
-    const tasks = state.vault.tasks
-    const openIds = new Set(tasks.filter((t) => !t.done).map((t) => t.id))
-    const here = new Set(block.chunks.map((c) => c.taskId))
-    const needle = q.trim().toLowerCase()
-    return tasks
-      .filter((t) => !t.done && !here.has(t.id) && !t.childIds.some((id) => openIds.has(id)))
-      .filter((t) => !needle || t.title.toLowerCase().includes(needle) || t.section.join(' ').toLowerCase().includes(needle))
-      .sort((a, b) => Number(b.category === block.category) - Number(a.category === block.category))
-      .slice(0, 40)
-  }, [state.vault.tasks, block, q])
-
-  if (!open)
-    return (
-      <Button kind="ghost" className="mt-2 -ml-2" onClick={() => setOpen(true)}>
-        <Plus size={13} /> Add task…
-      </Button>
-    )
-  const add = async (t: Task) => {
-    setOpen(false)
-    setQ('')
-    await act(api.addTaskToBlock(block.id, t.id), 'Added to block')
-  }
-  return (
-    <div className="mt-2 rounded-md border border-line bg-bg">
-      <input
-        autoFocus
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false)
-          if (e.key === 'Enter' && options[0]) void add(options[0])
-        }}
-        placeholder="Search tasks…"
-        className="w-full h-7 px-2 bg-transparent border-b border-line text-[12.5px] outline-none placeholder:text-faint"
-      />
-      <div className="max-h-56 overflow-y-auto py-1">
-        {options.map((t) => (
-          <button key={t.id} onClick={() => add(t)} className="w-full text-left px-2 py-1 hover:bg-sunken flex items-start gap-1.5">
-            <Dot color={categoryOf(state, t.category).color} className="mt-1" />
-            <span className="flex-1 min-w-0">
-              <span className="block text-[12px] truncate" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
-              {t.section.length > 0 && <span className="block text-[10.5px] text-faint truncate">{t.section.join(' › ')}</span>}
-            </span>
-          </button>
-        ))}
-        {!options.length && <div className="px-2 py-1 text-[11.5px] text-faint">No matching open tasks.</div>}
-      </div>
-    </div>
-  )
-}

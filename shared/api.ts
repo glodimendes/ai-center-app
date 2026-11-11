@@ -131,3 +131,15 @@ export interface Api {
 }
 
 export type ApiMethod = keyof Api
+
+/** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
+export const API_METHODS: Record<ApiMethod, true> = {
+  getState: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
+  applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
+  saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,
+  addTaskToBlock: true, removeTaskFromBlock: true, removeBlock: true, postponeBlock: true, restoreBlock: true, releaseHold: true,
+  listDocs: true, readDoc: true, writeDoc: true, savePreferences: true, saveSettings: true, chooseVault: true, revealVault: true,
+  connectCalendar: true, disconnectCalendar: true, refreshCalendar: true, syncPreview: true, syncApply: true, closeCapture: true,
+  contextUpdate: true, contextCancel: true, contextKeep: true, contextUndo: true
+}

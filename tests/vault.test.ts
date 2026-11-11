@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseInbox, parseTasks } from '../electron/main/vault/parser'
@@ -10,8 +10,11 @@ import { describeRepeat, earliestFor, nextOccurrence, parseRepeat } from '../sha
 
 const today = new Date(2026, 10, 8)
 const cats = DEFAULT_PREFERENCES.categories
-const todos = readFileSync(join(__dirname, 'fixtures/daily-todos.md'), 'utf8')
-const inbox = readFileSync(join(__dirname, 'fixtures/braindump-inbox.md'), 'utf8')
+// Synthetic samples (committed) with the real files' shape. Copies of the real files, if present in
+// tests/fixtures/ (gitignored), get the same structural checks below.
+const todos = readFileSync(join(__dirname, 'sample/daily-todos.md'), 'utf8')
+const inbox = readFileSync(join(__dirname, 'sample/braindump-inbox.md'), 'utf8')
+const realTodos = join(__dirname, 'fixtures/daily-todos.md')
 const FILE = '05_Tasks/daily-todos.md'
 
 const diffLines = (a: string, b: string) => {
@@ -55,22 +58,23 @@ describe('tokens', () => {
   })
 })
 
-describe('parseTasks on the real daily-todos.md', () => {
+describe('parseTasks on a daily-todos.md', () => {
   const { tasks, sections } = parseTasks(todos, FILE, cats, today)
 
   it('maps headings to categories', () => {
-    const t = tasks.find((t) => t.title.startsWith('Implement `load.py`'))!
+    const t = tasks.find((t) => t.title.startsWith('Implement `parser.py`'))!
     expect(t.section).toEqual(['ETH', 'Thesis'])
     expect(t.category).toBe('thesis')
-    expect(tasks.find((t) => t.title.startsWith('Revisar matemática dos métodos'))!.category).toBe('courses')
-    expect(tasks.find((t) => t.title.startsWith('Apply to Apple'))!.category).toBe('outside')
-    expect(tasks.find((t) => t.title.startsWith('schedule dermathologist'))!.category).toBe('personal')
-    expect(tasks.find((t) => t.title.startsWith('Revisar a documentação disponível'))!.category).toBe('outside')
+    expect(t.due).toBe('2026-10-31')
+    expect(tasks.find((t) => t.title.startsWith('Revisar matemática do método'))!.category).toBe('courses')
+    expect(tasks.find((t) => t.title.startsWith('Apply to Example Corp'))!.category).toBe('outside')
+    expect(tasks.find((t) => t.title.startsWith('schedule dentist'))!.category).toBe('personal')
+    expect(tasks.find((t) => t.title.startsWith('Revisar a documentação do projeto'))!.category).toBe('outside')
     expect(sections.some((s) => s.path.join('>') === 'ETH>Thesis')).toBe(true)
   })
 
   it('nests subtasks', () => {
-    const parent = tasks.find((t) => t.title.includes('Train for general coding interviews'))!
+    const parent = tasks.find((t) => t.title.includes('Train for coding interviews'))!
     expect(parent.childIds).toHaveLength(2)
     const child = tasks.find((t) => t.id === parent.childIds[0])!
     expect(child.parentId).toBe(parent.id)
@@ -80,6 +84,21 @@ describe('parseTasks on the real daily-todos.md', () => {
     expect(new Set(tasks.map((t) => t.id)).size).toBe(tasks.length)
     const again = parseTasks('\n\n' + todos, FILE, cats, today).tasks
     expect(again.map((t) => t.id)).toEqual(tasks.map((t) => t.id))
+  })
+})
+
+describe.skipIf(!existsSync(realTodos))('the real daily-todos.md copy (local only)', () => {
+  const real = existsSync(realTodos) ? readFileSync(realTodos, 'utf8') : ''
+  const { tasks } = parseTasks(real, FILE, cats, today)
+
+  it('parses with unique ids that survive shifted lines', () => {
+    expect(tasks.length).toBeGreaterThan(0)
+    expect(new Set(tasks.map((t) => t.id)).size).toBe(tasks.length)
+    expect(parseTasks('\n\n' + real, FILE, cats, today).tasks.map((t) => t.id)).toEqual(tasks.map((t) => t.id))
+  })
+
+  it('checking off any open task changes exactly its own line', () => {
+    for (const t of tasks.filter((x) => !x.done)) expect(diffLines(real, patchTask(real, FILE, t.id, { done: true }, cats, today))).toEqual([t.line])
   })
 })
 
@@ -114,7 +133,7 @@ describe('edits are line-local', () => {
   })
 
   it('deletes a task with its children', () => {
-    const parent = tasks.find((t) => t.title.includes('Train for general coding interviews'))!
+    const parent = tasks.find((t) => t.title.includes('Train for coding interviews'))!
     const out = deleteTask(todos, FILE, parent.id, cats, today)
     expect(out.split('\n').length).toBe(todos.split('\n').length - 3)
   })

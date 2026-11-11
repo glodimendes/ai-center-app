@@ -59,6 +59,17 @@ Read 00_START_HERE.md, 03_Workflows/context-maintenance.md and 03_Workflows/assi
 Finish with a short plain-text summary (at most 5 bullets) of what you changed and why, naming the files.`
 }
 
+/** SIGTERM, then SIGKILL if the CLI hasn't exited 5 s later, so a stuck run can't hold up quitting. */
+export function stop(child: ChildProcess) {
+  if (child.exitCode !== null || child.signalCode !== null) return
+  child.kill('SIGTERM')
+  const t = setTimeout(() => child.exitCode === null && child.signalCode === null && child.kill('SIGKILL'), 5000)
+  child.once('close', () => clearTimeout(t))
+}
+
+/** Only the tail of stderr matters for an error message. */
+export const keepTail = (s: string) => (s.length > 16_000 ? s.slice(-8_000) : s)
+
 export interface AgentRun {
   done: Promise<string>
   cancel: () => void
@@ -147,10 +158,11 @@ export async function runContextAgent(engine: ContextEngine, vault: string, inst
       }
     }
   })
-  child.stderr!.on('data', (c: Buffer) => (stderr += c.toString()))
+  child.stderr!.on('data', (c: Buffer) => (stderr = keepTail(stderr + c.toString())))
 
   const done = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => child.kill('SIGTERM'), 6 * 60_000)
+    let timedOut = false
+    const timer = setTimeout(() => ((timedOut = true), stop(child)), 6 * 60_000)
     child.on('error', reject)
     child.on('close', (code, signal) => {
       clearTimeout(timer)
@@ -158,10 +170,11 @@ export async function runContextAgent(engine: ContextEngine, vault: string, inst
         result = readFileSync(lastMessage, 'utf8').trim() || result
         rmSync(join(lastMessage, '..'), { recursive: true, force: true })
       }
+      if (timedOut) return reject(new Error('Stopped after 6 minutes without finishing. Nothing was kept.'))
       if (signal) return reject(new Error('Cancelled.'))
       if (code !== 0 && !result) return reject(new Error(stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${code}.`))
       resolve(result.trim())
     })
   })
-  return { done, cancel: () => child.kill('SIGTERM') }
+  return { done, cancel: () => stop(child) }
 }
