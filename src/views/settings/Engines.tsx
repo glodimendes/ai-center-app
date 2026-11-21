@@ -8,6 +8,10 @@ import { Button } from '@/components/ui'
 import { input } from './AreaSettings'
 
 const DEFAULT_CEILING = 70
+const ENGINE_NAMES: Record<AccountProfile['engine'], string> = { claude: 'Claude', codex: 'Codex', agy: 'Antigravity', ollama: 'Ollama (local)', command: 'Custom command' }
+/** Splits a command line into words, keeping "quoted text" together. */
+const splitCommand = (s: string) => [...s.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3])
+const joinCommand = (c?: string[]) => (c ?? []).map((w) => (/\s/.test(w) ? `"${w}"` : w)).join(' ')
 
 function Bar({ label, w, ceiling }: { label: string; w?: LimitWindow; ceiling: number }) {
   const live = w && Date.parse(w.resetsAt) > Date.now() ? w : undefined
@@ -26,6 +30,13 @@ function Bar({ label, w, ceiling }: { label: string; w?: LimitWindow; ceiling: n
   )
 }
 
+const ENGINE_NOTE: Record<AccountProfile['engine'], string> = {
+  claude: '',
+  codex: '',
+  agy: 'Antigravity CLI (agy). No usage window is reported; it is limited by its mode and sandbox (read-only runs use plan mode with the sandbox).',
+  ollama: "Local model, text only: it sees the prompt and your sources, can't read the vault or edit files, so it suits read-only agents. No usage windows; the model is unloaded after each run unless you keep it loaded.",
+  command: "Any program that takes the prompt and prints an answer. It can't be restricted, so it only runs read-only (text) agents."
+}
 const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
 
 function Totals({ rows, names }: { rows: UsageTotal[]; names: Map<string, string> }) {
@@ -68,10 +79,13 @@ export function EnginesSettings() {
       setTesting(null)
     }
   }
+  const [newEngine, setNewEngine] = useState<AccountProfile['engine']>('claude')
   const add = () => {
     let n = 2
-    while (a.profiles.some((p) => p.id === `claude-${n}`)) n++
-    save([...a.profiles, { id: `claude-${n}`, engine: 'claude', label: `Claude ${n}` }])
+    while (a.profiles.some((p) => p.id === `${newEngine}-${n}`)) n++
+    const id = a.profiles.some((p) => p.id === newEngine) ? `${newEngine}-${n}` : newEngine
+    const extra: Partial<AccountProfile> = newEngine === 'command' ? { command: [] } : {}
+    save([...a.profiles, { id, engine: newEngine, label: ENGINE_NAMES[newEngine] + (id === newEngine ? '' : ` ${n}`), ...extra }])
   }
 
   return (
@@ -89,6 +103,7 @@ export function EnginesSettings() {
         const lim = a.limits[p.id]
         const ceiling = p.sharePct ?? DEFAULT_CEILING
         const builtin = p.id === 'claude' || p.id === 'codex'
+        const hasLimits = p.engine === 'claude' || p.engine === 'codex'
         return (
           <div key={p.id} className="border border-line rounded-lg p-3 space-y-2.5">
             <div className="flex items-center gap-2 flex-wrap">
@@ -106,29 +121,73 @@ export function EnginesSettings() {
               )}
             </div>
             <div className="flex items-center gap-2 text-[12px] flex-wrap">
-              <span className="text-muted">{p.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</span>
-              <input
-                className={cx(input, 'flex-1 min-w-48 font-mono text-[11.5px]')}
-                defaultValue={p.configDir ?? ''}
-                placeholder="empty = the CLI's default login"
-                onBlur={(e) => e.target.value.trim() !== (p.configDir ?? '') && edit(p.id, { configDir: e.target.value.trim() || undefined })}
-              />
-              <span className="text-muted">Agents pause at</span>
-              <input className={cx(input, 'w-16')} type="number" min={1} max={100} defaultValue={ceiling} onBlur={(e) => Number(e.target.value) !== ceiling && edit(p.id, { sharePct: Number(e.target.value) })} />
-              <span className="text-muted">% of the window</span>
+              {hasLimits && (
+                <>
+                  <span className="text-muted">{p.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</span>
+                  <input
+                    className={cx(input, 'flex-1 min-w-48 font-mono text-[11.5px]')}
+                    defaultValue={p.configDir ?? ''}
+                    placeholder="empty = the CLI's default login"
+                    onBlur={(e) => e.target.value.trim() !== (p.configDir ?? '') && edit(p.id, { configDir: e.target.value.trim() || undefined })}
+                  />
+                </>
+              )}
+              {p.engine === 'ollama' && (
+                <>
+                  <span className="text-muted">Server</span>
+                  <input className={cx(input, 'w-56 font-mono text-[11.5px]')} defaultValue={p.baseUrl ?? ''} placeholder="http://127.0.0.1:11434" onBlur={(e) => e.target.value.trim() !== (p.baseUrl ?? '') && edit(p.id, { baseUrl: e.target.value.trim() || undefined })} />
+                  <span className="text-muted" title="0 unloads the model right after each run so it uses memory only while working; or 5m to keep it ready">
+                    Keep loaded
+                  </span>
+                  <input className={cx(input, 'w-16')} defaultValue={p.keepAlive ?? '0'} onBlur={(e) => e.target.value.trim() !== (p.keepAlive ?? '0') && edit(p.id, { keepAlive: e.target.value.trim() || '0' })} />
+                </>
+              )}
+              {p.engine === 'command' && (
+                <>
+                  <span className="text-muted">Command</span>
+                  <input className={cx(input, 'flex-1 min-w-56 font-mono text-[11.5px]')} defaultValue={joinCommand(p.command)} placeholder='mycli --ask "{prompt}"' onBlur={(e) => edit(p.id, { command: splitCommand(e.target.value) })} />
+                </>
+              )}
+              {p.engine !== 'command' && (
+                <>
+                  <span className="text-muted">Model</span>
+                  <input className={cx(input, 'w-44 font-mono text-[11.5px]')} defaultValue={p.model ?? ''} placeholder={p.engine === 'ollama' ? 'e.g. qwen3:4b' : 'default'} onBlur={(e) => e.target.value.trim() !== (p.model ?? '') && edit(p.id, { model: e.target.value.trim() || undefined })} />
+                </>
+              )}
+              {hasLimits && (
+                <>
+                  <span className="text-muted">Agents pause at</span>
+                  <input className={cx(input, 'w-16')} type="number" min={1} max={100} defaultValue={ceiling} onBlur={(e) => Number(e.target.value) !== ceiling && edit(p.id, { sharePct: Number(e.target.value) })} />
+                  <span className="text-muted">% of the window</span>
+                </>
+              )}
             </div>
-            <Bar label="5-hour" w={lim?.fiveHour} ceiling={ceiling} />
-            <Bar label="Weekly" w={lim?.weekly} ceiling={ceiling} />
-            <div className="text-[11px] text-faint">
-              Estimates read from the {p.engine === 'claude' ? 'Claude CLI (updated after each agent run or Test)' : 'Codex session logs'}
-              {lim ? `, last seen ${new Date(lim.asOf).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` : ''}. The numbers cover the whole account, not only agents.
-            </div>
+            {hasLimits && (
+              <>
+                <Bar label="5-hour" w={lim?.fiveHour} ceiling={ceiling} />
+                <Bar label="Weekly" w={lim?.weekly} ceiling={ceiling} />
+                <div className="text-[11px] text-faint">
+                  Estimates read from the {p.engine === 'claude' ? 'Claude CLI (updated after each agent run or Test)' : 'Codex session logs'}
+                  {lim ? `, last seen ${new Date(lim.asOf).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` : ''}. The numbers cover the whole account, not only agents.
+                </div>
+              </>
+            )}
+            {!hasLimits && <div className="text-[11px] text-faint">{ENGINE_NOTE[p.engine]}</div>}
           </div>
         )
       })}
-      <Button onClick={add}>
-        <Plus size={13} /> Add a Claude account
-      </Button>
+      <div className="flex items-center gap-2">
+        <select className={input} value={newEngine} onChange={(e) => setNewEngine(e.target.value as AccountProfile['engine'])}>
+          {(Object.keys(ENGINE_NAMES) as AccountProfile['engine'][]).map((k) => (
+            <option key={k} value={k}>
+              {ENGINE_NAMES[k]}
+            </option>
+          ))}
+        </select>
+        <Button onClick={add}>
+          <Plus size={13} /> Add an account
+        </Button>
+      </div>
 
       <div>
         <h4 className="text-[12px] font-semibold mb-1">Agent usage today</h4>

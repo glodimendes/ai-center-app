@@ -60,8 +60,8 @@ export interface Prepared {
   binary: string
   args: string[]
   cwd: string
-  /** `stream`: one JSON event per line. `json`: stdout is a single JSON document. `none`: ignore stdout. */
-  output: 'stream' | 'json' | 'none'
+  /** `stream`: one JSON event per line. `json`: stdout is a single JSON document. `text`: stdout is the answer. `none`: ignore stdout. */
+  output: 'stream' | 'json' | 'text' | 'none'
   /** The final message is written here instead (Codex `-o`). */
   lastMessageFile?: string
   /** Temp folder to delete after the run. */
@@ -70,7 +70,12 @@ export interface Prepared {
 
 export interface Engine {
   id: EngineId
+  /** Whether a conversation can continue across runs (chat). */
+  chat: boolean
+  /** Process engines describe a command line; the shared runner spawns it. */
   prepare(spec: RunSpec): Prepared
+  /** Engines that aren't a process (HTTP) run themselves instead. */
+  run?(spec: RunSpec, fetchImpl?: typeof fetch): Promise<EngineRun>
   /** One parsed JSON event → normalized events. */
   parse(ev: any): EngineEvent[]
 }

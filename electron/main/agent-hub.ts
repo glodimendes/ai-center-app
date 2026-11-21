@@ -9,7 +9,7 @@ import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
-import { ENGINES, profileEnv, resolveBinary, runEngine } from './agents/engines'
+import { ENGINES, ollamaModels, profileEnv, resolveBinary, runEngine } from './agents/engines'
 import { DEFAULT_PROFILES } from './agents/profiles'
 import type { GmailLike } from './agents/gmail'
 import { buildRawDraft } from './agents/gmail'
@@ -290,6 +290,8 @@ export class AgentHub {
     const def = this.registry.get(agentId)
     if (!def) throw new AgentError('That agent no longer exists.')
     if (!text.trim()) throw new AgentError('Write a message first.')
+    const engine = this.profiles().find((p) => p.id === def.profile)?.engine
+    if (!engine || !ENGINES[engine].chat) throw new AgentError('Chat needs an account whose engine keeps conversations (Claude, Codex or Antigravity). Pick another account for this agent.')
     if (this.busy(agentId)) throw new AgentError('This agent is still working on something. Wait for it to finish.')
     this.chat(agentId)
     return this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true }).id
@@ -331,7 +333,8 @@ export class AgentHub {
     const ids = new Set<string>()
     for (const p of list) {
       if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(p.id) || ids.has(p.id)) throw new AgentError(`"${p.id}" is empty, invalid or used twice (lowercase letters, digits, dashes).`)
-      if (p.engine !== 'claude' && p.engine !== 'codex') throw new AgentError(`Unknown engine for "${p.id}".`)
+      if (!(p.engine in ENGINES)) throw new AgentError(`Unknown engine for "${p.id}".`)
+      if (p.engine === 'command' && p.command && p.command.some((x) => typeof x !== 'string')) throw new AgentError(`The command of "${p.id}" must be a list of text.`)
       if (p.sharePct !== undefined && !(p.sharePct > 0 && p.sharePct <= 100)) throw new AgentError(`The ceiling of "${p.id}" is a percent between 1 and 100.`)
       ids.add(p.id)
     }
@@ -340,15 +343,25 @@ export class AgentHub {
     this.deps.push()
   }
 
+  /** The CLIs behind the profiles (claude and codex always: the built-ins use them). Ollama is checked by asking its server. */
   private async detectCli() {
     const out: CliInfo[] = []
-    for (const engine of ['claude', 'codex'] as const) {
+    const engines = new Set<AccountProfile['engine']>(['claude', 'codex', ...this.profiles().map((p) => p.engine)])
+    for (const engine of engines) {
+      if (engine === 'command') continue
       try {
+        if (engine === 'ollama') {
+          const url = this.profiles().find((p) => p.engine === 'ollama')?.baseUrl
+          const models = await ollamaModels(url)
+          out.push({ engine, version: `${models.length} model${models.length === 1 ? '' : 's'}: ${models.slice(0, 4).join(', ')}` })
+          continue
+        }
         const path = await resolveBinary(engine)
         const { stdout } = await exec(path, ['--version'])
         out.push({ engine, path, version: stdout.trim().split('\n')[0] })
       } catch (e) {
-        out.push({ engine, error: (e as Error).message })
+        const msg = (e as Error).message
+        out.push({ engine, error: engine === 'ollama' && /fetch failed|ECONNREFUSED|aborted/i.test(msg) ? 'not running (start Ollama to use local models)' : msg })
       }
     }
     this.cli = out
@@ -369,7 +382,7 @@ export class AgentHub {
       let seen = false
       const run = await runEngine(ENGINES[profile.engine], {
         profile,
-        mode: 'read',
+        mode: profile.engine === 'claude' ? 'read' : 'ask',
         prompt: 'Reply with the single word: ok',
         cwd: tmpdir(),
         timeoutMs: 60_000,
@@ -379,6 +392,7 @@ export class AgentHub {
       })
       const r = await run.done
       if (r.isError || (r.code !== 0 && !r.text)) return { ok: false, message: r.text || r.stderr.trim().split('\n').slice(-2).join(' ') || 'The CLI failed. Is this account logged in?' }
+      if (profile.engine !== 'claude') return { ok: true, message: `Works. It answered: ${r.text.slice(0, 60)}` }
       return { ok: true, message: seen ? 'Logged in. Window usage updated.' : 'Logged in, but the CLI reported no window usage for this plan.' }
     } catch (e) {
       return { ok: false, message: (e as Error).message }

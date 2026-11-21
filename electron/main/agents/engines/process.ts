@@ -28,7 +28,7 @@ export const keepTail = (s: string) => (s.length > 16_000 ? s.slice(-8_000) : s)
 /** Env that points a CLI at the profile's own login; nothing set means the CLI's default account. */
 export function profileEnv(profile: AccountProfile): NodeJS.ProcessEnv {
   const env = { ...process.env }
-  if (profile.configDir) env[profile.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'] = profile.configDir
+  if (profile.configDir && (profile.engine === 'claude' || profile.engine === 'codex')) env[profile.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'] = profile.configDir
   return env
 }
 
@@ -40,6 +40,7 @@ export class EngineTimeout extends Error {
 
 /** Starts the run. Rejects with EngineTimeout, Error('Cancelled.') or the spawn error; a failed exit code resolves, callers decide. */
 export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRun> {
+  if (engine.run) return engine.run(spec)
   const prep = engine.prepare(spec)
   const bin = await resolveBinary(prep.binary)
   const child = spawn(bin, prep.args, { cwd: prep.cwd, env: profileEnv(spec.profile), stdio: ['ignore', 'pipe', 'pipe'] })
@@ -67,7 +68,7 @@ export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRu
   }
   child.stdout!.on('data', (chunk: Buffer) => {
     if (prep.output === 'none') return
-    if (prep.output === 'json') return void (all += chunk.toString())
+    if (prep.output === 'json' || prep.output === 'text') return void (all += chunk.toString())
     buf += chunk.toString()
     let nl: number
     while ((nl = buf.indexOf('\n')) >= 0) {
@@ -86,6 +87,7 @@ export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRu
     child.on('close', (code, signal) => {
       clearTimeout(timer)
       if (prep.output === 'json') feed(all)
+      if (prep.output === 'text') text = all
       if (prep.lastMessageFile && existsSync(prep.lastMessageFile)) text = readFileSync(prep.lastMessageFile, 'utf8').trim() || text
       cleanup()
       if (timedOut) return reject(new EngineTimeout(spec.timeoutMs))

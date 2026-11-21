@@ -9,8 +9,9 @@ const NO_WRITE = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearc
 /** Claude Code CLI. Claude can be restricted tool by tool, so every mode is enforced by flags, not by the prompt. */
 export const claudeCli: Engine = {
   id: 'claude',
+  chat: true,
   prepare(spec) {
-    const model = spec.model ?? CONTEXT_MODELS.claude.model
+    const model = spec.model ?? spec.profile.model ?? CONTEXT_MODELS.claude.model
     const effort = spec.effort ?? CONTEXT_MODELS.claude.effort
     const base = ['-p', spec.prompt, '--model', model, '--effort', effort]
     // A chat keeps its session on disk so the next turn can resume it; every other run leaves nothing behind.

@@ -1,6 +1,6 @@
 // Types shared by the agent core (electron/main/agents) and the renderer.
 
-export type EngineId = 'claude' | 'codex'
+export type EngineId = 'claude' | 'codex' | 'agy' | 'ollama' | 'command'
 
 /** One login of one CLI. `configDir` is that CLI's home (CLAUDE_CONFIG_DIR / CODEX_HOME); unset = the CLI's default account. */
 export interface AccountProfile {
@@ -8,6 +8,14 @@ export interface AccountProfile {
   engine: EngineId
   label: string
   configDir?: string
+  /** Default model for agents on this profile (agents may set their own). Required for ollama. */
+  model?: string
+  /** ollama: server address (default http://127.0.0.1:11434). */
+  baseUrl?: string
+  /** ollama: how long the model stays loaded after a run: `0` unloads at once (default), or e.g. `5m`. */
+  keepAlive?: string
+  /** command: the program and its arguments; `{prompt}` is replaced by the prompt (else it is appended). Text in, text out. */
+  command?: string[]
   /** Agents don't start while this account's 5-hour or weekly window is at or above this percent (default 70); they pause and ask. */
   sharePct?: number
 }

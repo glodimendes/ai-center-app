@@ -114,3 +114,79 @@ describe('chat sessions', () => {
     expect(codexCli.parse({ type: 'thread.started', thread_id: 'thread-1' })).toEqual([{ type: 'session', id: 'thread-1' }])
   })
 })
+
+import { agyCli } from '../electron/main/agents/engines/agy-cli'
+import { commandEngine } from '../electron/main/agents/engines/command'
+import { keepAliveValue, ollamaEngine, ollamaModels } from '../electron/main/agents/engines/ollama'
+import { ENGINES } from '../electron/main/agents/engines'
+import type { AccountProfile } from '../electron/main/agents/engines/types'
+
+const prof = (p: Partial<AccountProfile> & Pick<AccountProfile, 'engine'>): AccountProfile => ({ id: p.engine, label: p.engine, ...p })
+const run = (profile: AccountProfile, mode: RunSpec['mode'], extra: Partial<RunSpec> = {}): RunSpec => ({ profile, mode, prompt: 'P', cwd: '/vault', timeoutMs: 1000, ...extra })
+
+describe('antigravity engine', () => {
+  it('read runs use plan mode with the sandbox, edits use accept-edits, tools mode is refused', () => {
+    const r = agyCli.prepare(run(prof({ engine: 'agy' }), 'read'))
+    expect(r.binary).toBe('agy')
+    expect(after(r.args, '--mode')).toEqual(['plan'])
+    expect(r.args).toContain('--sandbox')
+    expect(after(r.args, '--output-format')).toEqual(['stream-json'])
+    expect(after(agyCli.prepare(run(prof({ engine: 'agy' }), 'edit')).args, '--mode')).toEqual(['accept-edits'])
+    expect(() => agyCli.prepare(run(prof({ engine: 'agy' }), 'tools'))).toThrow(/per-tool/)
+  })
+  it('model comes from the profile or the agent, and a chat resumes by conversation id', () => {
+    expect(after(agyCli.prepare(run(prof({ engine: 'agy', model: 'm1' }), 'read')).args, '--model')).toEqual(['m1'])
+    expect(after(agyCli.prepare(run(prof({ engine: 'agy', model: 'm1' }), 'read', { model: 'm2' })).args, '--model')).toEqual(['m2'])
+    expect(after(agyCli.prepare(run(prof({ engine: 'agy' }), 'read', { session: { id: 'conv-1', resume: true } })).args, '--conversation')).toEqual(['conv-1'])
+  })
+  it('parses the conversation id, steps, usage and the result from recorded lines', () => {
+    expect(agyCli.parse({ event: 'init', init: { conversation_id: 'c1', tools: [] } })).toEqual([{ type: 'session', id: 'c1' }])
+    expect(agyCli.parse({ event: 'step_update', step_update: { state: 'ACTIVE', step_type: 'run_command' } })).toEqual([{ type: 'tool', name: 'run_command', target: '' }])
+    expect(agyCli.parse({ event: 'step_update', step_update: { state: 'ACTIVE', step_type: 'agent_response', text_delta: 'ok' } })).toEqual([])
+    const done = agyCli.parse({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: 'ok\n', usage: { input_tokens: 9, output_tokens: 2 } } })
+    expect(done).toContainEqual({ type: 'done', text: 'ok', isError: false })
+    expect(done).toContainEqual({ type: 'usage', usage: { inputTokens: 9, outputTokens: 2 } })
+    expect(agyCli.parse({ event: 'result', result: { status: 'ERROR', response: 'x' } }).at(-1)).toMatchObject({ isError: true })
+  })
+})
+
+describe('custom command engine', () => {
+  it('substitutes {prompt} or appends it, and refuses edit and tools modes', () => {
+    const a = commandEngine.prepare(run(prof({ engine: 'command', command: ['mycli', '--ask', '{prompt}', '-v'] }), 'ask'))
+    expect([a.binary, ...a.args]).toEqual(['mycli', '--ask', 'P', '-v'])
+    expect(a.output).toBe('text')
+    expect(commandEngine.prepare(run(prof({ engine: 'command', command: ['mycli'] }), 'read')).args).toEqual(['P'])
+    expect(() => commandEngine.prepare(run(prof({ engine: 'command', command: ['mycli'] }), 'edit'))).toThrow(/can't be limited/)
+    expect(() => commandEngine.prepare(run(prof({ engine: 'command' }), 'ask'))).toThrow(/Set the command/)
+  })
+  it('no engine except the CLIs with session flags offers chat', () => {
+    expect(Object.fromEntries(Object.entries(ENGINES).map(([k, e]) => [k, e.chat]))).toEqual({ claude: true, codex: true, agy: true, ollama: false, command: false })
+  })
+})
+
+describe('ollama engine', () => {
+  const stream = (lines: object[]) => new Response(new ReadableStream({ start(c) { for (const l of lines) c.enqueue(new TextEncoder().encode(JSON.stringify(l) + '\n')); c.close() } }))
+  it('streams text, sends the model and keep_alive, and reports tokens', async () => {
+    let sent: any
+    const fake = (async (url: string, init: any) => ((sent = { url, body: JSON.parse(init.body) }), stream([{ message: { content: 'Hel' } }, { message: { content: 'lo' } }, { done: true, prompt_eval_count: 7, eval_count: 3 }]))) as unknown as typeof fetch
+    const events: string[] = []
+    const r = await (await ollamaEngine.run!({ ...run(prof({ engine: 'ollama', model: 'qwen3:4b', baseUrl: 'http://h:1/' }), 'ask'), onEvent: (e) => events.push(e.type) }, fake)).done
+    expect(r).toMatchObject({ text: 'Hello', usage: { inputTokens: 7, outputTokens: 3 }, isError: false })
+    expect(sent.url).toBe('http://h:1/api/chat')
+    expect(sent.body).toMatchObject({ model: 'qwen3:4b', stream: true, keep_alive: 0, messages: [{ role: 'user', content: 'P' }] })
+    expect(events).toContain('usage')
+  })
+  it('keep_alive: 0 by default, numbers as numbers, durations as text', () => {
+    expect([keepAliveValue(undefined), keepAliveValue(''), keepAliveValue('0'), keepAliveValue('300'), keepAliveValue('5m')]).toEqual([0, 0, 0, 300, '5m'])
+  })
+  it('is text-only, needs a model, and explains an unreachable server', async () => {
+    await expect(ollamaEngine.run!(run(prof({ engine: 'ollama', model: 'm' }), 'edit'))).rejects.toThrow(/text-only/)
+    await expect(ollamaEngine.run!(run(prof({ engine: 'ollama' }), 'ask'))).rejects.toThrow(/Choose a model/)
+    const down = (async () => { throw new TypeError('fetch failed') }) as unknown as typeof fetch
+    await expect((await ollamaEngine.run!(run(prof({ engine: 'ollama', model: 'm' }), 'ask'), down)).done).rejects.toThrow(/Can't reach Ollama/)
+  })
+  it('lists installed models', async () => {
+    const fake = (async () => new Response(JSON.stringify({ models: [{ name: 'a:1' }, { name: 'b:2' }] }))) as unknown as typeof fetch
+    expect(await ollamaModels(undefined, fake)).toEqual(['a:1', 'b:2'])
+  })
+})
