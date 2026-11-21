@@ -18,7 +18,7 @@ export const SAMPLES: Sample[] = [
       profile: 'claude',
       permission: 'read',
       output: 'reply',
-      description: 'Example: give it a goal under Goals; it splits the work between your other agents and writes the final answer.',
+      description: 'Splits a request between your other agents and writes the final answer. The Central chat uses it when you don\'t tag anyone.',
       instructions: `You are a careful project coordinator. Break the goal into the smallest useful steps, delegate each step to the agent whose description fits best, check what comes back, and only then write the final answer. Prefer a few well-specified delegations over many vague ones. If no agent fits a step, say so in the final answer instead of guessing.`
     }
   },

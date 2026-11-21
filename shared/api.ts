@@ -176,6 +176,8 @@ export interface Api {
   /** A paused (over-budget) run starts once; `raise` also lifts the account's ceiling by 20 points. */
   allowRun(runId: string, raise: boolean): Promise<void>
   saveProfiles(list: AccountProfile[]): Promise<void>
+  /** The central chat: `@agent` tags go to those agents; an untagged message goes to the coordinator agent. The thread is `agents.chats._central`. */
+  centralSend(text: string): Promise<void>
   /** A goal for a coordinator agent: it delegates to your other agents turn by turn; returns the goal id. */
   startGoal(coordinatorId: string, text: string): Promise<string>
   stopGoal(id: string): Promise<void>
@@ -209,7 +211,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

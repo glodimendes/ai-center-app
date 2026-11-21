@@ -20,7 +20,7 @@ export function Goals() {
   return (
     <section>
       <div className="flex items-center mb-2">
-        <h2 className="flex-1 text-[12px] font-semibold text-muted uppercase tracking-wide">Goals</h2>
+        <h2 className="flex-1 text-[13px] font-medium text-muted">Goals</h2>
         <Button onClick={() => setStarting(true)} disabled={!coordinators.length} title={coordinators.length ? 'Give a coordinator agent a goal' : 'Add a read-only agent first (the Coordinator sample works)'}>
           <Target size={13} /> New goal
         </Button>

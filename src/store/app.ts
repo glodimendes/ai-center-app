@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { AppState } from '@shared/api'
 import { api } from '@/lib/api'
 
-export type View = 'brief' | 'today' | 'week' | 'tasks' | 'alerts' | 'inbox' | 'docs' | 'review' | 'agents' | 'settings'
+export type View = 'brief' | 'today' | 'week' | 'tasks' | 'alerts' | 'inbox' | 'docs' | 'review' | 'chat' | 'agents' | 'settings'
 
 interface Toast {
   id: number
@@ -18,12 +18,15 @@ interface Store {
   day: string
   selectedBlockId: string | null
   docPath: string | null
+  /** Conversation open in Chat: `central` or an agent id. */
+  chatTarget: string
   toasts: Toast[]
   setState: (s: AppState) => void
   go: (v: View) => void
   setDay: (d: string) => void
   selectBlock: (id: string | null) => void
   openDoc: (path: string) => void
+  openChat: (target: string) => void
   toast: (text: string, kind?: Toast['kind'], action?: Toast['action']) => void
   dismiss: (id: number) => void
 }
@@ -39,12 +42,14 @@ export const useStore = create<Store>((set, get) => ({
   day: todayISO(),
   selectedBlockId: null,
   docPath: null,
+  chatTarget: 'central',
   toasts: [],
   setState: (state) => set({ state }),
   go: (view) => set({ view }),
   setDay: (day) => set({ day, selectedBlockId: null }),
   selectBlock: (selectedBlockId) => set({ selectedBlockId }),
   openDoc: (docPath) => set({ docPath, view: 'docs' }),
+  openChat: (chatTarget) => set({ chatTarget, view: 'chat' }),
   toast: (text, kind = 'info', action) => {
     const id = Date.now() + Math.random()
     set({ toasts: [...get().toasts, { id, text, kind, action }] })

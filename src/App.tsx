@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CalendarRange, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
+import { AlertTriangle, CalendarRange, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, MessageCircle, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
@@ -14,6 +14,7 @@ import { Docs } from '@/views/Docs'
 import { Review } from '@/views/Review'
 import { Settings } from '@/views/Settings'
 import { Agents } from '@/views/Agents'
+import { Chat } from '@/views/Chat'
 import { Setup } from '@/components/Setup'
 import { Alerts, alertItems } from '@/views/Alerts'
 
@@ -44,7 +45,8 @@ const NAV: { view: View; label: string; icon: (p: LucideProps) => React.ReactNod
   { view: 'inbox', label: 'Inbox', icon: Inbox, key: '6' },
   { view: 'docs', label: 'Docs', icon: FileText, key: '7' },
   { view: 'review', label: 'Review', icon: TrendingUp, key: '8' },
-  { view: 'agents', label: 'Agents', icon: Bot, key: '9' }
+  { view: 'chat', label: 'Chat', icon: MessageCircle, key: '9' },
+  { view: 'agents', label: 'Agents', icon: Bot, key: '0' }
 ]
 
 const RAIL_KEY = 'sidebar'
@@ -228,6 +230,7 @@ export function App() {
         {view === 'inbox' && <InboxView />}
         {view === 'docs' && <Docs />}
         {view === 'review' && <Review />}
+        {view === 'chat' && <Chat />}
         {view === 'agents' && <Agents />}
         {view === 'settings' && <Settings />}
       </main>

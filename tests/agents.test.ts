@@ -474,3 +474,26 @@ describe('goals: coordinator delegating to agents', () => {
     expect(coordinatorPrompt(goal, [coord])).toContain('There are no other agents')
   })
 })
+
+import { parseMentions, withHistory } from '../electron/main/agents/capture'
+
+describe('central chat helpers', () => {
+  const agents = [parseAgent('writer', '---\nname: Haiku Writer\n---\nx'), parseAgent('editor', '---\nname: Editor\n---\nx'), { ...parseAgent('brief', '---\nname: Brief\n---\nx'), builtin: true }]
+  it('finds @tags anywhere, by id or name, removes them, and reports unknown ones', () => {
+    const m = parseMentions('@writer write about rain, then @Editor check it. Mail me@x.test', agents)
+    expect(m.agents.map((a) => a.id)).toEqual(['writer', 'editor'])
+    expect(m.text).toBe('write about rain, then check it. Mail me@x.test')
+    expect(parseMentions('@haikuwriter hi', agents).agents.map((a) => a.id)).toEqual(['writer'])
+    expect(parseMentions('hello @nobody and @brief', agents)).toMatchObject({ agents: [], unknown: ['nobody', 'brief'] })
+    expect(parseMentions('@writer @writer twice', agents).agents).toHaveLength(1)
+    expect(parseMentions('no tags here', agents)).toEqual({ agents: [], text: 'no tags here', unknown: [] })
+  })
+  it('gives engines without sessions the recent transcript as text', () => {
+    expect(withHistory([], 'hi')).toBe('hi')
+    const t = withHistory([{ role: 'user', text: 'a' }, { role: 'agent', text: 'b' }], 'c')
+    expect(t).toContain('User: a')
+    expect(t).toContain('You: b')
+    expect(t.endsWith('New message from the user: c')).toBe(true)
+    expect(withHistory(Array.from({ length: 30 }, (_, i) => ({ role: 'user' as const, text: `m${i}` })), 'x', 3)).not.toContain('m26')
+  })
+})

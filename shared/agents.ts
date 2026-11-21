@@ -156,6 +156,8 @@ export interface SampleInfo {
 
 export interface ChatMessage {
   role: 'user' | 'agent'
+  /** Who wrote an agent message (central chat shows several agents in one thread). */
+  agentId?: string
   text: string
   t: string
   /** The run that produced it (agent messages). */
@@ -183,6 +185,10 @@ export interface Goal {
   delegations: number
   steps: { turn: number; coordinatorRunId: string; delegations: GoalDelegation[] }[]
   finalText?: string
+  /** Earlier conversation the coordinator should know about (central chat); not shown as the goal's title. */
+  context?: string
+  /** Where it was started from (`central` = the central chat). */
+  origin?: string
   /** Vault folder with the plan, each agent's output and the result. */
   folder: string
   /** Delegations already made (loop detection). */

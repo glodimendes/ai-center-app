@@ -737,6 +737,9 @@ export class Controller implements Api {
   async resumeGoal(id: string) {
     this.agents.resumeGoal(id)
   }
+  async centralSend(text: string) {
+    this.agents.sendCentral(text)
+  }
   async chatSend(agentId: string, text: string): Promise<string> {
     return this.agents.sendChat(agentId, text)
   }

@@ -54,8 +54,17 @@ An **account profile** is one login of one tool. Built in: Claude Code, Codex, A
 
 ## Chat
 
-**Chat** in the Agents view continues a conversation with an agent across messages (Claude, Codex and Antigravity). Each message is a normal run: it queues, respects the usage ceiling and your review.
+The **Chat** page has a conversation list on the left: **Central** and one entry per agent.
+
+- **One agent:** a direct conversation that remembers earlier messages until you start a new one (Claude, Codex and Antigravity keep a real session; other engines are sent the recent transcript).
+- **Central:** coordinate several agents. Tag agents with `@` (autocomplete as you type) to give them work directly; each answers in the thread under its name. A message with no tag goes to a coordinator agent (the Coordinator example, or any read-only agent named like one), which splits it between your other agents and writes the final answer.
+
+Each message is a normal run: it queues, respects the usage ceiling and your review. Things an agent wants to do (add a task, save a draft, hand work on…) appear as cards in the conversation for you to approve or reject, and a paused run or a file edit waiting for review shows up the same way.
+
+## Agents page
+
+**Agents** lists your agents (edit, or jump to a chat) and the built-in ones. **Activity** shows what is waiting for you, your goals and the recent runs with their usage.
 
 ## Goals
 
-A **goal** lets one agent coordinate the others. Add the Coordinator sample (or any agent with `read` permission), open **Goals** in the Agents view and describe what you want. Each turn the coordinator either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits in the Approvals inbox. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `05_Tasks/agent-output/goals/<goal>/`.
+A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `05_Tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.

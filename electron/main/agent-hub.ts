@@ -16,7 +16,7 @@ import { buildRawDraft } from './agents/gmail'
 import { GoalRunner } from './agents/goals'
 import { SAMPLES } from './agents/samples'
 import { buildSourceBundle } from './agents/sources'
-import { routeCapture } from './agents/capture'
+import { parseMentions, routeCapture, withHistory } from './agents/capture'
 import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
 import { budgetPause, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
@@ -25,6 +25,8 @@ import { Supervisor, type Execute } from './agents/supervisor'
 import type { ContextSession } from './context/session'
 
 const exec = promisify(execFile)
+/** Key of the central chat's transcript. */
+const CENTRAL = '_central'
 const DEFAULT_CEILING = 70
 
 /** The planner's built-in AI paths, listed beside custom agents. Their behaviour stays in code (fixed safety); they are not files. */
@@ -153,7 +155,8 @@ export class AgentHub {
           mkdirSync(this.goalDir, { recursive: true })
           writeFileSync(join(this.goalDir, `${g.id}.json`), JSON.stringify(g))
         },
-        onChange: deps.push
+        onChange: deps.push,
+        onFinish: (g) => this.goalFinished(g)
       },
       restored
     )
@@ -175,7 +178,8 @@ export class AgentHub {
       sources: this.deps.sources() ?? [],
       gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
       goals: this.goals.list().slice(-20),
-      chats: Object.fromEntries([...this.chats].map(([id, c]) => [id, c.messages.slice(-100)])),
+      // Transcripts are loaded from disk on first use, so a conversation survives a restart.
+      chats: Object.fromEntries([CENTRAL, ...agents.filter((a) => !a.builtin).map((a) => a.id)].map((id) => [id, this.chat(id).messages.slice(-100)])),
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
@@ -322,7 +326,7 @@ export class AgentHub {
     if (!def) throw new AgentError('That agent no longer exists.')
     if (!text.trim()) throw new AgentError('Write a message first.')
     const engine = this.profiles().find((p) => p.id === def.profile)?.engine
-    if (!engine || !ENGINES[engine].chat) throw new AgentError('Chat needs an account whose engine keeps conversations (Claude, Codex or Antigravity). Pick another account for this agent.')
+    if (!engine) throw new AgentError('This agent uses an account that no longer exists. Edit the agent and pick another.')
     if (this.busy(agentId)) throw new AgentError('This agent is still working on something. Wait for it to finish.')
     this.chat(agentId)
     return this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true }).id
@@ -338,6 +342,47 @@ export class AgentHub {
   }
   resumeGoal(id: string) {
     this.goals.resume(id)
+  }
+
+  /**
+   * The central chat. `@agent` tags send the message to those agents (each answers in the thread); a message with no tag
+   * goes to a coordinator agent, which splits it between your other agents like a goal.
+   */
+  sendCentral(text: string): void {
+    const agents = this.registry.list().agents
+    const m = parseMentions(text, agents)
+    if (m.unknown.length) throw new AgentError(`No agent called ${m.unknown.map((u) => `@${u}`).join(', ')}.`)
+    const body = m.agents.length ? m.text : text.trim()
+    if (!body) throw new AgentError('Write a message first.')
+    const central = this.chat(CENTRAL)
+    const t = new Date().toISOString()
+    const history = central.messages.slice(-8)
+    central.messages.push({ role: 'user', text: text.trim(), t })
+    this.saveChat(CENTRAL)
+    if (m.agents.length) {
+      for (const a of m.agents) {
+        if (this.busy(a.id)) throw new AgentError(`${a.name} is still working on something.`)
+        this.markFired(a.id)
+        this.supervisor.enqueue(a, body, { from: 'central' })
+      }
+      return this.deps.push()
+    }
+    const coordinator = agents.find((a) => a.id === 'coordinator' && a.permission === 'read') ?? agents.find((a) => !a.builtin && a.permission === 'read' && /coordinator/i.test(a.name))
+    if (!coordinator) {
+      central.messages.pop()
+      throw new AgentError('Untagged messages go to a coordinator agent, and there is none yet. Add the Coordinator from Agents → Examples, or tag an agent with @.')
+    }
+    const context = history.map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n')
+    this.goals.start(coordinator, body, 'central', context || undefined)
+    this.deps.push()
+  }
+
+  private goalFinished(g: Goal) {
+    if (g.origin !== 'central') return
+    const text = g.status === 'done' ? (g.finalText ?? '') : `${g.status === 'needs-input' ? 'I paused: ' : 'I stopped: '}${g.reason ?? g.status}`
+    this.chat(CENTRAL).messages.push({ role: 'agent', agentId: g.coordinator, text: text || '(no answer)', t: new Date().toISOString() })
+    this.saveChat(CENTRAL)
+    this.deps.push()
   }
 
   resetChat(agentId: string) {
@@ -497,9 +542,12 @@ export class AgentHub {
     const chat = run.chat ? this.chat(def.id) : undefined
     // First turn: Claude takes a session id we choose; Codex reports its own (kept after the run). Later turns resume it.
     const engine = this.profiles().find((p) => p.id === def.profile)?.engine
-    const session = chat ? (chat.sessionId ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
+    // Engines that can't keep a conversation (Ollama, a custom command) get the transcript as text instead.
+    const sessionless = Boolean(chat && engine && !ENGINES[engine].chat)
+    const input = chat && sessionless ? withHistory(chat.messages, run.input.text) : run.input.text
+    const session = chat && !sessionless ? (chat.sessionId ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
     let sessionId: string | undefined
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input, { session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {
@@ -537,6 +585,12 @@ export class AgentHub {
       const t = new Date().toISOString()
       chat.messages.push({ role: 'user', text: run.input.text, t }, { role: 'agent', text, t, runId: run.id })
       this.saveChat(def.id)
+    }
+    if (run.input.from === 'central') {
+      // Tagged in the central chat: the answer lands in that thread under the agent's name.
+      const central = this.chat(CENTRAL)
+      central.messages.push({ role: 'agent', agentId: def.id, text: text || '(no text)', t: new Date().toISOString(), runId: run.id })
+      this.saveChat(CENTRAL)
     }
     this.cache = null
     return { text, usage }

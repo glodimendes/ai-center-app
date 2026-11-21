@@ -1,0 +1,102 @@
+import { Check, Undo2, X } from 'lucide-react'
+import type { Action, Run } from '@shared/agents'
+import { api } from '@/lib/api'
+import { act, useStore } from '@/store/app'
+import { ChangesList } from './ChangesList'
+import { Button } from './ui'
+
+const KIND: Record<Action['kind'], string> = {
+  'add-task': 'Add a task',
+  'complete-task': 'Complete a task',
+  'create-event': 'Create a calendar event',
+  'email-draft': 'Save an email draft',
+  'api-call': 'Call an API',
+  'run-agent': 'Hand work to an agent',
+  'new-agent': 'Create an agent'
+}
+
+/** Something an agent wants to do that needs your OK. Shown in the conversation that produced it and in Activity. */
+export function ApprovalCard({ action }: { action: Action }) {
+  const toast = useStore((st) => st.toast)
+  const agent = useStore((st) => st.state)!.agents.agents.find((g) => g.id === action.agentId)
+  const detail = Object.entries(action.payload).filter(([, v]) => typeof v === 'string' || Array.isArray(v))
+  return (
+    <div className="rounded-2xl border border-line bg-panel px-4 py-3">
+      <div className="text-[11.5px] text-faint">
+        {KIND[action.kind]} · {agent?.name ?? action.agentId}
+      </div>
+      <div className="text-[14px] mt-0.5">{action.title}</div>
+      {detail.length > 0 && (
+        <div className="mt-1.5 text-[12.5px] text-muted space-y-0.5">
+          {detail.slice(0, 4).map(([k, v]) => (
+            <div key={k} className="truncate">
+              <span className="text-faint">{k}: </span>
+              {Array.isArray(v) ? v.join(' › ') : String(v)}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-end gap-1 mt-2">
+        <Button kind="ghost" onClick={() => act(api.rejectAction(action.id))}>
+          <X size={13} /> Reject
+        </Button>
+        <Button kind="primary" onClick={() => act(api.approveAction(action.id).then((r) => r.status === 'failed' && toast(r.error ?? 'Failed', 'error')))}>
+          <Check size={13} /> Approve
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** A run held because the account is above its usage ceiling. */
+export function PausedCard({ run }: { run: Run }) {
+  return (
+    <div className="rounded-2xl border border-warn/40 bg-panel px-4 py-3">
+      <div className="text-[14px]">“{run.agentName}” is paused</div>
+      <div className="text-[12.5px] text-muted mt-0.5">{run.pauseReason}</div>
+      <div className="flex justify-end gap-1 mt-2">
+        <Button kind="ghost" onClick={() => act(api.cancelRun(run.id))}>
+          Skip
+        </Button>
+        <Button kind="ghost" onClick={() => act(api.allowRun(run.id, true))} title="Lifts this account's ceiling by 20 points">
+          Allow and raise ceiling
+        </Button>
+        <Button kind="primary" onClick={() => act(api.allowRun(run.id, false))}>
+          Allow once
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Edits an agent made to your files, held until you Keep or Undo. */
+export function ReviewCard() {
+  const r = useStore((st) => st.state)!.agents.review
+  const toast = useStore((st) => st.toast)
+  if (!r) return null
+  return (
+    <div className="rounded-2xl border border-warn/40 bg-panel overflow-hidden">
+      <div className="px-4 pt-3">
+        <div className="text-[14px]">Review the changes</div>
+        <div className="text-[12.5px] text-muted whitespace-pre-wrap mt-0.5">{r.summary || 'Done.'}</div>
+      </div>
+      <div className="px-4 py-3">
+        <ChangesList changes={r.changes} />
+      </div>
+      <div className="px-4 pb-3 flex justify-end gap-1">
+        <Button
+          kind="ghost"
+          onClick={async () => {
+            const skipped = await api.contextUndo()
+            toast(skipped.length ? `Undone, except ${skipped.join(', ')} (changed since).` : 'Changes undone.')
+          }}
+        >
+          <Undo2 size={13} /> Undo all
+        </Button>
+        <Button kind="primary" onClick={() => act(api.contextKeep())}>
+          <Check size={13} /> Keep changes
+        </Button>
+      </div>
+    </div>
+  )
+}
