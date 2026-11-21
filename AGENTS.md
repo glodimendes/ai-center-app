@@ -145,18 +145,18 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 **Start here next session:**
 1. Ask the user how the installed app behaved on real data, especially: **checking off a repeating task inside a block** (third-session fix below), archiving checked tasks in the weekly review, a day rule, a habit, a wish with focus, and the narrow-window drawer drag (ROADMAP "Next" has the full list).
-2. The third- and fourth-session commits (repeat fix, Codex for one-shot questions, macOS Calendar fetch, subtask inheritance) are committed locally, **not pushed**. Push only when the user asks. Ask whether web edits to Google now show up without opening Calendar.app, and how spread subtasks look.
+2. The third- and fourth-session commits (repeat fix, Codex for one-shot questions, macOS Calendar fetch, subtask inheritance) are committed locally, **not pushed**. Push only when the user asks.
 3. The user still has setup to do in Settings and in Codex (ROADMAP "Next" → "User's own setup"); don't do it for them in code.
 4. If they want more features, the Sunsama-style list in ROADMAP is what was offered; ask which, and keep routine-specific behaviour configurable (Settings), not hard-coded.
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
-**Added 2026-11-11, fourth session — subtasks inherit deadline and timing (verified in the dev app, installed 2026-11-11 ~23:05, NOT yet watched live):**
+**Added 2026-11-11, fourth session — subtasks inherit deadline and timing (installed 2026-11-11 ~23:05; user confirmed spread subtasks work on real data):**
 - **Parser:** a subtask without its own `due:` / `@spread` / `@asap` takes its nearest ancestor's, flagged `dueFromParent` / `timingFromParent` (never written to the line; repeating tasks and habits keep their own `due`). TaskRow shows inherited values muted and its timing button cycles only the line's own token; Brief/Review "due"/"slipped" lists skip inherited dates so a parent's deadline isn't listed once per subtask.
 - **Planner:** spread leaf subtasks under the same root task (same due, same area) share one even daily amount (`shares` in `plan.ts`), filled in queue order, so parts follow each other across the days. Tests: `vault.test.ts` inheritance, `scheduler.test.ts` "spreads the subtasks of a spread task…" (fails without the grouping).
 - **Known limit, unchanged:** tasks under a heading mapped to no area ("Other") only get leftover time, where spread doesn't apply.
 
-**Added 2026-11-11, fourth session — macOS Calendar pulls web edits (installed 2026-11-11 ~22:45, NOT yet watched live):**
+**Added 2026-11-11, fourth session — macOS Calendar pulls web edits (installed 2026-11-11 ~22:45; user confirmed live: Google web edits show up without opening Calendar.app):**
 - **Bug (reported by the user):** an event changed on the Google Calendar website only reached the app after Calendar.app was opened. EventKit reads the local Calendar database, and CalendarAgent may not fetch from Google until Calendar.app runs.
 - **Fix:** helper command `refresh [seconds]` calls `refreshSourcesIfNecessary()` and waits for `EKEventStoreChanged` (1.5 s quiet, 10 s cap). `Controller.pullRemote` runs it after each calendar refresh (focus, 10-min timer; at most every 30 s) and refreshes again if something changed; `syncPreview` awaits it first so the diff sees web edits. The dev helper has no Calendar access, so this is only typechecked: confirm on the installed app that a web edit appears within ~10 s of focusing the window.
 
