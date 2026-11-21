@@ -22,7 +22,7 @@ const BLOCKED = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch
 // output format is always appended: the app parses those exact headings.
 export const DEFAULT_BRIEF_TEMPLATE = `Give me a concise morning brief for {{date}} covering today's calendar, important emails (if included) and anything requiring my attention.
 
-The current directory is my AI Center vault (canonical path /Users/glodimendes/Documents/Personal Vault/AI Center).
+The current directory is my AI Center vault.
 - Check 05_Tasks/daily-todos.md for today's open todos.
 - Check 05_Tasks/ for active task notes and handoffs.
 - Use 02_Projects/ and 04_Context_Docs/ only when clearly relevant to today's calendar, emails, todos or task notes.

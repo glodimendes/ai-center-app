@@ -1,23 +1,23 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { homedir } from 'node:os'
 import type { Settings } from '@shared/types'
 
-const REAL_VAULT = join(homedir(), 'Documents/Personal Vault/AI Center')
 const file = () => join(app.getPath('userData'), 'settings.json')
 
 function defaults(): Settings {
-  // Development runs against a scratch copy; the packaged app uses the real vault.
-  const vaultPath = app.isPackaged ? REAL_VAULT : resolve(app.getAppPath(), '.dev-vault')
-  return { vaultPath, autoCommit: true, contextEngine: 'codex', askEngine: 'claude', calendarProvider: 'macos', briefAuto: true, briefEmail: true, hiddenCalendars: [], eventAvailability: {} }
+  // Development runs against a scratch copy; the packaged app starts with a starter vault in its own data folder,
+  // which the first-run setup can swap for the user's own folder.
+  const vaultPath = app.isPackaged ? join(app.getPath('userData'), 'Vault') : resolve(app.getAppPath(), '.dev-vault')
+  return { vaultPath, setupDone: !app.isPackaged, autoCommit: true, contextEngine: 'codex', askEngine: 'claude', calendarProvider: 'macos', briefAuto: true, briefEmail: true, hiddenCalendars: [], eventAvailability: {} }
 }
 
 export function loadSettings(): Settings {
   const base = defaults()
   if (!existsSync(file())) return base
   try {
-    const stored = { ...base, ...JSON.parse(readFileSync(file(), 'utf8')) }
+    // A settings file from before the setup existed means the user is already set up.
+    const stored = { ...base, setupDone: true, ...JSON.parse(readFileSync(file(), 'utf8')) }
     // Development never opens the real vault, whatever a settings file says.
     return app.isPackaged ? stored : { ...stored, vaultPath: base.vaultPath }
   } catch {

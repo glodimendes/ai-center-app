@@ -4,6 +4,8 @@ Motion-style routine organizer on top of the AI Center vault (`~/Documents/Perso
 
 For AI assistants and handoff: read `AGENTS.md` (rules, architecture, how to verify), then `ROADMAP.md`.
 
+> **Agents:** besides the planner, AI Center lets you define your own AI agents (permissions, approvals, triggers, chat, several accounts). See [docs/agents.md](docs/agents.md).
+
 ## Features
 
 | Screen | What it does |

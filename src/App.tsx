@@ -14,6 +14,7 @@ import { Docs } from '@/views/Docs'
 import { Review } from '@/views/Review'
 import { Settings } from '@/views/Settings'
 import { Agents } from '@/views/Agents'
+import { Setup } from '@/components/Setup'
 import { Alerts, alertItems } from '@/views/Alerts'
 
 /** Calendar glyph with today's day of the month. */
@@ -232,6 +233,7 @@ export function App() {
       </main>
       {palette && <CommandPalette onClose={() => setPalette(false)} onUpdateContext={() => setContextOpen(true)} />}
       {contextOpen && <ContextUpdate onClose={() => setContextOpen(false)} />}
+      {state.settings.setupDone === false && <Setup />}
       <Toasts />
     </div>
   )

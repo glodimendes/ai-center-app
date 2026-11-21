@@ -18,6 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
+import { createStarterVault } from './vault/starter'
 import { GmailAuth } from './gmail-auth'
 import type { AccountProfile, Action, AgentDef, SourceDef } from '@shared/agents'
 import { askJson } from './context/ask'
@@ -90,6 +91,8 @@ export class Controller implements Api {
 
   private openVault() {
     void this.vault?.close()
+    // A vault folder that doesn't exist yet (the default starter vault on first run) is created with a few example files.
+    if (!existsSync(this.settings.vaultPath)) createStarterVault(this.settings.vaultPath)
     this.vault = new VaultService(this.settings.vaultPath, () => this.settings.autoCommit, () => this.push())
     this.loadSeenTasks()
     this.vault.onExternalChange = (p) => this.agents?.fileChanged(p)

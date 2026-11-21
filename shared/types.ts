@@ -335,6 +335,8 @@ export interface ContextResult {
 
 export interface Settings {
   vaultPath: string
+  /** The first-run setup has been completed or skipped. */
+  setupDone?: boolean
   autoCommit: boolean
   contextEngine: ContextEngine
   /** Who answers the one-shot planning questions (Suggest estimates, Plan with a wish). */

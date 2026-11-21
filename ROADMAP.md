@@ -6,6 +6,15 @@ Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum
 
 This branch (`ai-center-core`) grows the planner into a general agent hub: plan `~/.claude-eth/plans/sequential-questing-sundae.md` (Phase 0 engine layer first). Everything below is the planner's roadmap as of the branch point and is maintained on `main`; merge `main` in regularly. Uniting the branches into `main` is a later, user-triggered step: see "Uniting the two lines" in `AGENTS.md`.
 
+## Open-source readiness: what is left (Phase 6)
+
+- **License:** none chosen yet. The owner decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
+- **Git history:** 42 commits are authored with the owner's personal email. Either accept it, or rewrite history (`git filter-repo --mailmap`) before the first public push; both are the owner's call.
+- **Planner defaults still personal:** `DEFAULT_PREFERENCES` in `vault/preferences.ts` names the owner's calendars (`ETH Classes`, `Holidays in Switzerland`…) and heading groups (`Mentoria`, `BRASA`…). They are safety lists (protected calendars) and many tests use them, so they were not changed blindly: replace with empty or neutral defaults together with the tests, and move the owner's values into their own `preferences.md`.
+- **Docs:** `AGENTS.md`, `ROADMAP.md` and `README.md` still describe the owner's routine. Rewrite README for a public audience and keep owner-specific notes out of the public repo.
+- **Done:** no hard-coded vault path (first run creates a starter vault; the setup dialog lets users pick their own folder), generic sample agents, `docs/agents.md`, `CONTRIBUTING.md`.
+- **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.
+
 ## Open decisions (waiting for the user)
 
 1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.

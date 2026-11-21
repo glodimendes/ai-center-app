@@ -8,7 +8,7 @@ import { Button } from '@/components/ui'
 import { input } from './AreaSettings'
 
 const KIND_HELP: Record<SourceDef['kind'], string> = {
-  'vault-path': 'A file or folder inside the vault (e.g. 02_Projects/hybrid-training.md).',
+  'vault-path': 'A file or folder inside the vault (e.g. 02_Projects/notes.md).',
   file: 'Any file or folder on this Mac (absolute path or ~/…).',
   url: 'A web page or text file (http/https), fetched when an agent runs.',
   gmail: 'Recent mail from your connected Gmail, matching a Gmail search. Agents can read it and propose drafts; nothing is ever sent.'
