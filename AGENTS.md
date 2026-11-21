@@ -6,6 +6,33 @@ Read this first, then `README.md` (what the app does, planning rules) and `ROADM
 
 AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style routine organizer over the user's Markdown knowledge base ("the vault", `~/Documents/Personal Vault/AI Center/`, an Obsidian vault under git) and their calendars (macOS Calendar by default, Google directly as an option). The owner is a student at ETH Zurich who plans thesis, courses, outside work (applications, BRASA, mentoring, an education project) and hybrid training. The UI is in English; task text is mixed Portuguese/English and must be kept verbatim.
 
+## Two lines of work (since 2026-11-21): this folder is the expansion
+
+This folder is the git worktree `/Users/glodimendes/Programming/AI-Center-core` on branch **`ai-center-core`**: the general AI Center agent hub. **Plan (read it first): `~/.claude-eth/plans/sequential-questing-sundae.md`** (phases 0–7, user decisions, safety rules). The stable planner lives on `main` in `/Users/glodimendes/Programming/AI-Center`, where the user keeps improving it and from where the installed app is built.
+- **Here:** expansion work only. Don't run `npm run install-app` from this folder unless the user asks. Never commit vault content or personal data (hard rule 6 applies; the repo is public-bound).
+- **Stay current with `main`:** before starting a phase, and whenever the user says they changed the planner, run `git merge main` (or rebase) in this folder and rerun `npm test` and `npm run typecheck`. Resolve conflicts in favour of keeping planner behaviour identical; Phase 0 must not change behaviour.
+- **Keep the core separable:** new code under `electron/main/agents/` must not import Electron or UI, and the planner must stay usable as a module of the core (plan, Phase 1 and 6).
+- **Separate dev instance:** use its own dev app-data folder and debug port from `main` (Phase 0 task), so both dev apps can run together.
+
+### Start here (handoff, 2026-11-21)
+
+State: the plan is approved; **no expansion code is written yet**. The branch equals `main` at `466c001` plus these doc notes. `npm ci` is done here, `.dev-vault/` and `resources/calendar-helper` were copied from the main folder, and `npm run typecheck` and `npm test` pass (145 passed, 2 skipped).
+1. Read the plan (`~/.claude-eth/plans/sequential-questing-sundae.md`), then start **Phase 0**: engine layer extracted from `context/agent.ts` and `context/ask.ts`, no behaviour change, tests in `tests/engines.test.ts`.
+2. Phase 0 also: give this branch its own dev app-data folder and debug port (not `ai-center-planner-dev/` / 9333), update hard rules 7 and 8 as the plan says, and add `agents/` to the Architecture section.
+3. Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; the Antigravity CLI binary is `agy` (v1.5.9; `-p`, `--output-format stream-json`, `--model`, `--effort`, `--mode`, `acp` subcommand). `gemini` isn't installed.
+4. Nothing is pushed: `ai-center-core` is local only. Push only when the user asks.
+5. Ask the user before long refactors of `controller.ts`; keep commits small and per step so `main` can be merged in without pain.
+
+### Uniting the two lines (when the user is ready)
+
+Do this only when the user asks. Steps:
+1. In `AI-Center`, make sure `main` is committed and tests are green; note its last commit.
+2. In `AI-Center-core`: `git merge main`, resolve conflicts, `npm test`, `npm run typecheck`, then run the dev app and check the brief, Update context, Suggest estimates and Plan with a wish against `.dev-vault`.
+3. Check the migration: existing `settings.json` (`contextEngine`, `askEngine`) must load into the new account profiles, and `06_Prompts/daily-brief.md` must keep working as the built-in Daily brief agent; the app data folder stays `AI Center Planner/` so Calendar permission, plan cache and sync state carry over.
+4. Merge `ai-center-core` into `main` (fast-forward after step 2 if possible), push only when the user asks, then `npm run install-app` and ask the user to restart and watch a daily brief and one custom agent on real data.
+5. Remove the worktree (`git worktree remove ../AI-Center-core`) and the branch only after the user confirms. Update this section, `ROADMAP.md` and `main`'s `AGENTS.md`.
+Commit messages follow hard rule 5 (no mention of Claude).
+
 ## Hard rules
 
 1. **Never write to the real vault while developing.** `npm run dev` and `npx electron .` use `.dev-vault/` (a scratch copy with its own git, gitignored) and their own app data (`ai-center-planner-dev/`); both are forced in code, so a dev run can't open the real vault even if a settings file says so. Only the packaged app in `/Applications/AI Center.app` uses the real vault. The user runs it daily: never start a second instance against the real vault. Dev runs never auto-run the daily brief (`app.isPackaged` check in `maybeRunBrief`); the "Run daily brief" button still does, against `.dev-vault`.
