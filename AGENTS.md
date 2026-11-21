@@ -6,6 +6,14 @@ Read this first, then `README.md` (what the app does, planning rules) and `ROADM
 
 AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style routine organizer over the user's Markdown knowledge base ("the vault", `~/Documents/Personal Vault/AI Center/`, an Obsidian vault under git) and their calendars (macOS Calendar by default, Google directly as an option). The owner is a student at ETH Zurich who plans thesis, courses, outside work (applications, BRASA, mentoring, an education project) and hybrid training. The UI is in English; task text is mixed Portuguese/English and must be kept verbatim.
 
+## Two lines of work (since 2026-11-21)
+
+This folder is **`main`: the stable planner**, the one the packaged app is built from. The general "AI Center" agent-hub expansion (engines, agents, runs, usage, approvals; plan `~/.claude-eth/plans/sequential-questing-sundae.md`) is developed on branch **`ai-center-core`** in a separate git worktree, `/Users/glodimendes/Programming/AI-Center-core`. Work on each line in its own folder with its own Claude/Codex session.
+- **Here, on `main`:** planner features and fixes only. Don't start the expansion here, and don't install from the other folder.
+- **Keep the two mergeable:** the expansion refactors `electron/main/context/{agent,ask,brief,session}.ts`, `controller.ts`, `settings.ts`, `shared/{types,api}.ts`. Avoid reshaping those files without need; prefer small, local changes there, and say in the commit what you touched so the merge is easy.
+- **Merge direction, for now:** `main` → `ai-center-core` (merge or rebase `main` into the core branch from the core folder). Nothing flows back until the user decides to **unite them**; the procedure is in `AI-Center-core/AGENTS.md` ("Uniting the two lines").
+- Dev runs of both folders share the dev data folder name and debug port 9333 unless the core branch has changed them: don't run both dev apps at once.
+
 ## Hard rules
 
 1. **Never write to the real vault while developing.** `npm run dev` and `npx electron .` use `.dev-vault/` (a scratch copy with its own git, gitignored) and their own app data (`ai-center-planner-dev/`); both are forced in code, so a dev run can't open the real vault even if a settings file says so. Only the packaged app in `/Applications/AI Center.app` uses the real vault. The user runs it daily: never start a second instance against the real vault. Dev runs never auto-run the daily brief (`app.isPackaged` check in `maybeRunBrief`); the "Run daily brief" button still does, against `.dev-vault`.
@@ -118,18 +126,18 @@ macOS `screencapture` is blocked in agent sandboxes; use `scripts/cdp.mjs`. The 
 
 **Start here next session:**
 1. Ask the user how the installed app behaved on real data, especially: **checking off a repeating task inside a block** (third-session fix below), archiving checked tasks in the weekly review, a day rule, a habit, a wish with focus, and the narrow-window drawer drag (ROADMAP "Next" has the full list).
-2. The third- and fourth-session commits (repeat fix, Codex for one-shot questions, macOS Calendar fetch, subtask inheritance) are committed locally, **not pushed**. Push only when the user asks. Ask whether web edits to Google now show up without opening Calendar.app, and how spread subtasks look.
+2. The third- and fourth-session commits (repeat fix, Codex for one-shot questions, macOS Calendar fetch, subtask inheritance) are committed locally, **not pushed**. Push only when the user asks.
 3. The user still has setup to do in Settings and in Codex (ROADMAP "Next" → "User's own setup"); don't do it for them in code.
 4. If they want more features, the Sunsama-style list in ROADMAP is what was offered; ask which, and keep routine-specific behaviour configurable (Settings), not hard-coded.
 
 **Installed and in daily use** as `/Applications/AI Center.app` (renamed from "AI Center Planner"; same bundle id `local.aicenter.planner`, app data still in `~/Library/Application Support/AI Center Planner/`). macOS Calendar access granted.
 
-**Added 2026-11-11, fourth session — subtasks inherit deadline and timing (verified in the dev app, installed 2026-11-11 ~23:05, NOT yet watched live):**
+**Added 2026-11-11, fourth session — subtasks inherit deadline and timing (installed 2026-11-11 ~23:05; user confirmed spread subtasks work on real data):**
 - **Parser:** a subtask without its own `due:` / `@spread` / `@asap` takes its nearest ancestor's, flagged `dueFromParent` / `timingFromParent` (never written to the line; repeating tasks and habits keep their own `due`). TaskRow shows inherited values muted and its timing button cycles only the line's own token; Brief/Review "due"/"slipped" lists skip inherited dates so a parent's deadline isn't listed once per subtask.
 - **Planner:** spread leaf subtasks under the same root task (same due, same area) share one even daily amount (`shares` in `plan.ts`), filled in queue order, so parts follow each other across the days. Tests: `vault.test.ts` inheritance, `scheduler.test.ts` "spreads the subtasks of a spread task…" (fails without the grouping).
 - **Known limit, unchanged:** tasks under a heading mapped to no area ("Other") only get leftover time, where spread doesn't apply.
 
-**Added 2026-11-11, fourth session — macOS Calendar pulls web edits (installed 2026-11-11 ~22:45, NOT yet watched live):**
+**Added 2026-11-11, fourth session — macOS Calendar pulls web edits (installed 2026-11-11 ~22:45; user confirmed live: Google web edits show up without opening Calendar.app):**
 - **Bug (reported by the user):** an event changed on the Google Calendar website only reached the app after Calendar.app was opened. EventKit reads the local Calendar database, and CalendarAgent may not fetch from Google until Calendar.app runs.
 - **Fix:** helper command `refresh [seconds]` calls `refreshSourcesIfNecessary()` and waits for `EKEventStoreChanged` (1.5 s quiet, 10 s cap). `Controller.pullRemote` runs it after each calendar refresh (focus, 10-min timer; at most every 30 s) and refreshes again if something changed; `syncPreview` awaits it first so the diff sees web edits. The dev helper has no Calendar access, so this is only typechecked: confirm on the installed app that a web edit appears within ~10 s of focusing the window.
 

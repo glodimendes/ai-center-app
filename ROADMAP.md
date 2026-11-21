@@ -2,6 +2,10 @@
 
 Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-11.
 
+## Two lines of work (2026-11-21)
+
+The agent-hub expansion is on branch `ai-center-core` (worktree `../AI-Center-core`), plan `~/.claude-eth/plans/sequential-questing-sundae.md`. This roadmap is for the stable planner on `main`. The two are to be **united later**, when the user decides; see "Two lines of work" in `AGENTS.md` and "Uniting the two lines" in the core folder's `AGENTS.md`.
+
 ## Open decisions (waiting for the user)
 
 1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.
