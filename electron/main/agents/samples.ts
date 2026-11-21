@@ -60,6 +60,6 @@ For each item that needs action, propose an "add-task" action with payload {"sec
 
 In your answer, list the mails you ignored in one line each, so I can check your judgement.`
     },
-    needs: 'a Gmail data source (not available yet)'
+    needs: 'a Gmail source with id gmail-inbox (Settings → Data sources → Connect Gmail → Add Gmail source)'
   }
 ]

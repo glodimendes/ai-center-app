@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { SourceDef } from '@shared/agents'
+import { fetchGmail, type GmailLike } from './gmail'
 
 const MAX_CHARS = 60_000
 const MAX_FILES = 40
@@ -59,7 +60,11 @@ export function resolveSourcePath(def: SourceDef, vaultRoot: string): string {
   return isAbsolute(p) ? p : p.startsWith('~') ? join(homedir(), p.slice(1)) : resolve(p)
 }
 
-export async function fetchSource(def: SourceDef, vaultRoot: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+export async function fetchSource(def: SourceDef, vaultRoot: string, fetchImpl: typeof fetch = fetch, gmail?: () => Promise<GmailLike>): Promise<string> {
+  if (def.kind === 'gmail') {
+    if (!gmail) throw new Error('Connect Gmail in Settings → Data sources first.')
+    return (await fetchGmail(await gmail(), def.query ?? '', def.max ?? 25)).slice(0, MAX_CHARS)
+  }
   if (def.kind === 'vault-path' || def.kind === 'file') return readPath(resolveSourcePath(def, vaultRoot), def.path ?? '')
   if (def.kind === 'url') {
     if (!def.url || !/^https?:\/\//i.test(def.url)) throw new Error('A URL source needs an http(s) address.')
@@ -76,7 +81,7 @@ export async function fetchSource(def: SourceDef, vaultRoot: string, fetchImpl: 
  * The data an agent asked for (`sources: [ids]`), as one read-only block for its prompt. A failing source is reported in
  * the block instead of failing the run. Fetched text is data, never instructions: the prompt says so.
  */
-export async function buildSourceBundle(ids: string[], defs: SourceDef[], vaultRoot: string, fetchImpl?: typeof fetch): Promise<string> {
+export async function buildSourceBundle(ids: string[], defs: SourceDef[], vaultRoot: string, fetchImpl?: typeof fetch, gmail?: () => Promise<GmailLike>): Promise<string> {
   if (!ids.length) return ''
   const parts: string[] = []
   for (const id of ids) {
@@ -86,7 +91,7 @@ export async function buildSourceBundle(ids: string[], defs: SourceDef[], vaultR
       continue
     }
     try {
-      parts.push(`## Source: ${def.label}\n${await fetchSource(def, vaultRoot, fetchImpl)}`)
+      parts.push(`## Source: ${def.label}\n${await fetchSource(def, vaultRoot, fetchImpl, gmail)}`)
     } catch (e) {
       parts.push(`## Source: ${def.label}\n(couldn't be read: ${(e as Error).message})`)
     }

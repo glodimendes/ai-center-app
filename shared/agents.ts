@@ -110,11 +110,14 @@ export interface Action {
 /** A place an agent may read from, defined once in Settings and referenced by id in an agent's `sources`. */
 export interface SourceDef {
   id: string
-  kind: 'vault-path' | 'file' | 'url'
+  kind: 'vault-path' | 'file' | 'url' | 'gmail'
   label: string
   /** vault-path: relative to the vault; file: absolute or ~; a folder is read as its newest text files. */
   path?: string
   url?: string
+  /** gmail: search query (default newer_than:3d) and how many messages (default 25, max 50). */
+  query?: string
+  max?: number
 }
 
 export interface UsageTotal {
@@ -153,6 +156,7 @@ export interface AgentsState {
   totals: { today: UsageTotal[]; week: UsageTotal[] }
   cli: CliInfo[]
   sources: SourceDef[]
+  gmail: { configured: boolean; connected: boolean }
   samples: SampleInfo[]
   /** Folder the definitions are read from. */
   dir: string

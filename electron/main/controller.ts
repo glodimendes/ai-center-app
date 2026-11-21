@@ -18,6 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
+import { GmailAuth } from './gmail-auth'
 import type { AccountProfile, Action, AgentDef, SourceDef } from '@shared/agents'
 import { askJson } from './context/ask'
 import { describeWish, focusPins, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
@@ -40,12 +41,14 @@ export class Controller implements Api {
   private pulling: Promise<boolean> | null = null
   private lastPull = 0
   private context = new ContextSession(() => this.vault, () => this.settings.contextEngine, (line) => this.emit('context-progress', line))
+  private gmail = new GmailAuth(() => ({ id: this.settings.googleClientId, secret: this.settings.googleClientSecret }))
   private agents = new AgentHub({
     vaultRoot: () => this.vault.root,
     agentsDir: () => this.settings.agentsDir || join(this.vault.root, '06_Prompts/agents'),
     userData: app.getPath('userData'),
     triggersEnabled: () => app.isPackaged || process.env.AI_CENTER_TRIGGERS === '1',
     sources: () => this.settings.sources,
+    gmail: { configured: () => this.gmail.configured, connected: () => this.gmail.connected, api: () => this.gmail.api() },
     saveSources: (sources) => this.saveSettings({ sources }),
     profiles: () => this.settings.profiles,
     saveProfiles: (profiles) => this.saveSettings({ profiles }),
@@ -721,6 +724,14 @@ export class Controller implements Api {
   }
   async allowRun(runId: string, raise: boolean) {
     this.agents.allowRun(runId, raise)
+  }
+  async connectGmail() {
+    await this.gmail.connect()
+    this.push()
+  }
+  async disconnectGmail() {
+    this.gmail.disconnect()
+    this.push()
   }
   async addSampleAgent(id: string) {
     this.agents.addSample(id)

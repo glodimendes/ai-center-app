@@ -10,6 +10,8 @@ import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
 import { ENGINES, profileEnv, resolveBinary, runEngine } from './agents/engines'
 import { DEFAULT_PROFILES } from './agents/profiles'
+import type { GmailLike } from './agents/gmail'
+import { buildRawDraft } from './agents/gmail'
 import { SAMPLES } from './agents/samples'
 import { buildSourceBundle } from './agents/sources'
 import { routeCapture } from './agents/capture'
@@ -41,6 +43,7 @@ export interface HubDeps {
   profiles: () => AccountProfile[] | undefined
   saveProfiles: (p: AccountProfile[]) => void
   sources: () => SourceDef[] | undefined
+  gmail: { configured: () => boolean; connected: () => boolean; api: () => Promise<GmailLike> }
   saveSources: (s: SourceDef[]) => void
   context: ContextSession
   addTask: (section: string[], body: string) => Promise<void>
@@ -105,6 +108,12 @@ export class AgentHub {
           const triggers = Array.isArray(p.triggers) && p.triggers.every((t) => typeof t === 'string') ? (p.triggers as string[]) : ['manual']
           this.registry.save({ id, name: text('name') ?? id, profile: text('profile') ?? 'claude', permission, output, triggers, sources: [], instructions: text('instructions') ?? '', description: text('description') })
         },
+        // Only ever a draft in the user's Gmail drafts folder; sending is the user's own step in Gmail.
+        'email-draft': async (a) => {
+          const { to, subject, body } = a.payload as Record<string, unknown>
+          if (typeof to !== 'string' || !to.includes('@') || typeof body !== 'string' || !body.trim()) throw new Error('The draft needs a recipient and a body.')
+          await (await deps.gmail.api()).createDraft(buildRawDraft({ to, subject: typeof subject === 'string' ? subject : '', body }))
+        },
         'complete-task': async (a) => {
           if (typeof a.payload.taskId !== 'string') throw new Error('The proposal names no task.')
           await deps.completeTask(a.payload.taskId)
@@ -129,6 +138,7 @@ export class AgentHub {
       totals: this.totals(),
       cli: this.cli,
       sources: this.deps.sources() ?? [],
+      gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
@@ -258,7 +268,7 @@ export class AgentHub {
     const ids = new Set<string>()
     for (const s of list) {
       if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(s.id) || ids.has(s.id)) throw new AgentError(`"${s.id}" is empty, invalid or used twice (lowercase letters, digits, dashes).`)
-      if (!['vault-path', 'file', 'url'].includes(s.kind)) throw new AgentError(`Unknown source kind for "${s.id}".`)
+      if (!['vault-path', 'file', 'url', 'gmail'].includes(s.kind)) throw new AgentError(`Unknown source kind for "${s.id}".`)
       ids.add(s.id)
     }
     this.deps.saveSources(list)
@@ -269,7 +279,7 @@ export class AgentHub {
   async previewSource(id: string): Promise<string> {
     const def = (this.deps.sources() ?? []).find((s) => s.id === id)
     if (!def) throw new AgentError('No such source.')
-    return (await buildSourceBundle([id], [def], this.deps.vaultRoot())).slice(0, 4000)
+    return (await buildSourceBundle([id], [def], this.deps.vaultRoot(), undefined, () => this.deps.gmail.api())).slice(0, 4000)
   }
 
   saveProfiles(list: AccountProfile[]) {
@@ -380,7 +390,7 @@ export class AgentHub {
   private execute: Execute = async (run, def, onProgress, sig) => {
     const root = this.deps.vaultRoot()
     const date = isoDate(new Date())
-    const sources = await buildSourceBundle(def.sources, this.deps.sources() ?? [], root)
+    const sources = await buildSourceBundle(def.sources, this.deps.sources() ?? [], root, undefined, () => this.deps.gmail.api())
     const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']

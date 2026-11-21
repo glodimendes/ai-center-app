@@ -345,3 +345,36 @@ describe('sample agents', () => {
     expect(run).toHaveBeenCalledTimes(2)
   })
 })
+
+import { buildRawDraft, fetchGmail, payloadText, type GmailLike } from '../electron/main/agents/gmail'
+
+describe('gmail source and drafts', () => {
+  const fake = (msgs: Record<string, object>, drafts: string[] = []): GmailLike => ({
+    listIds: async () => Object.keys(msgs),
+    getMessage: async (id) => ({ from: 'a@x.test', to: 'me@x.test', subject: 'S', date: 'D', snippet: 'snip', body: '', ...msgs[id] }),
+    createDraft: async (raw) => void drafts.push(raw)
+  })
+  it('turns recent mail into prompt text, falling back to the snippet', async () => {
+    const t = await fetchGmail(fake({ m1: { subject: 'Meeting', body: 'Tue 15:00?' }, m2: { subject: 'Empty', body: '' } }), 'newer_than:3d', 25)
+    expect(t).toContain('### Meeting\nFrom: a@x.test')
+    expect(t).toContain('Tue 15:00?')
+    expect(t).toContain('snip')
+    expect(await fetchGmail(fake({}), '', 5)).toBe('(no messages match)')
+  })
+  it('a Gmail source with no connection becomes a note in the bundle, not a crash', async () => {
+    const text = await buildSourceBundle(['g'], [{ id: 'g', kind: 'gmail', label: 'Mail' }], '/tmp')
+    expect(text).toContain('Connect Gmail in Settings')
+  })
+  it('builds a plain-text draft with an encoded non-ASCII subject and no header injection', () => {
+    const raw = Buffer.from(buildRawDraft({ to: 'b@x.test\r\nBcc: evil@x.test', subject: 'Olá — reunião', body: 'Oi,\nobrigado' }), 'base64url').toString('utf8')
+    expect(raw).toContain('To: b@x.test Bcc: evil@x.test')
+    expect(raw).not.toContain('\r\nBcc:')
+    expect(raw).toMatch(/Subject: =\?UTF-8\?B\?/)
+    expect(Buffer.from(raw.split('\r\n\r\n')[1], 'base64').toString('utf8')).toBe('Oi,\nobrigado')
+  })
+  it('reads the text/plain part, or HTML without tags', () => {
+    const enc = (s: string) => Buffer.from(s).toString('base64url')
+    expect(payloadText({ mimeType: 'multipart/alternative', parts: [{ mimeType: 'text/html', body: { data: enc('<p>no</p>') } }, { mimeType: 'text/plain', body: { data: enc('plain') } }] })).toBe('plain')
+    expect(payloadText({ mimeType: 'text/html', body: { data: enc('<p>Hi <b>there</b></p>') } })).toBe('Hi there')
+  })
+})
