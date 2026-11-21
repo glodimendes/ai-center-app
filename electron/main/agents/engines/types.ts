@@ -1,6 +1,6 @@
 // Engine layer of the AI Center core. No Electron or UI imports: it must run headless later.
 
-import type { AccountProfile, EngineId, Usage } from '@shared/agents'
+import type { AccountProfile, EngineId, Limits, Usage } from '@shared/agents'
 export type { AccountProfile, EngineId, Usage }
 
 /** What an engine reports while running, whatever the CLI's own format. */
@@ -9,6 +9,7 @@ export type EngineEvent =
   | { type: 'file_change'; path: string }
   | { type: 'text'; text: string }
   | { type: 'usage'; usage: Usage }
+  | { type: 'limits'; limits: Omit<Limits, 'asOf'> }
   | { type: 'done'; text: string; isError: boolean }
 
 /**

@@ -16,9 +16,11 @@ This folder is the git worktree `/Users/glodimendes/Programming/AI-Center-core` 
 
 ### Start here (handoff, 2026-11-21)
 
-State (2026-11-21): **Phase 0 is committed** (`1a8b683`, verified live: brief, Update context via Codex, Suggest estimates, Plan with a wish). **Phase 1 is written, uncommitted**: typecheck clean, `tests/agents.test.ts` + `tests/engines.test.ts` pass; **not yet run in the dev app** (Agents view ⌘9, a custom agent, approvals). Permission rule in code: `read` = read-only engine mode; `propose` and `act` always go through ContextSession review (Keep/Undo); `act` only auto-adds tasks; complete/event/email/API actions need an approve click (`permissions.canAutoRun`, `ApprovalStore`). Built-ins (Daily brief, Update context, Planner assistant) are listed read-only in the Agents view and still run from their own code paths. Not done in Phase 1: file watching of the agents folder (it is re-read on every state push), "New agent from this run", executors for create-event/email-draft/api-call (they fail visibly), data sources.
-**User preference:** don't run tests/typecheck unprompted while building; ask first with a reason.
-Next: try Phase 1 in the dev app with the user, then Phase 2 (usage, budgets, Engines & accounts; real profiles such as `claude-eth` with `configDir: ~/.claude-eth`). Settings `contextEngine`/`askEngine` still hold `'claude' | 'codex'`, which equal the default profile ids.
+State (2026-11-21): **Phase 0** (`1a8b683`) and **Phase 1** (`71155c3`) are committed. **Phase 2 is written, verified live in the dev app, uncommitted**: window usage per account (Claude: `rate_limit_event` in the stream-json run output, `utilization` is a 0..1 fraction; Codex: `rate_limits` in `~/.codex/sessions` logs, read-only), budget ceiling per profile (`AccountProfile.sharePct`, default 70, per-agent `budget` overrides) enforced by `Supervisor`'s gate: above it a run is `paused` and the user picks Allow once / Allow and raise (+20) / Skip; usage totals per agent per day/week from `runs/*.jsonl`; Settings → Engines & accounts (CLI versions, profiles with `configDir`, ceiling, Test, bars); `Settings.profiles` (unset = `claude`, `codex`). Tests: `tests/usage.test.ts` (+ agents/engines) pass; live: Test button, pause and Allow once.
+Caveats: the ceiling is on the whole account's window (Claude reports no agent-only share). Claude numbers refresh only after an agent run or Test (the personal `~/.claude` account returned no limit event when probed; probably not logged in). Built-in paths (brief, Update context, estimates) don't go through the gate yet and don't update limits. Older run logs have no `profile`.
+**Phase 1 recap:** Agents view (⌘9), `agent-hub.ts`, definitions in `06_Prompts/agents/`, approvals inbox. Not done: file watching, "New agent from this run", executors for create-event/email-draft/api-call, data sources.
+**User preferences:** run tests/typecheck without asking, but keep them minimal (targeted files, once).
+Next: Phase 3 (triggers, ⌘⇧Space `@agent` routing, data sources, Email triage / Training coach / Task automation agents) after committing Phase 2.
 1. Read the plan (`~/.claude-eth/plans/sequential-questing-sundae.md`) before each phase; run `git merge main` first.
 2. Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; the Antigravity CLI binary is `agy` (v1.5.9; `-p`, `--output-format stream-json`, `--model`, `--effort`, `--mode`, `acp` subcommand). `gemini` isn't installed.
 3. Nothing is pushed: `ai-center-core` is local only. Push only when the user asks.
@@ -93,7 +95,8 @@ electron/main/
                         google.ts (OAuth loopback), sync.ts (pure diff), adopt.ts (pure: which calendar edits win)
   agent-hub.ts          app glue: runs agents through the supervisor, review via ContextSession, executes approved actions
   agents/               core, no Electron/UI imports: definition.ts (Markdown+frontmatter), registry.ts, permissions.ts, actions.ts
-                        (ApprovalStore: only approve() runs an executor), supervisor.ts (queue, concurrency 1, runs/*.jsonl), runner.ts;
+                        (ApprovalStore: only approve() runs an executor), supervisor.ts (queue, concurrency 1, budget pause, runs/*.jsonl),
+                        usage.ts (window limits, budget check, run totals), runner.ts;
                         engines/ (types, process: spawn+stream+timeout+profile env, claude-cli, codex-cli,
                         models), profiles.ts (account profiles; default = each CLI's own login)
   context/              agent.ts (Update context run + vault snapshot), session.ts (Update context: snapshot, diff, Keep/Undo),

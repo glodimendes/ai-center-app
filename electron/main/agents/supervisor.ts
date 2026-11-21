@@ -9,6 +9,9 @@ export interface Outcome {
   usage?: Usage
 }
 
+/** Called before a run starts. A string pauses the run with that reason until the user allows or skips it. */
+export type Gate = (run: Run, def: AgentDef) => Promise<string | null> | string | null
+
 export type Execute = (run: Run, def: AgentDef, onProgress: (line: string) => void, signal: { cancel: (fn: () => void) => void }) => Promise<Outcome>
 
 /**
@@ -18,13 +21,14 @@ export type Execute = (run: Run, def: AgentDef, onProgress: (line: string) => vo
 export class Supervisor {
   private runs: Run[] = []
   private queue: { run: Run; def: AgentDef }[] = []
-  private current: { run: Run; cancel: () => void } | null = null
+  private current: { run: Run; cancel: () => void; resume?: () => void } | null = null
   private seq = 0
 
   constructor(
     private execute: Execute,
     private logDir: string | null,
-    private onChange: () => void = () => {}
+    private onChange: () => void = () => {},
+    private gate?: Gate
   ) {}
 
   enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string } = {}): Run {
@@ -32,6 +36,7 @@ export class Supervisor {
       id: `${Date.now().toString(36)}-${++this.seq}`,
       agentId: def.id,
       agentName: def.name,
+      profile: def.profile,
       parentRunId: opts.parentRunId,
       input: { from: opts.from ?? 'user', to: def.id, text },
       status: 'queued',
@@ -68,6 +73,11 @@ export class Supervisor {
     this.current?.cancel()
   }
 
+  /** Lets a paused run start (once). */
+  allow(id: string) {
+    if (this.current?.run.id === id) this.current.resume?.()
+  }
+
   isBusy() {
     return this.current !== null || this.queue.length > 0
   }
@@ -80,10 +90,24 @@ export class Supervisor {
     let cancelled = false
     let stop: () => void = () => {}
     this.current = { run, cancel: () => ((cancelled = true), stop()) }
-    run.status = 'running'
-    run.startedAt = new Date().toISOString()
-    this.onChange()
     try {
+      const reason = this.gate ? await this.gate(run, def) : null
+      if (reason) {
+        // Hold the queue until the user decides: allow once, or skip (cancel).
+        run.status = 'paused'
+        run.pauseReason = reason
+        this.log(run, { type: 'paused', reason })
+        this.onChange()
+        await new Promise<void>((resolve, reject) => {
+          this.current!.resume = resolve
+          this.current!.cancel = () => ((cancelled = true), reject(new Error('Cancelled.')))
+        })
+        run.pauseReason = undefined
+        this.current!.cancel = () => ((cancelled = true), stop())
+      }
+      run.status = 'running'
+      run.startedAt = new Date().toISOString()
+      this.onChange()
       const out = await this.execute(
         run,
         def,
@@ -111,7 +135,7 @@ export class Supervisor {
     run.status = status
     run.error = status === 'done' ? undefined : error
     run.endedAt = new Date().toISOString()
-    this.log(run, { type: 'end', status, error: run.error, output: run.output, usage: run.usage })
+    this.log(run, { type: 'end', status, profile: run.profile, error: run.error, output: run.output, usage: run.usage })
     if (this.runs.length > 100) this.runs = this.runs.filter((r) => r.status === 'queued' || r.status === 'running' || this.runs.indexOf(r) >= this.runs.length - 100)
     this.onChange()
   }

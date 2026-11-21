@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, Check, ChevronDown, ChevronRight, Loader2, Pencil, Play, Plus, Square, Trash2, Undo2, X } from 'lucide-react'
+import { Bot, Check, Pause, ChevronDown, ChevronRight, Loader2, Pencil, Play, Plus, Square, Trash2, Undo2, X } from 'lucide-react'
 import type { AgentDef, AgentOutput, Permission, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -41,6 +41,25 @@ export function Agents() {
       </Header>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-5 @max-3xl:px-3 py-5 space-y-6">
+          {a.runs
+            .filter((r) => r.status === 'paused')
+            .map((r) => (
+              <section key={r.id} className="border border-warn/40 rounded-lg bg-panel p-3">
+                <div className="text-[13px] font-medium">“{r.agentName}” is paused</div>
+                <div className="text-[12px] text-muted mt-0.5">{r.pauseReason}</div>
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button kind="ghost" onClick={() => act(api.cancelRun(r.id))}>
+                    Skip this run
+                  </Button>
+                  <Button onClick={() => act(api.allowRun(r.id, true))} title="Lifts this account's ceiling by 20 points">
+                    Allow and raise ceiling
+                  </Button>
+                  <Button kind="primary" onClick={() => act(api.allowRun(r.id, false))}>
+                    Allow once
+                  </Button>
+                </div>
+              </section>
+            ))}
           {a.review && <Review />}
           {pending.length > 0 && (
             <section>
@@ -167,11 +186,12 @@ function History({ runs }: { runs: Run[] }) {
           <button onClick={() => setOpen(open === r.id ? null : r.id)} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left">
             {open === r.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {r.status === 'running' && <Loader2 size={12} className="animate-spin text-accent" />}
+            {r.status === 'paused' && <Pause size={12} className="text-warn" />}
             <span className="font-medium">{r.agentName}</span>
             <span className="flex-1 truncate text-muted">{r.input.text}</span>
             <span className={cx('text-[11px]', r.status === 'error' ? 'text-danger' : r.status === 'done' ? 'text-ok' : 'text-muted')}>{r.status}</span>
             <span className="text-[11px] text-faint">{when(r.queuedAt)}</span>
-            {(r.status === 'running' || r.status === 'queued') && (
+            {(r.status === 'running' || r.status === 'queued' || r.status === 'paused') && (
               <span
                 role="button"
                 title="Cancel"

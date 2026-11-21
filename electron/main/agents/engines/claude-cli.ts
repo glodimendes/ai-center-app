@@ -36,6 +36,12 @@ export const claudeCli: Engine = {
     if (ev.type === 'assistant')
       for (const c of ev.message?.content ?? [])
         if (c.type === 'tool_use') out.push({ type: 'tool', name: String(c.name), target: String(c.input?.file_path ?? c.input?.pattern ?? '') })
+    if (ev.type === 'rate_limit_event') {
+      // utilization is a 0..1 fraction (checked against a heavily used account: 0.17 five-hour, 0.32 weekly).
+      const w = ev.rate_limit_info?.unifiedWindows ?? {}
+      const win = (x: any) => (x && typeof x.utilization === 'number' && x.resetsAt ? { usedPct: Math.round(x.utilization * 1000) / 10, resetsAt: new Date(x.resetsAt * 1000).toISOString() } : undefined)
+      out.push({ type: 'limits', limits: { fiveHour: win(w.five_hour), weekly: win(w.seven_day) } })
+    }
     if (ev.type === 'result') {
       const u = ev.usage
       if (u || ev.total_cost_usd != null) out.push({ type: 'usage', usage: { inputTokens: u?.input_tokens, outputTokens: u?.output_tokens, costUsd: ev.total_cost_usd } })

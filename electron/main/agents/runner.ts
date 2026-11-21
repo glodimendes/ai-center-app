@@ -1,5 +1,6 @@
 import { join, relative } from 'node:path'
 import type { AgentDef } from './definition'
+import type { Limits } from '@shared/agents'
 import { ENGINES, EngineTimeout, runEngine, type Usage } from './engines'
 import { engineMode } from './permissions'
 import { findProfile } from './profiles'
@@ -26,6 +27,8 @@ export interface RunContext {
   date: string
   onProgress: (line: string) => void
   onCancel: (cancel: () => void) => void
+  /** The account's window usage as the CLI reported it during the run. */
+  onLimits?: (limits: Omit<Limits, 'asOf'>) => void
   timeoutMs?: number
 }
 
@@ -45,6 +48,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
     timeoutMs,
     onEvent: (ev) => {
       if (ev.type === 'tool') ctx.onProgress(`${ev.name} ${['Read', 'Edit', 'Write'].includes(ev.name) ? rel(ev.target) : ev.target}`.trim())
+      if (ev.type === 'limits') ctx.onLimits?.(ev.limits)
       if (ev.type === 'file_change') ctx.onProgress(`Editing ${rel(ev.path)}`)
     }
   })

@@ -8,7 +8,7 @@ export interface AccountProfile {
   engine: EngineId
   label: string
   configDir?: string
-  /** Share of the account's usage window agents may use (Phase 2). */
+  /** Agents don't start while this account's 5-hour or weekly window is at or above this percent (default 70); they pause and ask. */
   sharePct?: number
 }
 
@@ -16,6 +16,19 @@ export interface Usage {
   inputTokens?: number
   outputTokens?: number
   costUsd?: number
+}
+
+/** One usage window of an account (the CLIs' 5-hour and weekly windows), as a percent used. Estimates read from the CLIs' own reports. */
+export interface LimitWindow {
+  usedPct: number
+  /** ISO time the window resets. */
+  resetsAt: string
+}
+export interface Limits {
+  fiveHour?: LimitWindow
+  weekly?: LimitWindow
+  /** When we last saw this report. */
+  asOf: string
 }
 
 /** What an agent may do. `read` answers only; `propose` and `act` edit files for review (Keep/Undo); `act` also adds tasks without a click. Outside effects always need a click. */
@@ -54,12 +67,16 @@ export interface AgentMessage {
   attachments?: string[]
 }
 
-export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
+export type RunStatus = 'queued' | 'paused' | 'running' | 'done' | 'error' | 'cancelled'
 
 export interface Run {
   id: string
   agentId: string
   agentName: string
+  /** Account profile the run used. */
+  profile: string
+  /** Set while status is `paused`: why the run waits for the user (budget). */
+  pauseReason?: string
   parentRunId?: string
   input: AgentMessage
   status: RunStatus
@@ -90,12 +107,33 @@ export interface Action {
   resolvedAt?: string
 }
 
+export interface UsageTotal {
+  agentId: string
+  profile: string
+  runs: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+export interface CliInfo {
+  engine: EngineId
+  path?: string
+  version?: string
+  error?: string
+}
+
 export interface AgentsState {
   agents: AgentDef[]
   errors: { id: string; message: string }[]
   runs: Run[]
   approvals: Action[]
   profiles: AccountProfile[]
+  /** Latest 5-hour and weekly window per profile id; null = not seen yet. */
+  limits: Record<string, Limits | null>
+  /** Agent runs per agent and profile, today and over the last 7 days. */
+  totals: { today: UsageTotal[]; week: UsageTotal[] }
+  cli: CliInfo[]
   /** Folder the definitions are read from. */
   dir: string
   /** The unreviewed edits of a propose/act run, shown with Keep/Undo. */

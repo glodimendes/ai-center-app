@@ -18,7 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
-import type { Action, AgentDef } from '@shared/agents'
+import type { AccountProfile, Action, AgentDef } from '@shared/agents'
 import { askJson } from './context/ask'
 import { describeWish, focusPins, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
@@ -43,6 +43,8 @@ export class Controller implements Api {
     vaultRoot: () => this.vault.root,
     agentsDir: () => this.settings.agentsDir || join(this.vault.root, '06_Prompts/agents'),
     userData: app.getPath('userData'),
+    profiles: () => this.settings.profiles,
+    saveProfiles: (profiles) => this.saveSettings({ profiles }),
     context: this.context,
     addTask: (section, body) => this.addTask(section, body),
     completeTask: (id) => this.completeTask(id),
@@ -703,6 +705,15 @@ export class Controller implements Api {
   // --- agents -----------------------------------------------------------
   runAgent(id: string, input: string): Promise<string> {
     return this.agents.run(id, input)
+  }
+  async allowRun(runId: string, raise: boolean) {
+    this.agents.allowRun(runId, raise)
+  }
+  async saveProfiles(list: AccountProfile[]) {
+    this.agents.saveProfiles(list)
+  }
+  testProfile(id: string) {
+    return this.agents.testProfile(id)
   }
   async cancelRun(runId: string) {
     this.agents.cancel(runId)

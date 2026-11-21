@@ -4,6 +4,18 @@ import { join } from 'node:path'
 import { CONTEXT_MODELS } from './models'
 import type { Engine, EngineEvent } from './types'
 
+/** Codex reports `primary` (300 min = 5 h) and `secondary` (10080 min = weekly) with used_percent and resets_at (epoch seconds). */
+export function codexLimits(rl: any): { fiveHour?: { usedPct: number; resetsAt: string }; weekly?: { usedPct: number; resetsAt: string } } {
+  const out: ReturnType<typeof codexLimits> = {}
+  for (const w of [rl?.primary, rl?.secondary]) {
+    if (!w || typeof w.used_percent !== 'number' || !w.resets_at) continue
+    const win = { usedPct: w.used_percent, resetsAt: new Date(w.resets_at * 1000).toISOString() }
+    if (w.window_minutes === 300) out.fiveHour = win
+    else if (w.window_minutes === 10080) out.weekly = win
+  }
+  return out
+}
+
 /**
  * Codex CLI. It has no switch to turn its shell off, so the sandbox is the limit: `workspace-write` for edits
  * (writes stay inside the folder, no network) and `read-only` from an empty folder for answers.
@@ -27,6 +39,7 @@ export const codexCli: Engine = {
     const item = ev.item ?? ev.msg
     if (item?.type === 'file_change') for (const ch of item.changes ?? []) out.push({ type: 'file_change', path: String(ch.path) })
     if (item?.type === 'agent_message' && item.text) out.push({ type: 'text', text: String(item.text) })
+    if (item?.type === 'token_count' && item.rate_limits) out.push({ type: 'limits', limits: codexLimits(item.rate_limits) })
     if (item?.type === 'token_count' && item.info?.total_token_usage) {
       const u = item.info.total_token_usage
       out.push({ type: 'usage', usage: { inputTokens: u.input_tokens, outputTokens: u.output_tokens } })

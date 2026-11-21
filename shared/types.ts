@@ -345,6 +345,8 @@ export interface Settings {
   briefEmail: boolean
   /** Where agent definitions live; default the vault's 06_Prompts/agents/. */
   agentsDir?: string
+  /** Account profiles; unset = one default profile per CLI (claude, codex). */
+  profiles?: import('./agents').AccountProfile[]
   /** Calendars hidden from Today/Week/Brief (display only). */
   hiddenCalendars: string[]
   /** Per-event "busy"/"free" overrides, keyed by `${calendarId}:${eventId}`. */

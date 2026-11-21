@@ -9,6 +9,7 @@ import { AreaSettings, DurationInput, input } from './settings/AreaSettings'
 import { StrategySettings } from './settings/StrategySettings'
 import { DayRules } from './settings/DayRules'
 import { BriefPromptEditor } from './settings/BriefPrompt'
+import { EnginesSettings } from './settings/Engines'
 
 const DAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
@@ -80,6 +81,10 @@ export function Settings() {
               </select>
               <span className="text-[11.5px] text-faint">gets only the question's text and can't change anything (Codex runs read-only from an empty folder)</span>
             </label>
+          </Card>
+
+          <Card title="Engines & accounts" desc="The AI CLIs this app runs, one profile per login. Agents pick a profile; when its 5-hour or weekly window reaches the ceiling, a run pauses and asks you.">
+            <EnginesSettings />
           </Card>
 
           <Card title="Calendar" desc="Reads all your calendars to find free time and writes approved blocks into each area's calendar. Only events the planner created are ever changed, and edits you make in your calendar win.">
