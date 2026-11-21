@@ -16,12 +16,12 @@ This folder is the git worktree `/Users/glodimendes/Programming/AI-Center-core` 
 
 ### Start here (handoff, 2026-11-21)
 
-State: the plan is approved; **no expansion code is written yet**. The branch equals `main` at `466c001` plus these doc notes. `npm ci` is done here, `.dev-vault/` and `resources/calendar-helper` were copied from the main folder, and `npm run typecheck` and `npm test` pass (145 passed, 2 skipped).
-1. Read the plan (`~/.claude-eth/plans/sequential-questing-sundae.md`), then start **Phase 0**: engine layer extracted from `context/agent.ts` and `context/ask.ts`, no behaviour change, tests in `tests/engines.test.ts`.
-2. Phase 0 also: give this branch its own dev app-data folder and debug port (not `ai-center-planner-dev/` / 9333), update hard rules 7 and 8 as the plan says, and add `agents/` to the Architecture section.
-3. Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; the Antigravity CLI binary is `agy` (v1.5.9; `-p`, `--output-format stream-json`, `--model`, `--effort`, `--mode`, `acp` subcommand). `gemini` isn't installed.
-4. Nothing is pushed: `ai-center-core` is local only. Push only when the user asks.
-5. Ask the user before long refactors of `controller.ts`; keep commits small and per step so `main` can be merged in without pain.
+State (2026-11-21): **Phase 0 is done and uncommitted** (commit when the user asks). Engine layer in `electron/main/agents/engines/` (types, process, claude-cli, codex-cli, models) plus `agents/profiles.ts`; `context/{agent,ask,brief}.ts` now run through it with the same flags as before; `tests/engines.test.ts` added (156 tests pass, 2 skipped); live Claude ask verified through the new path. This branch uses dev data `ai-center-core-dev/` and debug port 9334 (`main` keeps 9333). Not yet done: running the dev app to check the brief, Update context, Suggest estimates and Plan with a wish by eye (needs the user's OK to start the app), the Codex edit path live, and Phase 0's `usage` events are parsed but not stored anywhere yet.
+Next: Phase 1 (registry, supervisor, permissions, actions, Agents view). Settings `contextEngine`/`askEngine` still hold `'claude' | 'codex'`, which equal the default profile ids; real profile settings (e.g. `claude-eth` with `configDir: ~/.claude-eth`) arrive with Phase 2's Engines & accounts screen.
+1. Read the plan (`~/.claude-eth/plans/sequential-questing-sundae.md`) before each phase; run `git merge main` first.
+2. Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; the Antigravity CLI binary is `agy` (v1.5.9; `-p`, `--output-format stream-json`, `--model`, `--effort`, `--mode`, `acp` subcommand). `gemini` isn't installed.
+3. Nothing is pushed: `ai-center-core` is local only. Push only when the user asks.
+4. Ask the user before long refactors of `controller.ts`; keep commits small and per step so `main` can be merged in without pain.
 
 ### Uniting the two lines (when the user is ready)
 
@@ -35,7 +35,7 @@ Commit messages follow hard rule 5 (no mention of Claude).
 
 ## Hard rules
 
-1. **Never write to the real vault while developing.** `npm run dev` and `npx electron .` use `.dev-vault/` (a scratch copy with its own git, gitignored) and their own app data (`ai-center-planner-dev/`); both are forced in code, so a dev run can't open the real vault even if a settings file says so. Only the packaged app in `/Applications/AI Center.app` uses the real vault. The user runs it daily: never start a second instance against the real vault. Dev runs never auto-run the daily brief (`app.isPackaged` check in `maybeRunBrief`); the "Run daily brief" button still does, against `.dev-vault`.
+1. **Never write to the real vault while developing.** `npm run dev` and `npx electron .` use `.dev-vault/` (a scratch copy with its own git, gitignored) and their own app data (`ai-center-core-dev/` on this branch; `main` uses `ai-center-planner-dev/`); both are forced in code, so a dev run can't open the real vault even if a settings file says so. Only the packaged app in `/Applications/AI Center.app` uses the real vault. The user runs it daily: never start a second instance against the real vault. Dev runs never auto-run the daily brief (`app.isPackaged` check in `maybeRunBrief`); the "Run daily brief" button still does, against `.dev-vault`.
 2. **Vault edits are line-local.** Re-parse the file, find the target by stable id, and change only that line (`electron/main/vault/edits.ts`). Never re-serialize a vault file the app doesn't own: Obsidian, Claude, Codex and a meeting-review automation edit the same files.
 3. **Files the app owns** (may rewrite whole):
    - `05_Tasks/weekly/YYYY-Www.md`: log, pins, overrides, the week's focus notes, its own grid hours and day-rule picks.
@@ -51,8 +51,8 @@ Commit messages follow hard rule 5 (no mention of Claude).
    - The user's calendar edits win: a moved planner event becomes a pin, a deleted one is dismissed (`Controller.adoptCalendarEdits`).
 5. **Git commits never mention Claude**: no `Co-Authored-By: Claude` trailer and no "Claude" in messages. This applies to this repo, to the vault, and to the app's own `planner: …` commits, which use the user's identity. The user asked for this explicitly.
 6. **Commit or push only when the user asks.** The repo is pushed to GitHub: never commit vault content, real task data, settings, tokens or calendar data (`.gitignore` covers the known paths; check `git status` before committing).
-7. **AI must use the cheapest models**: `gpt-5.6-luna` (Codex) and `claude-haiku-5-5` (Claude), medium effort (`CONTEXT_MODELS` in `electron/main/context/agent.ts`). Don't change them without the user asking.
-8. **AI never acts without the user.** The brief is read-only. Update context edits are reviewed (Keep/Undo). Suggested todos need a click.
+7. **Built-in AI uses the cheapest models**: `gpt-5.6-luna` (Codex) and `claude-haiku-5-5` (Claude), medium effort (`CONTEXT_MODELS` in `electron/main/agents/engines/models.ts`). Don't change them without the user asking. A custom agent's model is the user's choice, set in its definition.
+8. **AI never acts without the user.** Each agent has a permission level: `read` (answers only), `propose` (edits reviewed with Keep/Undo) or `act`. Even `act` may at most write the agent's own output files and add/edit tasks. **Completing a task, creating a calendar event, sending email and calling an API always need the user's click**: agents only propose these (Approvals inbox, Phase 1), and code enforces it, never the prompt. Today: the brief is read-only, Update context edits are reviewed, suggested todos need a click.
 9. The vault's own rules apply to any vault content change: `03_Workflows/assistant-file-update-rules.md` and `03_Workflows/context-maintenance.md`.
 10. **Don't design the "Braindump feature"** until the user specifies it (see ROADMAP).
 
@@ -89,7 +89,9 @@ electron/main/
                         a wish" prompt, validation, and writing it into week overrides; day rules live inside plan.ts
   calendar/             provider.ts (interface), macos.ts (→ native/calendar-helper, Swift/EventKit),
                         google.ts (OAuth loopback), sync.ts (pure diff), adopt.ts (pure: which calendar edits win)
-  context/              agent.ts (CLI runs + resolution), session.ts (Update context: snapshot, diff, Keep/Undo),
+  agents/               core, no Electron/UI imports: engines/ (types, process: spawn+stream+timeout+profile env, claude-cli, codex-cli,
+                        models), profiles.ts (account profiles; default = each CLI's own login)
+  context/              agent.ts (Update context run + vault snapshot), session.ts (Update context: snapshot, diff, Keep/Undo),
                         revert.ts (undo only the agent's lines), brief.ts (daily brief prompt + runner),
                         ask.ts (one-shot Haiku question, no tools, JSON answer: estimates, wishes)
 electron/preload/       window.api.call / onState / onProgress / onBriefProgress
@@ -105,13 +107,13 @@ src/                    React 19 + Tailwind 4 + zustand
                         EstimateSuggestions (Tasks), ui (Button, Header, Modal, Popover in a portal, useEscape)
 tests/                  vitest: vault, scheduler, sync, brief, context, inbox. sample/ = synthetic files (committed);
                         fixtures/ = copies of real vault files (gitignored, optional: their tests skip when absent)
-scripts/cdp.mjs         screenshot / eval in the running app over the DevTools protocol (port 9333)
+scripts/cdp.mjs         screenshot / eval in the running app over the DevTools protocol (port 9334 on this branch via `CDP_PORT`, `main` uses 9333)
 scripts/make-icon.swift app icon → build/icon.png/.icns (npm run build:icon; electron-builder picks up build/icon.icns)
 ```
 
 Data flow: the main process computes `AppState` (vault + calendar + plan + brief status) and pushes it on every change (`state` channel). The renderer calls `api.<method>()` and never touches files. To add a call, put the method in `shared/api.ts` and implement it on `Controller`; the preload proxy needs no change.
 
-**App data** (`~/Library/Application Support/AI Center Planner/`, kept from before the rename; dev: `ai-center-planner-dev/`; both set in `electron/main/index.ts`; dev always uses `.dev-vault` even if a settings file says otherwise):
+**App data** (`~/Library/Application Support/AI Center Planner/`, kept from before the rename; dev: `ai-center-core-dev/` here, `ai-center-planner-dev/` on `main`; both set in `electron/main/index.ts`; dev always uses `.dev-vault` even if a settings file says otherwise):
 - `settings.json`
 - `plan-cache.json`: last plan, so blocks stay stable across restarts.
 - `sync-state.json`: what was synced, plus dismissals from calendar deletions.
@@ -130,7 +132,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ```bash
 npm test              # 145 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
-npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
+npm run build && npx electron . --remote-debugging-port=9334 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
 #   main-process calls from the renderer: window.api.call('<method>', ...args)
 cd .dev-vault && git status && git log --oneline | head   # confirm exactly what the app wrote

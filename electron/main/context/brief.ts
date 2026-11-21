@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process'
 import type { CalEvent } from '@shared/types'
-import { CONTEXT_MODELS, keepTail, resolveBinary, stop } from './agent'
+import { ENGINES, EngineTimeout, runEngine } from '../agents/engines'
+import { findProfile } from '../agents/profiles'
 
 // In-app daily brief. Runs Claude Code headlessly (cheapest model) inside the vault with read-only
 // tools: vault files and Gmail reads. Calendar events come only from the app (the calendars shown in
@@ -72,64 +72,29 @@ export function buildBriefPrompt(template: string, { date, events, includeEmail 
 }
 
 export async function runBrief(vault: string, template: string, date: string, events: CalEvent[], includeEmail: boolean, onProgress: (line: string) => void): Promise<string> {
-  const bin = await resolveBinary('claude')
+  const profile = findProfile('claude')
   const allowed = includeEmail ? READ_TOOLS : READ_TOOLS.filter((t) => !t.includes('Gmail'))
-  const child = spawn(
-    bin,
-    [
-      '-p',
-      buildBriefPrompt(template, { date, events, includeEmail }),
-      '--model',
-      CONTEXT_MODELS.claude.model,
-      '--effort',
-      CONTEXT_MODELS.claude.effort,
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--allowedTools',
-      ...allowed,
-      '--disallowedTools',
-      ...BLOCKED,
-      '--no-session-persistence'
-    ],
-    { cwd: vault, stdio: ['ignore', 'pipe', 'pipe'] }
-  )
-  let buf = ''
-  let result = ''
-  let stderr = ''
-  child.stdout.on('data', (chunk: Buffer) => {
-    buf += chunk.toString()
-    let nl: number
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim()
-      buf = buf.slice(nl + 1)
-      try {
-        const ev = JSON.parse(line)
-        if (ev.type === 'assistant')
-          for (const c of ev.message?.content ?? []) {
-            if (c.type !== 'tool_use') continue
-            const name = String(c.name)
-            if (name.includes('Gmail')) onProgress('Reading email…')
-            else if (name.includes('Calendar')) onProgress('Checking calendar…')
-            else if (name === 'Read') onProgress(`Reading ${String(c.input?.file_path ?? '').replace(vault + '/', '')}`)
-          }
-        if (ev.type === 'result') result = String(ev.result ?? '')
-      } catch {
-        /* noise */
-      }
+  const run = await runEngine(ENGINES[profile.engine], {
+    profile,
+    mode: 'tools',
+    prompt: buildBriefPrompt(template, { date, events, includeEmail }),
+    cwd: vault,
+    allowedTools: allowed,
+    disallowedTools: BLOCKED,
+    timeoutMs: 5 * 60_000,
+    onEvent: (ev) => {
+      if (ev.type !== 'tool') return
+      if (ev.name.includes('Gmail')) onProgress('Reading email…')
+      else if (ev.name.includes('Calendar')) onProgress('Checking calendar…')
+      else if (ev.name === 'Read') onProgress(`Reading ${ev.target.replace(vault + '/', '')}`)
     }
   })
-  child.stderr.on('data', (c: Buffer) => (stderr = keepTail(stderr + c.toString())))
-  return new Promise((resolve, reject) => {
-    let timedOut = false
-    const timer = setTimeout(() => ((timedOut = true), stop(child)), 5 * 60_000)
-    child.on('error', reject)
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      if (timedOut) return reject(new Error('The brief took more than 5 minutes and was stopped. Try again later.'))
-      const md = result.trim()
-      if (!md.includes('## ')) return reject(new Error(stderr.trim().split('\n').slice(-2).join(' ') || `The brief run ended without a brief (code ${code}).`))
-      resolve(md)
-    })
-  })
+  try {
+    const r = await run.done
+    const md = r.text
+    if (!md.includes('## ')) throw new Error(r.stderr.trim().split('\n').slice(-2).join(' ') || `The brief run ended without a brief (code ${r.code}).`)
+    return md
+  } catch (e) {
+    throw e instanceof EngineTimeout ? new Error('The brief took more than 5 minutes and was stopped. Try again later.') : e
+  }
 }

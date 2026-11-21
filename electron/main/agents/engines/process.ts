@@ -1,0 +1,95 @@
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { promisify } from 'node:util'
+import type { AccountProfile, Engine, EngineEvent, EngineRun, RunResult, RunSpec, Usage } from './types'
+
+const exec = promisify(execFile)
+
+/** The packaged app doesn't inherit the shell PATH, so ask a login shell where the CLI lives. */
+export async function resolveBinary(name: string): Promise<string> {
+  for (const p of [`/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`]) if (existsSync(p)) return p
+  const { stdout } = await exec('/bin/zsh', ['-lc', `command -v ${name}`])
+  const p = stdout.trim()
+  if (!p) throw new Error(`Couldn't find the "${name}" command. Install it or switch the engine in Settings.`)
+  return p
+}
+
+/** SIGTERM, then SIGKILL if the CLI hasn't exited 5 s later, so a stuck run can't hold up quitting. */
+export function stop(child: ChildProcess) {
+  if (child.exitCode !== null || child.signalCode !== null) return
+  child.kill('SIGTERM')
+  const t = setTimeout(() => child.exitCode === null && child.signalCode === null && child.kill('SIGKILL'), 5000)
+  child.once('close', () => clearTimeout(t))
+}
+
+/** Only the tail of stderr matters for an error message. */
+export const keepTail = (s: string) => (s.length > 16_000 ? s.slice(-8_000) : s)
+
+/** Env that points a CLI at the profile's own login; nothing set means the CLI's default account. */
+export function profileEnv(profile: AccountProfile): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (profile.configDir) env[profile.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'] = profile.configDir
+  return env
+}
+
+export class EngineTimeout extends Error {
+  constructor(public readonly timeoutMs: number) {
+    super(`Stopped after ${Math.round(timeoutMs / 1000)} s.`)
+  }
+}
+
+/** Starts the run. Rejects with EngineTimeout, Error('Cancelled.') or the spawn error; a failed exit code resolves, callers decide. */
+export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRun> {
+  const prep = engine.prepare(spec)
+  const bin = await resolveBinary(prep.binary)
+  const child = spawn(bin, prep.args, { cwd: prep.cwd, env: profileEnv(spec.profile), stdio: ['ignore', 'pipe', 'pipe'] })
+
+  let text = ''
+  let isError = false
+  let usage: Usage | undefined
+  let stderr = ''
+  let buf = ''
+  let all = ''
+  const emit = (ev: EngineEvent) => {
+    if (ev.type === 'done') ((text = ev.text), (isError = ev.isError))
+    else if (ev.type === 'text') text = ev.text
+    else if (ev.type === 'usage') usage = { ...usage, ...ev.usage }
+    spec.onEvent?.(ev)
+  }
+  const feed = (line: string) => {
+    try {
+      for (const ev of engine.parse(JSON.parse(line))) emit(ev)
+    } catch {
+      /* non-JSON noise */
+    }
+  }
+  child.stdout!.on('data', (chunk: Buffer) => {
+    if (prep.output === 'none') return
+    if (prep.output === 'json') return void (all += chunk.toString())
+    buf += chunk.toString()
+    let nl: number
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim()
+      buf = buf.slice(nl + 1)
+      if (line) feed(line)
+    }
+  })
+  child.stderr!.on('data', (c: Buffer) => (stderr = keepTail(stderr + c.toString())))
+
+  const cleanup = () => prep.tempDir && rmSync(prep.tempDir, { recursive: true, force: true })
+  const done = new Promise<RunResult>((resolve, reject) => {
+    let timedOut = false
+    const timer = setTimeout(() => ((timedOut = true), stop(child)), spec.timeoutMs)
+    child.on('error', (e) => (clearTimeout(timer), cleanup(), reject(e)))
+    child.on('close', (code, signal) => {
+      clearTimeout(timer)
+      if (prep.output === 'json') feed(all)
+      if (prep.lastMessageFile && existsSync(prep.lastMessageFile)) text = readFileSync(prep.lastMessageFile, 'utf8').trim() || text
+      cleanup()
+      if (timedOut) return reject(new EngineTimeout(spec.timeoutMs))
+      if (signal) return reject(new Error('Cancelled.'))
+      resolve({ text: text.trim(), isError, usage, code, stderr })
+    })
+  })
+  return { done, cancel: () => stop(child) }
+}

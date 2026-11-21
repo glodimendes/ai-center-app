@@ -1,7 +1,7 @@
-// Inspect the running app over the DevTools protocol (start it with --remote-debugging-port=9333).
+// Inspect the running app over the DevTools protocol (start it with --remote-debugging-port=9334; CDP_PORT overrides; main uses 9333).
 // Usage: node scripts/cdp.mjs <out.png> [js-to-eval-in-renderer] [waitMs]
 const [, , out, js, wait = '800'] = process.argv
-const targets = await (await fetch('http://127.0.0.1:9333/json')).json()
+const targets = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT ?? 9334}/json`)).json()
 const page = targets.find((t) => t.type === 'page' && !t.url.includes('#capture'))
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 let id = 0

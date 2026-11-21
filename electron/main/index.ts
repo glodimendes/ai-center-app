@@ -5,7 +5,7 @@ import { Controller } from './controller'
 
 // App data stays in the folder from before the rename to "AI Center" (settings, plan cache, sync state).
 // Dev builds share the productName with the installed app; keep their settings, caches and sync state apart.
-app.setPath('userData', join(app.getPath('appData'), app.isPackaged ? 'AI Center Planner' : 'ai-center-planner-dev'))
+app.setPath('userData', join(app.getPath('appData'), app.isPackaged ? 'AI Center Planner' : 'ai-center-core-dev'))
 
 let main: BrowserWindow | null = null
 let capture: BrowserWindow | null = null

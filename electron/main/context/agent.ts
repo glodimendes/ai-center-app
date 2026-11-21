@@ -1,18 +1,10 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { promisify } from 'node:util'
 import type { ContextEngine } from '@shared/types'
 import { isoDate } from '@shared/time'
+import { ENGINES, EngineTimeout, runEngine } from '../agents/engines'
+import { findProfile } from '../agents/profiles'
 
-const run = promisify(execFile)
-
-/** Cheapest models, chosen by the user for cost. Effort applies to this run only, not the global CLI config. */
-export const CONTEXT_MODELS = {
-  codex: { model: 'gpt-5.6-luna', effort: 'medium' },
-  claude: { model: 'claude-haiku-5-5', effort: 'medium' }
-} as const
 const TEXT_EXT = /\.(md|txt|ya?ml|json)$/i
 const SKIP_DIR = /^(\.git|node_modules|dist|output|\.obsidian)$/
 
@@ -30,15 +22,6 @@ export function snapshotVault(root: string): Map<string, string> {
   }
   walk(root)
   return out
-}
-
-/** The packaged app doesn't inherit the shell PATH, so ask a login shell where the CLI lives. */
-export async function resolveBinary(name: string): Promise<string> {
-  for (const p of [`/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`]) if (existsSync(p)) return p
-  const { stdout } = await run('/bin/zsh', ['-lc', `command -v ${name}`])
-  const p = stdout.trim()
-  if (!p) throw new Error(`Couldn't find the "${name}" command. Install it or switch the engine in Settings.`)
-  return p
 }
 
 function prompt(instruction: string) {
@@ -59,21 +42,12 @@ Read 00_START_HERE.md, 03_Workflows/context-maintenance.md and 03_Workflows/assi
 Finish with a short plain-text summary (at most 5 bullets) of what you changed and why, naming the files.`
 }
 
-/** SIGTERM, then SIGKILL if the CLI hasn't exited 5 s later, so a stuck run can't hold up quitting. */
-export function stop(child: ChildProcess) {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  child.kill('SIGTERM')
-  const t = setTimeout(() => child.exitCode === null && child.signalCode === null && child.kill('SIGKILL'), 5000)
-  child.once('close', () => clearTimeout(t))
-}
-
-/** Only the tail of stderr matters for an error message. */
-export const keepTail = (s: string) => (s.length > 16_000 ? s.slice(-8_000) : s)
-
 export interface AgentRun {
   done: Promise<string>
   cancel: () => void
 }
+
+const VERBS: Record<string, string> = { Read: 'Reading', Edit: 'Editing', Write: 'Writing', Glob: 'Looking for', Grep: 'Searching' }
 
 /**
  * Runs the chosen CLI headlessly inside the vault. Claude gets file tools only (no shell, no web).
@@ -82,99 +56,27 @@ export interface AgentRun {
  * Progress lines (e.g. "Editing 04_Context_Docs/current-priorities.md") are reported as they happen.
  */
 export async function runContextAgent(engine: ContextEngine, vault: string, instruction: string, onProgress: (line: string) => void): Promise<AgentRun> {
-  let child: ChildProcess
-  let lastMessage: string | null = null
+  const profile = findProfile(engine)
   const rel = (p?: string) => (p ? relative(vault, p) || p : '')
-
-  if (engine === 'codex') {
-    const bin = await resolveBinary('codex')
-    const outDir = mkdtempSync(join(tmpdir(), 'planner-codex-'))
-    lastMessage = join(outDir, 'last.txt')
-    child = spawn(bin, ['exec', '-m', CONTEXT_MODELS.codex.model, '-c', `model_reasoning_effort="${CONTEXT_MODELS.codex.effort}"`, '-C', vault, '-s', 'workspace-write', '--skip-git-repo-check', '--ephemeral', '--json', '-o', lastMessage, prompt(instruction)], {
-      cwd: vault,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-  } else {
-    const bin = await resolveBinary('claude')
-    child = spawn(
-      bin,
-      [
-        '-p',
-        prompt(instruction),
-        '--model',
-        CONTEXT_MODELS.claude.model,
-        '--effort',
-        CONTEXT_MODELS.claude.effort,
-        '--output-format',
-        'stream-json',
-        '--verbose',
-        '--permission-mode',
-        'acceptEdits',
-        '--allowedTools',
-        'Read',
-        'Edit',
-        'Write',
-        'Glob',
-        'Grep',
-        '--disallowedTools',
-        'Bash',
-        'WebFetch',
-        'WebSearch',
-        '--no-session-persistence'
-      ],
-      { cwd: vault, stdio: ['ignore', 'pipe', 'pipe'] }
-    )
-  }
-
-  let buf = ''
-  let result = ''
-  let stderr = ''
-  child.stdout!.on('data', (chunk: Buffer) => {
-    buf += chunk.toString()
-    let nl: number
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim()
-      buf = buf.slice(nl + 1)
-      if (!line) continue
-      try {
-        const ev = JSON.parse(line)
-        // Claude Code stream-json
-        if (ev.type === 'assistant') {
-          for (const c of ev.message?.content ?? []) {
-            if (c.type === 'tool_use') {
-              const target = rel(c.input?.file_path) || c.input?.pattern || ''
-              const verb = { Read: 'Reading', Edit: 'Editing', Write: 'Writing', Glob: 'Looking for', Grep: 'Searching' }[c.name as string] ?? c.name
-              onProgress(`${verb} ${target}`.trim())
-            }
-          }
-        }
-        if (ev.type === 'result') result = String(ev.result ?? '')
-        // Codex --json
-        const item = ev.item ?? ev.msg
-        if (item?.type === 'file_change') for (const ch of item.changes ?? []) onProgress(`Editing ${rel(ch.path)}`)
-        if (item?.type === 'agent_message' && item.text) result = item.text
-      } catch {
-        /* non-JSON noise */
-      }
+  const run = await runEngine(ENGINES[profile.engine], {
+    profile,
+    mode: 'edit',
+    prompt: prompt(instruction),
+    cwd: vault,
+    timeoutMs: 6 * 60_000,
+    onEvent: (ev) => {
+      if (ev.type === 'tool') onProgress(`${VERBS[ev.name] ?? ev.name} ${ev.name === 'Read' || ev.name === 'Edit' || ev.name === 'Write' ? rel(ev.target) : ev.target}`.trim())
+      if (ev.type === 'file_change') onProgress(`Editing ${rel(ev.path)}`)
     }
   })
-  child.stderr!.on('data', (c: Buffer) => (stderr = keepTail(stderr + c.toString())))
-
-  const done = new Promise<string>((resolve, reject) => {
-    let timedOut = false
-    const timer = setTimeout(() => ((timedOut = true), stop(child)), 6 * 60_000)
-    child.on('error', reject)
-    child.on('close', (code, signal) => {
-      clearTimeout(timer)
-      if (lastMessage && existsSync(lastMessage)) {
-        result = readFileSync(lastMessage, 'utf8').trim() || result
-        rmSync(join(lastMessage, '..'), { recursive: true, force: true })
-      }
-      if (timedOut) return reject(new Error('Stopped after 6 minutes without finishing. Nothing was kept.'))
-      if (signal) return reject(new Error('Cancelled.'))
-      if (code !== 0 && !result) return reject(new Error(stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${code}.`))
-      resolve(result.trim())
-    })
-  })
-  return { done, cancel: () => stop(child) }
+  const done = run.done.then(
+    (r) => {
+      if (r.code !== 0 && !r.text) throw new Error(r.stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${r.code}.`)
+      return r.text
+    },
+    (e) => {
+      throw e instanceof EngineTimeout ? new Error('Stopped after 6 minutes without finishing. Nothing was kept.') : e
+    }
+  )
+  return { done, cancel: run.cancel }
 }
