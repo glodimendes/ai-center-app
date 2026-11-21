@@ -176,6 +176,10 @@ export interface Api {
   /** A paused (over-budget) run starts once; `raise` also lifts the account's ceiling by 20 points. */
   allowRun(runId: string, raise: boolean): Promise<void>
   saveProfiles(list: AccountProfile[]): Promise<void>
+  /** One chat turn with a custom agent: continues its conversation (Claude `--resume`, Codex `exec resume`); returns the run id. */
+  chatSend(agentId: string, text: string): Promise<string>
+  /** Forgets the agent's conversation and transcript. */
+  chatReset(agentId: string): Promise<void>
   /** Gmail sign-in (read mail, create drafts; never send) with the Google client set for the calendar. */
   connectGmail(): Promise<void>
   disconnectGmail(): Promise<void>
@@ -200,7 +204,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

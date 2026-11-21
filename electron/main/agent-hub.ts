@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
-import type { AccountProfile, Action, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
+import { randomUUID } from 'node:crypto'
+import type { AccountProfile, Action, ChatMessage, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
@@ -65,6 +66,9 @@ export class AgentHub {
   private cli: CliInfo[] = []
   private limitsFile: string
   private triggersFile: string
+  private chatDir: string
+  /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
+  private chats = new Map<string, { sessionId?: string; messages: ChatMessage[] }>()
   /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
   private lastFired: Record<string, number> = {}
 
@@ -75,6 +79,7 @@ export class AgentHub {
     } catch {
       /* limits are re-read from the CLIs */
     }
+    this.chatDir = join(deps.userData, 'chats')
     this.triggersFile = join(deps.userData, 'triggers.json')
     try {
       if (existsSync(this.triggersFile)) this.lastFired = JSON.parse(readFileSync(this.triggersFile, 'utf8'))
@@ -139,6 +144,7 @@ export class AgentHub {
       cli: this.cli,
       sources: this.deps.sources() ?? [],
       gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
+      chats: Object.fromEntries([...this.chats].map(([id, c]) => [id, c.messages.slice(-100)])),
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
@@ -254,6 +260,45 @@ export class AgentHub {
       this.deps.saveProfiles(list)
     }
     this.supervisor.allow(runId)
+  }
+
+  private chat(agentId: string) {
+    let c = this.chats.get(agentId)
+    if (!c) {
+      const file = join(this.chatDir, `${agentId}.json`)
+      try {
+        c = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined
+      } catch {
+        c = undefined
+      }
+      this.chats.set(agentId, (c ??= { messages: [] }))
+    }
+    return c
+  }
+
+  private saveChat(agentId: string) {
+    try {
+      mkdirSync(this.chatDir, { recursive: true })
+      writeFileSync(join(this.chatDir, `${agentId}.json`), JSON.stringify(this.chat(agentId)))
+    } catch {
+      /* the transcript stays in memory */
+    }
+  }
+
+  /** One chat turn: a run that continues the agent's conversation. It queues, passes the budget gate and, for propose/act agents, is reviewed like any run. */
+  sendChat(agentId: string, text: string): string {
+    const def = this.registry.get(agentId)
+    if (!def) throw new AgentError('That agent no longer exists.')
+    if (!text.trim()) throw new AgentError('Write a message first.')
+    if (this.busy(agentId)) throw new AgentError('This agent is still working on something. Wait for it to finish.')
+    this.chat(agentId)
+    return this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true }).id
+  }
+
+  resetChat(agentId: string) {
+    this.chats.set(agentId, { messages: [] })
+    this.saveChat(agentId)
+    this.deps.push()
   }
 
   addSample(id: string) {
@@ -391,7 +436,12 @@ export class AgentHub {
     const root = this.deps.vaultRoot()
     const date = isoDate(new Date())
     const sources = await buildSourceBundle(def.sources, this.deps.sources() ?? [], root, undefined, () => this.deps.gmail.api())
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
+    const chat = run.chat ? this.chat(def.id) : undefined
+    // First turn: Claude takes a session id we choose; Codex reports its own (kept after the run). Later turns resume it.
+    const engine = this.profiles().find((p) => p.id === def.profile)?.engine
+    const session = chat ? (chat.sessionId ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
+    let sessionId: string | undefined
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {
@@ -400,7 +450,7 @@ export class AgentHub {
       const res = await this.deps.context.update(run.input.text, async () => {
         let cancel = () => {}
         const p = go((c) => (cancel = c))
-        return { done: p.then((r) => ((usage = r.usage), r.text)), cancel: () => cancel() }
+        return { done: p.then((r) => ((usage = r.usage), (sessionId = r.sessionId), r.text)), cancel: () => cancel() }
       })
       text = res.summary
       if (res.changes.length) this.reviewRunId = run.id
@@ -408,6 +458,7 @@ export class AgentHub {
       const r = await go(sig.cancel)
       text = r.text
       usage = r.usage
+      sessionId = r.sessionId
     }
     if (def.output === 'actions' || def.output === 'suggestions') {
       const parsed = parseActions(text)
@@ -421,6 +472,13 @@ export class AgentHub {
       writeFileSync(join(root, rel), `# ${def.name} · ${date}\n\n${text}\n`)
       run.outputFile = rel
       onProgress(`Wrote ${rel}`)
+    }
+    if (chat) {
+      // The turn counts only once it succeeded; a failed one leaves the conversation as it was.
+      if (sessionId) chat.sessionId = sessionId
+      const t = new Date().toISOString()
+      chat.messages.push({ role: 'user', text: run.input.text, t }, { role: 'agent', text, t, runId: run.id })
+      this.saveChat(def.id)
     }
     this.cache = null
     return { text, usage }

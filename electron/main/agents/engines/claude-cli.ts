@@ -13,20 +13,22 @@ export const claudeCli: Engine = {
     const model = spec.model ?? CONTEXT_MODELS.claude.model
     const effort = spec.effort ?? CONTEXT_MODELS.claude.effort
     const base = ['-p', spec.prompt, '--model', model, '--effort', effort]
-    const none = '--no-session-persistence'
-    if (spec.mode === 'ask') return { binary: 'claude', args: [...base, '--output-format', 'json', '--tools', '', '--strict-mcp-config', none], cwd: spec.cwd, output: 'json' }
+    // A chat keeps its session on disk so the next turn can resume it; every other run leaves nothing behind.
+    const none = spec.session ? (spec.session.resume ? '--resume' : '--session-id') : '--no-session-persistence'
+    const sessArgs = (rest: string[]) => (spec.session ? [...rest, none, spec.session.id] : [...rest, none])
+    if (spec.mode === 'ask') return { binary: 'claude', args: sessArgs([...base, '--output-format', 'json', '--tools', '', '--strict-mcp-config']), cwd: spec.cwd, output: 'json' }
     if (spec.mode === 'read')
-      return { binary: 'claude', args: [...base, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...READ_ONLY, '--disallowedTools', ...NO_WRITE, '--strict-mcp-config', none], cwd: spec.cwd, output: 'stream' }
+      return { binary: 'claude', args: sessArgs([...base, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...READ_ONLY, '--disallowedTools', ...NO_WRITE, '--strict-mcp-config']), cwd: spec.cwd, output: 'stream' }
     if (spec.mode === 'edit')
       return {
         binary: 'claude',
-        args: [...base, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--allowedTools', ...FILE_TOOLS, '--disallowedTools', ...NO_SHELL, none],
+        args: sessArgs([...base, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--allowedTools', ...FILE_TOOLS, '--disallowedTools', ...NO_SHELL]),
         cwd: spec.cwd,
         output: 'stream'
       }
     return {
       binary: 'claude',
-      args: [...base, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...(spec.allowedTools ?? []), '--disallowedTools', ...(spec.disallowedTools ?? []), none],
+      args: sessArgs([...base, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...(spec.allowedTools ?? []), '--disallowedTools', ...(spec.disallowedTools ?? [])]),
       cwd: spec.cwd,
       output: 'stream'
     }

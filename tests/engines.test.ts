@@ -89,3 +89,28 @@ describe('account profiles', () => {
     expect(() => findProfile('nope')).toThrow(/nope/)
   })
 })
+
+describe('chat sessions', () => {
+  const base = { prompt: 'P', cwd: '/vault', timeoutMs: 1 }
+  it('Claude: the first turn names a session id, later turns resume it, and no other run keeps a session', () => {
+    const first = claudeCli.prepare({ ...spec('read', 'claude'), ...base, session: { id: 'abc', resume: false } })
+    expect(after(first.args, '--session-id')).toEqual(['abc'])
+    expect(first.args).not.toContain('--no-session-persistence')
+    const next = claudeCli.prepare({ ...spec('read', 'claude'), ...base, session: { id: 'abc', resume: true } })
+    expect(after(next.args, '--resume')).toEqual(['abc'])
+    expect(claudeCli.prepare(spec('read', 'claude')).args).toContain('--no-session-persistence')
+  })
+  it('Codex: the first turn keeps its thread (not ephemeral, json) and later turns resume it with the sandbox as config', () => {
+    const first = codexCli.prepare({ ...spec('read', 'codex'), session: { id: '', resume: false } })
+    expect(first.args).not.toContain('--ephemeral')
+    expect(first.args).toContain('--json')
+    expect(after(first.args, '-s')).toEqual(['read-only'])
+    const next = codexCli.prepare({ ...spec('read', 'codex'), session: { id: 'thread-1', resume: true } })
+    expect(next.args.slice(0, 2)).toEqual(['exec', 'resume'])
+    expect(next.args).toContain('thread-1')
+    expect(next.args).toContain('sandbox_mode="read-only"')
+    expect(next.args).not.toContain('-s')
+    expect(spec('read', 'codex')).toBeTruthy()
+    expect(codexCli.parse({ type: 'thread.started', thread_id: 'thread-1' })).toEqual([{ type: 'session', id: 'thread-1' }])
+  })
+})

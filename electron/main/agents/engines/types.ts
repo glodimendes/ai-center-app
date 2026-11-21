@@ -9,6 +9,7 @@ export type EngineEvent =
   | { type: 'file_change'; path: string }
   | { type: 'text'; text: string }
   | { type: 'usage'; usage: Usage }
+  | { type: 'session'; id: string }
   | { type: 'limits'; limits: Omit<Limits, 'asOf'> }
   | { type: 'done'; text: string; isError: boolean }
 
@@ -24,6 +25,8 @@ export interface RunSpec {
   profile: AccountProfile
   mode: RunMode
   prompt: string
+  /** A conversation that continues across runs: `resume` false starts it with this id (Claude) or lets the CLI pick one (Codex reports it). */
+  session?: { id: string; resume: boolean }
   /** Per-run override; unset = the cheap built-in default (CONTEXT_MODELS). */
   model?: string
   effort?: string
@@ -41,6 +44,8 @@ export interface RunResult {
   /** The CLI itself said the run failed (Claude `is_error`). */
   isError: boolean
   usage?: Usage
+  /** The conversation's id as the CLI reported it (Codex), or the one we asked for. */
+  sessionId?: string
   code: number | null
   stderr: string
 }

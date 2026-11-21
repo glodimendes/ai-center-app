@@ -47,6 +47,7 @@ export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRu
   let text = ''
   let isError = false
   let usage: Usage | undefined
+  let sessionId: string | undefined = spec.session?.id
   let stderr = ''
   let buf = ''
   let all = ''
@@ -54,6 +55,7 @@ export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRu
     if (ev.type === 'done') ((text = ev.text), (isError = ev.isError))
     else if (ev.type === 'text') text = ev.text
     else if (ev.type === 'usage') usage = { ...usage, ...ev.usage }
+    else if (ev.type === 'session') sessionId = ev.id
     spec.onEvent?.(ev)
   }
   const feed = (line: string) => {
@@ -88,7 +90,7 @@ export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRu
       cleanup()
       if (timedOut) return reject(new EngineTimeout(spec.timeoutMs))
       if (signal) return reject(new Error('Cancelled.'))
-      resolve({ text: text.trim(), isError, usage, code, stderr })
+      resolve({ text: text.trim(), isError, usage, sessionId, code, stderr })
     })
   })
   return { done, cancel: () => stop(child) }

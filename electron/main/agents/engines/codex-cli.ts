@@ -31,11 +31,17 @@ export const codexCli: Engine = {
     const edit = spec.mode === 'edit'
     // `read` looks at the vault but can't write (read-only sandbox); `ask` sees nothing.
     const cwd = edit || spec.mode === 'read' ? spec.cwd : dir
-    const args = ['exec', '-m', model, '-c', `model_reasoning_effort="${effort}"`, '-C', cwd, '-s', edit ? 'workspace-write' : 'read-only', '--skip-git-repo-check', '--ephemeral', ...(edit ? ['--json'] : []), '-o', last, spec.prompt]
-    return { binary: 'codex', args, cwd, output: edit ? 'stream' : 'none', lastMessageFile: last, tempDir: dir }
+    const sandbox = edit ? 'workspace-write' : 'read-only'
+    const common = ['-m', model, '-c', `model_reasoning_effort="${effort}"`, '--skip-git-repo-check']
+    // A chat keeps its thread so the next turn can resume it. `exec resume` has no -s/-C: the sandbox goes in as config, the folder is the process cwd.
+    const args = spec.session?.resume
+      ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, '--json', '-o', last, spec.session.id, spec.prompt]
+      : ['exec', ...common, '-C', cwd, '-s', sandbox, ...(spec.session ? [] : ['--ephemeral']), ...(edit || spec.session ? ['--json'] : []), '-o', last, spec.prompt]
+    return { binary: 'codex', args, cwd, output: edit || spec.session ? 'stream' : 'none', lastMessageFile: last, tempDir: dir }
   },
   parse(ev): EngineEvent[] {
     const out: EngineEvent[] = []
+    if (ev.type === 'thread.started' && ev.thread_id) out.push({ type: 'session', id: String(ev.thread_id) })
     const item = ev.item ?? ev.msg
     if (item?.type === 'file_change') for (const ch of item.changes ?? []) out.push({ type: 'file_change', path: String(ch.path) })
     if (item?.type === 'agent_message' && item.text) out.push({ type: 'text', text: String(item.text) })

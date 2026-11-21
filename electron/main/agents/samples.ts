@@ -31,17 +31,19 @@ Keep the task text in its original language. In your answer, give one line per s
   {
     def: {
       ...base,
-      id: 'training-coach',
-      name: 'Training coach',
+      id: 'routine-coach',
+      name: 'Routine coach',
       profile: 'claude',
       permission: 'read',
       output: 'actions',
-      description: 'Looks at your training notes, the TRAINING tasks and recent weeks, and proposes next sessions as tasks.',
-      instructions: `You are my hybrid-training coach. Read 02_Projects/hybrid-training.md, the "## TRAINING" section of 05_Tasks/daily-todos.md, and the newest files in 05_Tasks/weekly/ to see what I actually did.
+      description: 'Example: tell it which routine to look after (training, study, a language…); it reads your notes and tasks and proposes the next steps as tasks.',
+      instructions: `You look after one of my routines. The routine is named in my message for this run (for example "training" or "Spanish practice"); if it isn't, ask me which one in your answer and propose nothing.
 
-Judge load and recovery from what is written (do not invent data), then propose the next 3 to 5 sessions. Each proposal is an "add-task" action with payload {"section": ["TRAINING"], "body": "<task line in my existing style, with an estimate like ~1h and a due: date if useful>"}. Keep each body in the same language and format as the existing TRAINING tasks.
+Find what I have written about it: search the vault's notes and the task list (05_Tasks/daily-todos.md) for that routine, and read the newest weekly files in 05_Tasks/weekly/ to see what I actually did. Any data sources given below are extra evidence. Do not invent facts about what I did.
 
-In your answer, give a short reasoning (at most 6 lines): what the recent weeks show and why these sessions. If notes from Strava or Garmin were given as a source, use them; otherwise say what data you are missing.`
+Judge consistency and load from what is written, then propose the next 3 to 5 steps. Each is an "add-task" action with payload {"section": ["<the heading where that routine's tasks live>"], "body": "<task line in my existing style, with an estimate like ~1h and a due: date if useful>"}. Match the language and format of the existing tasks.
+
+In your answer, give a short reasoning (at most 6 lines): what the recent weeks show, why these steps, and what data you are missing.`
     }
   },
   {

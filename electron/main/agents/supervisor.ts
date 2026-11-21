@@ -31,13 +31,14 @@ export class Supervisor {
     private gate?: Gate
   ) {}
 
-  enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string } = {}): Run {
+  enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string; chat?: boolean } = {}): Run {
     const run: Run = {
       id: `${Date.now().toString(36)}-${++this.seq}`,
       agentId: def.id,
       agentName: def.name,
       profile: def.profile,
       parentRunId: opts.parentRunId,
+      chat: opts.chat || undefined,
       input: { from: opts.from ?? 'user', to: def.id, text },
       status: 'queued',
       queuedAt: new Date().toISOString(),

@@ -725,6 +725,12 @@ export class Controller implements Api {
   async allowRun(runId: string, raise: boolean) {
     this.agents.allowRun(runId, raise)
   }
+  async chatSend(agentId: string, text: string): Promise<string> {
+    return this.agents.sendChat(agentId, text)
+  }
+  async chatReset(agentId: string) {
+    this.agents.resetChat(agentId)
+  }
   async connectGmail() {
     await this.gmail.connect()
     this.push()

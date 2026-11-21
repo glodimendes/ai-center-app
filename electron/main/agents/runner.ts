@@ -12,7 +12,9 @@ const ACTIONS_FORMAT = `If you want something done outside your own output (add 
 \`\`\`
 Use payload {"section": ["Heading"], "body": "task text"} for add-task, {"taskId": "..."} for complete-task, {"agent": "agent-id", "input": "..."} for run-agent (hands work to another agent), and the agent's fields (id, name, permission, output, instructions, triggers) for new-agent. Nothing in that block happens without the user's click.`
 
-export function buildPrompt(def: AgentDef, input: string, date: string, sources = ''): string {
+/** A resumed chat turn is just the user's message: the CLI already holds the instructions and earlier turns. */
+export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false): string {
+  if (resumed) return input.trim()
   const parts = [def.instructions, `Today is ${date}.`]
   if (sources) parts.push(sources)
   if (input.trim()) parts.push(`The user's input for this run:\n"""\n${input.trim()}\n"""`)
@@ -33,10 +35,12 @@ export interface RunContext {
   timeoutMs?: number
   /** Text of the agent's data sources (see sources.ts), already fetched. */
   sources?: string
+  /** Continue (or start) a chat conversation for this agent. */
+  session?: { id: string; resume: boolean }
 }
 
 /** Runs one agent definition through its engine, with the permission mapped to flags. Returns the final text. */
-export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext): Promise<{ text: string; usage?: Usage }> {
+export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext): Promise<{ text: string; usage?: Usage; sessionId?: string }> {
   const profile = findProfile(def.profile, ctx.profiles)
   const cwd = def.workdir ? join(ctx.vaultRoot, def.workdir) : ctx.vaultRoot
   const rel = (p: string) => (p ? relative(ctx.vaultRoot, p) || p : '')
@@ -44,7 +48,8 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: engineMode(def.permission),
-    prompt: buildPrompt(def, input, ctx.date, ctx.sources),
+    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume),
+    session: ctx.session,
     model: def.model,
     effort: def.effort,
     cwd,
@@ -60,7 +65,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
     const r = await run.done
     if (r.isError) throw new Error(r.text || 'The model returned an error.')
     if (r.code !== 0 && !r.text) throw new Error(r.stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${r.code}.`)
-    return { text: r.text, usage: r.usage }
+    return { text: r.text, usage: r.usage, sessionId: r.sessionId }
   } catch (e) {
     throw e instanceof EngineTimeout ? new Error(`Stopped after ${Math.round(timeoutMs / 60_000)} minutes without finishing.`) : e
   }

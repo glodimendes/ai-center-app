@@ -87,6 +87,8 @@ export interface Run {
   output?: AgentMessage
   error?: string
   usage?: Usage
+  /** True when this run is one turn of the agent's chat. */
+  chat?: boolean
   /** Vault file the app wrote from the answer (output: file). */
   outputFile?: string
 }
@@ -144,6 +146,14 @@ export interface SampleInfo {
   added: boolean
 }
 
+export interface ChatMessage {
+  role: 'user' | 'agent'
+  text: string
+  t: string
+  /** The run that produced it (agent messages). */
+  runId?: string
+}
+
 export interface AgentsState {
   agents: AgentDef[]
   errors: { id: string; message: string }[]
@@ -158,6 +168,8 @@ export interface AgentsState {
   sources: SourceDef[]
   gmail: { configured: boolean; connected: boolean }
   samples: SampleInfo[]
+  /** Chat transcripts per agent id (the last 100 messages each). */
+  chats: Record<string, ChatMessage[]>
   /** Folder the definitions are read from. */
   dir: string
   /** The unreviewed edits of a propose/act run, shown with Keep/Undo. */

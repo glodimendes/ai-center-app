@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Bot, Check, Pause, ChevronDown, ChevronRight, Loader2, Pencil, Play, Plus, Square, Trash2, Undo2, X } from 'lucide-react'
+import { Bot, Check, MessageSquare, Pause, ChevronDown, ChevronRight, Loader2, Pencil, Play, Plus, Square, Trash2, Undo2, X } from 'lucide-react'
 import type { AgentDef, AgentOutput, Permission, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { ChangesList } from '@/components/ChangesList'
+import { AgentChat } from '@/components/AgentChat'
 import { Button, Empty, Header, Modal } from '@/components/ui'
 
 const PERMISSION_HELP: Record<Permission, string> = {
@@ -29,6 +30,7 @@ export function Agents() {
   const a = s.agents
   const [editing, setEditing] = useState<AgentDef | null>(null)
   const [running, setRunning] = useState<AgentDef | null>(null)
+  const [chatting, setChatting] = useState<string | null>(null)
   const pending = a.approvals.filter((x) => x.status === 'pending')
   const runsFor = (id: string) => a.runs.filter((r) => r.agentId === id).slice(-1)[0]
 
@@ -126,6 +128,11 @@ export function Agents() {
                         </Button>
                       </>
                     )}
+                    {!g.builtin && (
+                      <Button kind="default" onClick={() => setChatting(g.id)} title="Multi-turn conversation with this agent">
+                        <MessageSquare size={12} /> Chat
+                      </Button>
+                    )}
                     <Button kind="default" onClick={() => (g.builtin ? act(api.runAgent(g.id, '')) : setRunning(g))} title={g.builtin && g.id !== 'daily-brief' ? 'Runs from its own place in the app' : 'Run now'}>
                       <Play size={12} /> Run now
                     </Button>
@@ -159,6 +166,7 @@ export function Agents() {
       </div>
       {editing && <Editor def={editing} onClose={() => setEditing(null)} />}
       {running && <RunDialog def={running} onClose={() => setRunning(null)} />}
+      {chatting && a.agents.find((g) => g.id === chatting) && <AgentChat def={a.agents.find((g) => g.id === chatting)!} onClose={() => setChatting(null)} />}
     </div>
   )
 }
