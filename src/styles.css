@@ -6,16 +6,20 @@
   --color-bg: #f7f7f8;
   --color-panel: #ffffff;
   --color-sunken: #f0f0f2;
-  --color-line: #e4e4e8;
+  --color-line: #ebebee;
   --color-ink: #17181c;
   --color-muted: #6b6f7a;
   --color-faint: #a2a6b0;
-  --color-accent: #4f46e5;
-  --color-accent-soft: #eef0ff;
+  --color-accent: #265537;
+  --color-accent-soft: #e6f0ea;
   --color-danger: #dc2626;
   --color-warn: #b45309;
   --color-warn-soft: #fff7e6;
   --color-ok: #059669;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
 }
 
@@ -24,12 +28,13 @@
     --color-bg: #0b0d12;
     --color-panel: #12151c;
     --color-sunken: #0f1218;
-    --color-line: #232733;
+    --color-line: #1e222c;
     --color-ink: #e8e9ee;
     --color-muted: #9298a6;
     --color-faint: #5d6372;
-    --color-accent: #8b85ff;
-    --color-accent-soft: #1d1f3a;
+    /* a lighter tint of the brand green: #265537 is too dark to read on the dark theme */
+    --color-accent: #3d8b5c;
+    --color-accent-soft: #15261c;
     --color-warn: #f0b35a;
     --color-warn-soft: #2a2213;
   }

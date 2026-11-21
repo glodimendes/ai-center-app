@@ -40,7 +40,7 @@ export function InboxView() {
           {!s.vault.inbox.length && <Empty>Inbox is empty.</Empty>}
           {[...byDate].map(([date, items]) => (
             <section key={date} className="mt-6">
-              <h3 className="text-[11px] uppercase tracking-wide text-faint mb-1">{date}</h3>
+              <h3 className="text-[12px] text-faint mb-1">{date}</h3>
               {items.map((i) => (
                 <Item key={i.id} item={i} />
               ))}

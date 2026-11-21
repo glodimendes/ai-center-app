@@ -87,7 +87,7 @@ export function Brief() {
         <Button onClick={() => (setDay(today), go('today'))}>Open Today</Button>
       </Header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 @max-3xl:px-4 py-5 flex flex-col gap-5">
+        <div className="max-w-5xl mx-auto px-6 @max-3xl:px-4 py-8 flex flex-col gap-6">
           {s.brief.running && (
             <div className="rounded-lg bg-accent-soft px-4 py-2.5 text-[12.5px] flex items-center gap-2">
               <Loader2 size={14} className="animate-spin text-accent" />
@@ -101,7 +101,7 @@ export function Brief() {
               <Button onClick={() => act(api.generateBrief())}>Try again</Button>
             </div>
           )}
-          <div className="grid grid-cols-4 @max-3xl:grid-cols-2 gap-3">
+          <div className="grid grid-cols-4 @max-3xl:grid-cols-2 gap-4">
             <Stat icon={<Timer size={14} />} label="Planned work" value={fmtDuration(plannedMin)}>
               <div className="flex h-1.5 rounded-full overflow-hidden mt-2 bg-sunken">
                 {[...byArea].map(([k, m]) => (
@@ -120,7 +120,7 @@ export function Brief() {
             {!s.calendar.connected && <div className="mt-2 text-[11.5px] text-faint">Calendar not connected: showing planned blocks only (Settings → Calendar).</div>}
           </Card>
 
-          <div className="grid grid-cols-2 @max-3xl:grid-cols-1 gap-5">
+          <div className="grid grid-cols-2 @max-3xl:grid-cols-1 gap-6">
             <Card title="Emails / attention" icon={<Mail size={14} />} source={attention ? 'AI brief' : undefined}>
               {attention ? <Md text={attention.body} /> : <NoBrief running={s.brief.running} />}
             </Card>
@@ -140,7 +140,7 @@ export function Brief() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-3 @max-5xl:grid-cols-2 @max-3xl:grid-cols-1 gap-5">
+          <div className="grid grid-cols-3 @max-5xl:grid-cols-2 @max-3xl:grid-cols-1 gap-6">
             <Card title="Due" icon={<Flag size={14} />}>
               <TaskList title="Overdue" tasks={overdue} tone="danger" />
               <TaskList title="Today" tasks={dueToday} />
@@ -285,10 +285,10 @@ function Ribbon({ events, blocks, onPick }: { events: CalEvent[]; blocks: Block[
 
 function Card({ title, icon, source, children }: { title: string; icon: ReactNode; source?: string; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-panel p-4 min-w-0">
-      <div className="flex items-center gap-2 mb-3">
+    <section className="rounded-2xl border border-line bg-panel p-5 min-w-0">
+      <div className="flex items-center gap-2 mb-4">
         <span className="text-accent">{icon}</span>
-        <h2 className="text-[13px] font-semibold flex-1 min-w-0 truncate">{title}</h2>
+        <h2 className="text-[14px] font-semibold flex-1 min-w-0 truncate">{title}</h2>
         {source && <span className="text-[10.5px] text-faint truncate max-w-[50%]" title={source}>{source}</span>}
       </div>
       {children}
@@ -298,12 +298,12 @@ function Card({ title, icon, source, children }: { title: string; icon: ReactNod
 
 function Stat({ icon, label, value, sub, tone, children }: { icon: ReactNode; label: string; value: string; sub?: string; tone?: 'warn'; children?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-4 py-3 min-w-0">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted">
+    <div className="rounded-2xl border border-line bg-panel px-5 py-4 min-w-0">
+      <div className="flex items-center gap-1.5 text-[12px] text-muted">
         {icon} {label}
       </div>
-      <div className={cx('text-[18px] font-semibold mt-0.5 truncate', tone === 'warn' && 'text-warn')}>{value}</div>
-      {sub && <div className="text-[11px] text-faint truncate">{sub}</div>}
+      <div className={cx('text-[22px] font-semibold mt-1 truncate', tone === 'warn' && 'text-warn')}>{value}</div>
+      {sub && <div className="text-[12px] text-faint truncate">{sub}</div>}
       {children}
     </div>
   )
@@ -314,9 +314,9 @@ function TaskList({ title, tasks, tone }: { title: string; tasks: Task[]; tone?:
   if (!tasks.length) return null
   return (
     <div className="mb-3">
-      <div className={cx('text-[10.5px] uppercase tracking-wide mb-1', tone === 'danger' ? 'text-danger' : 'text-faint')}>{title}</div>
+      <div className={cx('text-[12px] mb-1', tone === 'danger' ? 'text-danger' : 'text-faint')}>{title}</div>
       {tasks.slice(0, 6).map((t) => (
-        <div key={t.id} className="flex items-center gap-1.5 text-[12px] py-0.5">
+        <div key={t.id} className="flex items-center gap-2 text-[13px] py-1">
           <Dot color={categoryOf(s, t.category).color} />
           <span className="truncate flex-1" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
           <span className="text-[10.5px] text-faint whitespace-nowrap">{relDay(t.due!)}</span>

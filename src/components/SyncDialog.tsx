@@ -80,7 +80,7 @@ export function SyncDialog({ onClose, day }: { onClose: () => void; day?: string
         )}
         {[...byCal].map(([cal, idx]) => (
           <div key={cal} className="mb-4">
-            <h3 className="text-[11px] uppercase tracking-wide text-faint mb-1.5">{cal}</h3>
+            <h3 className="text-[12px] text-faint mb-1.5">{cal}</h3>
             {idx.map((i) => {
               const o = ops![i]
               return (
@@ -97,7 +97,7 @@ export function SyncDialog({ onClose, day }: { onClose: () => void; day?: string
                   />
                   <span
                     className={cx(
-                      'w-14 shrink-0 text-[10.5px] font-semibold uppercase',
+                      'w-14 shrink-0 text-[12px] font-semibold ',
                       o.op === 'create' && 'text-ok',
                       o.op === 'update' && 'text-accent',
                       o.op === 'delete' && 'text-danger'

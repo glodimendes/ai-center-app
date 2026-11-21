@@ -18,11 +18,6 @@ export function ReplanButton() {
   const at = new Date(plan.fullPlannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-faint whitespace-nowrap @max-6xl:hidden" title="Blocks keep their place until the next full re-plan (each morning, after a preference change, or when you click Re-plan). Adding or finishing tasks only changes what's inside them.">
-        Planned {at}
-        {variant.key !== 'balanced' && ` · ${variant.label}`}
-        {variant.seed !== undefined && ' (shuffled)'}
-      </span>
       <Button onClick={() => setOpen(true)} label="Re-plan" title={`Re-plan: compare strategies and rearrange everything that isn't pinned or already started. Planned ${at}${variant.key !== 'balanced' ? ` · ${variant.label}` : ''}`}>
         <RotateCcw size={13} />
       </Button>

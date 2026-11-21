@@ -261,7 +261,7 @@ export function TaskRow({
       <div className="relative">
         <button
           onClick={() => setPop(pop === 'postpone' ? null : 'postpone')}
-          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', postponed ? 'bg-indigo-500/10 text-indigo-500' : 'text-faint hidden group-hover:flex')}
+          className={cx('flex items-center gap-1 px-1.5 h-5 rounded text-[11px] whitespace-nowrap', postponed ? 'bg-accent/10 text-accent' : 'text-faint hidden group-hover:flex')}
           title={postponed ? `Postponed: not planned before ${postponed}` : 'Postpone: not planned before a date'}
         >
           <MoonZzz size={11} />

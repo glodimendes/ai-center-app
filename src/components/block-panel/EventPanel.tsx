@@ -46,7 +46,7 @@ export function EventEditor({ ev }: { ev: CalEvent }) {
   const field = 'h-7 px-2 rounded-md border border-line bg-bg text-[12.5px]'
   return (
     <div className="mt-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint mb-1.5">Edit event</div>
+      <div className="text-[12px] font-medium text-faint mb-1.5">Edit event</div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} className={cx(field, 'w-full')} />
       {!ev.allDay && (
         <div className="flex items-center gap-1.5 mt-1.5">
@@ -95,7 +95,7 @@ export function EventAvailability({ ev }: { ev: CalEvent }) {
   const selected = overridden ? value : null
   return (
     <div className="mt-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint mb-1.5">Show as</div>
+      <div className="text-[12px] font-medium text-faint mb-1.5">Show as</div>
       <div className="flex rounded-md border border-line overflow-hidden text-[12px]">
         {AVAILABILITY_OPTIONS.map((o) => (
           <button

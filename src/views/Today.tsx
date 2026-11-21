@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, Moon, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, Moon, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -16,7 +16,7 @@ import { CalendarFilter } from '@/components/CalendarFilter'
 import { SyncDialog } from '@/components/SyncDialog'
 import { Shutdown } from '@/components/Shutdown'
 import { AddBlockButton, NewBlockDialog, type BlockDraft } from '@/components/NewBlock'
-import { Button, Dot, Header, useEscape } from '@/components/ui'
+import { Button, Dot, Header, MoreMenu, useEscape } from '@/components/ui'
 
 export function Today() {
   const { state, day, setDay, selectedBlockId, selectBlock, go } = useStore()
@@ -27,6 +27,10 @@ export function Today() {
   const [wrapUp, setWrapUp] = useState(false)
   // Narrow windows: the task list is a drawer over the timeline, hidden while a task is dragged out of it.
   const [listOpen, setListOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  // Sort and filters stay tucked away until used; an active filter keeps them visible so it can't be forgotten.
+  const filtersActive = view.areas.length > 0 || view.show !== 'all'
+  const showFilters = filtersOpen || filtersActive
   const [dragging, setDragging] = useState(false)
   useEscape(() => setListOpen(false), listOpen)
   const filter = view.q
@@ -80,17 +84,9 @@ export function Today() {
             <AlertTriangle size={13} /> {alertCount}
           </Button>
         )}
-        {isToday && (
-          <Button kind="ghost" onClick={() => setWrapUp(true)} label="Wrap up" title="Wrap up the day: log blocks, deal with what's left, see tomorrow">
-            <Moon size={13} />
-          </Button>
-        )}
         <AddBlockButton day={day} onOpen={setDraft} />
         <ReplanButton />
         <CalendarFilter />
-        <Button kind="ghost" onClick={() => act(api.refreshCalendar())} title="Refresh calendar">
-          <RefreshCw size={13} />
-        </Button>
         <Button onClick={() => setDay(isoDate(addDays(date, -1)))}>
           <ChevronLeft size={14} />
         </Button>
@@ -109,6 +105,12 @@ export function Today() {
         >
           <CloudUpload size={13} />
         </Button>
+        <MoreMenu
+          items={[
+            { label: 'Wrap up the day', icon: <Moon size={14} />, onClick: () => setWrapUp(true), hidden: !isToday },
+            { label: 'Refresh calendar', icon: <RefreshCw size={14} />, onClick: () => void act(api.refreshCalendar()) }
+          ]}
+        />
       </Header>
 
 
@@ -139,12 +141,24 @@ export function Today() {
             </button>
           )}
           <div className="px-3 pb-2 flex flex-col gap-1.5">
-            <input
-              value={filter}
-              onChange={(e) => setView({ q: e.target.value })}
-              placeholder="Search tasks…"
-              className="w-full h-7 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
-            />
+            <div className="flex gap-1.5">
+              <input
+                value={filter}
+                onChange={(e) => setView({ q: e.target.value })}
+                placeholder="Search tasks…"
+                className="flex-1 min-w-0 h-8 px-3 rounded-lg bg-sunken text-[12.5px] outline-none placeholder:text-faint"
+              />
+              <button
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                title="Sort and filter"
+                className={cx('relative shrink-0 w-8 h-8 grid place-items-center rounded-lg', showFilters ? 'bg-sunken text-ink' : 'text-faint hover:bg-sunken')}
+              >
+                <SlidersHorizontal size={14} />
+                {filtersActive && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent" />}
+              </button>
+            </div>
+            {showFilters && (
+              <>
             <div className="flex gap-1.5 text-[11.5px]">
               <label className="flex-1 flex items-center gap-1 text-faint">
                 Sort
@@ -186,14 +200,16 @@ export function Today() {
                 </button>
               )}
             </div>
+              </>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 pb-4">
             <QuickAdd />
-            {todays.length > 0 && <h3 className="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-faint">On this day</h3>}
+            {todays.length > 0 && <h3 className="px-2 pt-3 pb-1 text-[12px] text-faint">On this day</h3>}
             {todays.map((t) => (
               <TaskRow key={t.id} task={t} draggable showSection skipRepeats />
             ))}
-            <h3 className="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-faint">{todays.length ? 'Other tasks' : 'Tasks'} · drag onto the timeline</h3>
+            <h3 className="px-2 pt-3 pb-1 text-[12px] text-faint">{todays.length ? 'Other tasks' : 'Tasks'} · drag onto the timeline</h3>
             {!ordered.length && <div className="px-2 py-2 text-[12px] text-faint">No tasks match.</div>}
             {later.map((t) => (
               <TaskRow key={t.id} task={t} draggable showSection skipRepeats />

@@ -38,7 +38,7 @@ export function CalendarFilter() {
           {calendars.length === 0 && <div className="px-1.5 py-2 text-[12px] text-muted">No calendars found.</div>}
           {[...groups].map(([source, cals]) => (
             <div key={source} className="mb-1">
-              {source && <div className="px-1.5 pt-1.5 pb-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-faint">{source}</div>}
+              {source && <div className="px-1.5 pt-1.5 pb-0.5 text-[12px] font-medium text-faint">{source}</div>}
               {cals.map((c) => {
                 const visible = !hidden.has(c.name)
                 const busy = !ignored.has(c.name)

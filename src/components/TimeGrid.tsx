@@ -178,7 +178,7 @@ export function TimeGrid({ days, items, allDay = [], startHour = 0, endHour = 24
                 const date = parseDate(d)
                 return (
                   <button key={d} onClick={() => onDayClick?.(d)} className="flex-1 min-w-0 py-2 text-center hover:bg-sunken">
-                    <div className={cx('text-[11px] uppercase tracking-wide', i === todayIdx ? 'text-accent font-semibold' : 'text-muted')}>
+                    <div className={cx('text-[12px] ', i === todayIdx ? 'text-accent font-semibold' : 'text-muted')}>
                       {date.toLocaleDateString(undefined, { weekday: 'short' })}
                     </div>
                     <div className={cx('text-[15px] font-semibold', i === todayIdx && 'text-accent')}>{date.getDate()}</div>

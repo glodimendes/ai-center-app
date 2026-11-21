@@ -46,7 +46,7 @@ export function Settings() {
         )}
       </Header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 @max-3xl:px-4 py-6 flex flex-col gap-8">
+        <div className="max-w-3xl mx-auto px-6 @max-3xl:px-4 py-8 flex flex-col gap-10">
           <Card title="Vault" desc="Where tasks, docs and logs are read from and written to.">
             <div className="flex items-center gap-2">
               <code className="flex-1 text-[12px] bg-sunken px-2 py-1.5 rounded-md truncate">{s.vault.vaultPath}</code>
@@ -284,9 +284,9 @@ export function Settings() {
 function Card({ title, desc, children }: { title: string; desc?: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="text-[14px] font-semibold">{title}</h2>
-      {desc && <p className="text-[12px] text-muted mt-0.5 mb-3">{desc}</p>}
-      <div className="rounded-xl border border-line bg-panel p-4 @max-3xl:p-3 min-w-0">{children}</div>
+      <h2 className="text-[17px] font-semibold">{title}</h2>
+      {desc && <p className="text-[13px] text-muted mt-1 mb-4 leading-relaxed">{desc}</p>}
+      <div className="rounded-2xl border border-line bg-panel p-5 @max-3xl:p-3 min-w-0">{children}</div>
     </section>
   )
 }

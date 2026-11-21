@@ -221,7 +221,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
 
       {(tasks.length > 0 || accepts) && (
         <section className="mt-5">
-          <h3 className="text-[11px] uppercase tracking-wide text-faint mb-2">Tasks in this block</h3>
+          <h3 className="text-[12px] text-faint mb-2">Tasks in this block</h3>
           <div className="flex flex-col gap-2">
             {tasks.map(({ task, chunk }) => {
               const st = taskState[task.id] ?? { done: task.done, remaining: '' }
@@ -275,7 +275,7 @@ function BlockDetail({ block, onClose }: { block: Block; onClose: () => void }) 
       )}
 
       <section className="mt-6 border-t border-line pt-4">
-        <h3 className="text-[11px] uppercase tracking-wide text-faint mb-2">{existing ? 'Logged' : ended ? 'Log this block' : started ? 'Log (in progress)' : 'Log time'}</h3>
+        <h3 className="text-[12px] text-faint mb-2">{existing ? 'Logged' : ended ? 'Log this block' : started ? 'Log (in progress)' : 'Log time'}</h3>
         <div className="flex gap-1 mb-3">
           {(['done', 'partial', 'skipped'] as LogStatus[]).map((s) => (
             <button

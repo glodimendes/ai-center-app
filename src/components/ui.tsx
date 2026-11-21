@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { MoreHorizontal } from 'lucide-react'
 import { cx } from '@/lib/util'
 
 export function Button({
@@ -42,9 +43,9 @@ export function Button({
 
 export function Header({ title, children, sub }: { title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="drag-region h-14 shrink-0 flex items-center gap-3 px-5 @max-3xl:px-3 border-b border-line">
+    <header className="drag-region h-14 shrink-0 flex items-center gap-3 px-6 @max-3xl:px-3 border-b border-line/50">
       <div className="min-w-0 flex-1">
-        <h1 className="text-[15px] font-semibold leading-tight truncate">{title}</h1>
+        <h1 className="text-[16px] font-semibold leading-tight truncate">{title}</h1>
         {sub && <div className="text-[11.5px] text-muted leading-tight truncate @max-2xl:hidden">{sub}</div>}
       </div>
       <div className="no-drag flex shrink-0 items-center gap-2 @max-3xl:gap-1">{children}</div>
@@ -159,5 +160,36 @@ export function MoonZzz({ size = 12, className }: { size?: number; className?: s
       <path d="M11 4a7.5 7.5 0 1 0 9 9 6 6 0 0 1-9-9Z" />
       <path d="M15 2.5h4l-4 4h4" strokeWidth={1.7} />
     </svg>
+  )
+}
+
+/** A "…" button with a short list of secondary actions, so a header keeps only what you use most. */
+export function MoreMenu({ items }: { items: { label: string; icon?: ReactNode; onClick: () => void; hidden?: boolean }[] }) {
+  const [open, setOpen] = useState(false)
+  const shown = items.filter((i) => !i.hidden)
+  if (!shown.length) return null
+  return (
+    <div className="relative">
+      <Button kind="ghost" onClick={() => setOpen(!open)} title="More">
+        <MoreHorizontal size={15} />
+      </Button>
+      {open && (
+        <Popover onClose={() => setOpen(false)} align="right" className="w-52">
+          {shown.map((i) => (
+            <button
+              key={i.label}
+              onClick={() => {
+                setOpen(false)
+                i.onClick()
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left hover:bg-sunken"
+            >
+              <span className="text-muted">{i.icon}</span>
+              {i.label}
+            </button>
+          ))}
+        </Popover>
+      )}
+    </div>
   )
 }

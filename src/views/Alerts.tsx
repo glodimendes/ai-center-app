@@ -105,7 +105,7 @@ export function Alerts() {
                   <span className="text-[12px] text-faint">{list.length}</span>
                 </div>
                 <p className="text-[12px] text-muted mt-0.5 mb-2">{g.hint}</p>
-                <div className="rounded-xl border border-line bg-panel divide-y divide-line">
+                <div className="rounded-2xl border border-line bg-panel divide-y divide-line/70">
                   {list.map((item, i) =>
                     item.task ? (
                       <div key={item.task.id} className="px-2 py-2">
@@ -170,7 +170,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 
 function Small({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="px-2 h-6 rounded border border-line text-[11px] text-muted hover:bg-sunken hover:text-ink">
+    <button onClick={onClick} className="px-2.5 h-7 rounded-lg text-[12px] text-muted hover:bg-sunken hover:text-ink">
       {children}
     </button>
   )

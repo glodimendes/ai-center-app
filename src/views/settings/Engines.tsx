@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import type { AccountProfile, LimitWindow, UsageTotal } from '@shared/agents'
 import { api } from '@/lib/api'
@@ -37,6 +37,15 @@ const ENGINE_NOTE: Record<AccountProfile['engine'], string> = {
   ollama: "Local model, text only: it sees the prompt and your sources, can't read the vault or edit files, so it suits read-only agents. No usage windows; the model is unloaded after each run unless you keep it loaded.",
   command: "Any program that takes the prompt and prints an answer. It can't be restricted, so it only runs read-only (text) agents."
 }
+function Field({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+  return (
+    <label className={cx('flex flex-col gap-1', wide && 'col-span-2 @max-3xl:col-span-1')}>
+      <span className="text-muted">{label}</span>
+      {children}
+    </label>
+  )
+}
+
 const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
 
 function Totals({ rows, names }: { rows: UsageTotal[]; names: Map<string, string> }) {
@@ -105,7 +114,7 @@ export function EnginesSettings() {
         const builtin = p.id === 'claude' || p.id === 'codex'
         const hasLimits = p.engine === 'claude' || p.engine === 'codex'
         return (
-          <div key={p.id} className="border border-line rounded-lg p-3 space-y-2.5">
+          <div key={p.id} className="border border-line rounded-xl p-4 space-y-3.5">
             <div className="flex items-center gap-2 flex-wrap">
               <input className={cx(input, 'w-40')} defaultValue={p.label} onBlur={(e) => e.target.value !== p.label && edit(p.id, { label: e.target.value.trim() || p.label })} title="Name shown in the app" />
               <code className="text-[11.5px] text-muted">{p.id}</code>
@@ -120,46 +129,36 @@ export function EnginesSettings() {
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-2 text-[12px] flex-wrap">
+            <div className="grid grid-cols-2 @max-3xl:grid-cols-1 gap-x-4 gap-y-3 text-[12px]">
               {hasLimits && (
-                <>
-                  <span className="text-muted">{p.engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</span>
-                  <input
-                    className={cx(input, 'flex-1 min-w-48 font-mono text-[11.5px]')}
-                    defaultValue={p.configDir ?? ''}
-                    placeholder="empty = the CLI's default login"
-                    onBlur={(e) => e.target.value.trim() !== (p.configDir ?? '') && edit(p.id, { configDir: e.target.value.trim() || undefined })}
-                  />
-                </>
+                <Field label={p.engine === 'claude' ? 'Login folder (CLAUDE_CONFIG_DIR)' : 'Login folder (CODEX_HOME)'}>
+                  <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={p.configDir ?? ''} placeholder="empty = the tool's default login" onBlur={(e) => e.target.value.trim() !== (p.configDir ?? '') && edit(p.id, { configDir: e.target.value.trim() || undefined })} />
+                </Field>
               )}
               {p.engine === 'ollama' && (
                 <>
-                  <span className="text-muted">Server</span>
-                  <input className={cx(input, 'w-56 font-mono text-[11.5px]')} defaultValue={p.baseUrl ?? ''} placeholder="http://127.0.0.1:11434" onBlur={(e) => e.target.value.trim() !== (p.baseUrl ?? '') && edit(p.id, { baseUrl: e.target.value.trim() || undefined })} />
-                  <span className="text-muted" title="0 unloads the model right after each run so it uses memory only while working; or 5m to keep it ready">
-                    Keep loaded
-                  </span>
-                  <input className={cx(input, 'w-16')} defaultValue={p.keepAlive ?? '0'} onBlur={(e) => e.target.value.trim() !== (p.keepAlive ?? '0') && edit(p.id, { keepAlive: e.target.value.trim() || '0' })} />
+                  <Field label="Server">
+                    <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={p.baseUrl ?? ''} placeholder="http://127.0.0.1:11434" onBlur={(e) => e.target.value.trim() !== (p.baseUrl ?? '') && edit(p.id, { baseUrl: e.target.value.trim() || undefined })} />
+                  </Field>
+                  <Field label="Keep model loaded (0 = unload after each run, or 5m)">
+                    <input className={cx(input, 'w-full')} defaultValue={p.keepAlive ?? '0'} onBlur={(e) => e.target.value.trim() !== (p.keepAlive ?? '0') && edit(p.id, { keepAlive: e.target.value.trim() || '0' })} />
+                  </Field>
                 </>
               )}
               {p.engine === 'command' && (
-                <>
-                  <span className="text-muted">Command</span>
-                  <input className={cx(input, 'flex-1 min-w-56 font-mono text-[11.5px]')} defaultValue={joinCommand(p.command)} placeholder='mycli --ask "{prompt}"' onBlur={(e) => edit(p.id, { command: splitCommand(e.target.value) })} />
-                </>
+                <Field label="Command ({prompt} is replaced by the prompt)" wide>
+                  <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={joinCommand(p.command)} placeholder='mycli --ask "{prompt}"' onBlur={(e) => edit(p.id, { command: splitCommand(e.target.value) })} />
+                </Field>
               )}
               {p.engine !== 'command' && (
-                <>
-                  <span className="text-muted">Model</span>
-                  <input className={cx(input, 'w-44 font-mono text-[11.5px]')} defaultValue={p.model ?? ''} placeholder={p.engine === 'ollama' ? 'e.g. qwen3:4b' : 'default'} onBlur={(e) => e.target.value.trim() !== (p.model ?? '') && edit(p.id, { model: e.target.value.trim() || undefined })} />
-                </>
+                <Field label="Model">
+                  <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={p.model ?? ''} placeholder={p.engine === 'ollama' ? 'e.g. qwen3:4b' : 'default'} onBlur={(e) => e.target.value.trim() !== (p.model ?? '') && edit(p.id, { model: e.target.value.trim() || undefined })} />
+                </Field>
               )}
               {hasLimits && (
-                <>
-                  <span className="text-muted">Agents pause at</span>
-                  <input className={cx(input, 'w-16')} type="number" min={1} max={100} defaultValue={ceiling} onBlur={(e) => Number(e.target.value) !== ceiling && edit(p.id, { sharePct: Number(e.target.value) })} />
-                  <span className="text-muted">% of the window</span>
-                </>
+                <Field label="Agents pause at (% of the usage window)">
+                  <input className={cx(input, 'w-24')} type="number" min={1} max={100} defaultValue={ceiling} onBlur={(e) => Number(e.target.value) !== ceiling && edit(p.id, { sharePct: Number(e.target.value) })} />
+                </Field>
               )}
             </div>
             {hasLimits && (

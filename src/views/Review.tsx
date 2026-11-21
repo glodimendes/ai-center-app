@@ -64,7 +64,7 @@ export function Review() {
                   {l.title}
                   {l.note && <span className="text-muted">: {l.note}</span>}
                 </span>
-                <span className={cx('w-16 shrink-0 text-right text-[11px] uppercase @max-xl:hidden', l.status === 'skipped' ? 'text-warn' : 'text-muted')}>{l.status}</span>
+                <span className={cx('w-16 shrink-0 text-right text-[12px] @max-xl:hidden', l.status === 'skipped' ? 'text-warn' : 'text-muted')}>{l.status}</span>
                 <span className="shrink-0 whitespace-nowrap text-right">
                   {fmtDuration(l.actualMin)} <span className="text-faint">/ {fmtDuration(l.plannedMin)}</span>
                 </span>
@@ -92,7 +92,7 @@ export function Review() {
           ))}
         </div>
         <div className="w-[460px] shrink-0 border-l border-line flex flex-col min-h-0 bg-panel @max-5xl:w-auto @max-5xl:min-h-[480px] @max-5xl:border-l-0 @max-5xl:border-t">
-          <div className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-wide text-faint">Current priorities</div>
+          <div className="px-5 pt-3 pb-1 text-[12px] text-faint">Current priorities</div>
           <DocEditor path="04_Context_Docs/current-priorities.md" />
         </div>
       </div>

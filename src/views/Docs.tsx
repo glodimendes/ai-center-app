@@ -51,7 +51,7 @@ export function Docs() {
 function Group({ title, docs, active, onOpen }: { title: string; docs: DocInfo[]; active: string | null; onOpen: (p: string) => void }) {
   return (
     <div className="mt-3">
-      <h3 className="px-2 text-[11px] uppercase tracking-wide text-faint mb-0.5">{title}</h3>
+      <h3 className="px-2 text-[12px] text-faint mb-0.5">{title}</h3>
       {docs.map((d) => (
         <button
           key={title + d.path}
