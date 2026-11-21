@@ -23,6 +23,7 @@ export class Supervisor {
   private queue: { run: Run; def: AgentDef }[] = []
   private current: { run: Run; cancel: () => void; resume?: () => void } | null = null
   private seq = 0
+  private waiters = new Map<string, ((r: Run) => void)[]>()
 
   constructor(
     private execute: Execute,
@@ -58,6 +59,14 @@ export class Supervisor {
 
   get(id: string): Run | undefined {
     return this.runs.find((r) => r.id === id)
+  }
+
+  /** Resolves when the run has finished (done, error or cancelled). */
+  wait(id: string): Promise<Run> {
+    const run = this.get(id)
+    if (!run) return Promise.reject(new Error('Unknown run.'))
+    if (['done', 'error', 'cancelled'].includes(run.status)) return Promise.resolve(run)
+    return new Promise((resolve) => this.waiters.set(id, [...(this.waiters.get(id) ?? []), resolve]))
   }
 
   /** Cancels a queued run at once, or asks the running one to stop. */
@@ -137,6 +146,8 @@ export class Supervisor {
     run.error = status === 'done' ? undefined : error
     run.endedAt = new Date().toISOString()
     this.log(run, { type: 'end', status, profile: run.profile, error: run.error, output: run.output, usage: run.usage })
+    for (const w of this.waiters.get(run.id) ?? []) w(run)
+    this.waiters.delete(run.id)
     if (this.runs.length > 100) this.runs = this.runs.filter((r) => r.status === 'queued' || r.status === 'running' || this.runs.indexOf(r) >= this.runs.length - 100)
     this.onChange()
   }

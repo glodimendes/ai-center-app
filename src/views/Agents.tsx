@@ -6,6 +6,7 @@ import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { ChangesList } from '@/components/ChangesList'
 import { AgentChat } from '@/components/AgentChat'
+import { Goals } from '@/components/Goals'
 import { Button, Empty, Header, Modal } from '@/components/ui'
 
 const PERMISSION_HELP: Record<Permission, string> = {
@@ -161,6 +162,7 @@ export function Agents() {
               </div>
             )}
           </section>
+          <Goals />
           <History runs={a.runs} />
         </div>
       </div>

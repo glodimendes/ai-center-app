@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
-import type { AccountProfile, Action, ChatMessage, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
+import type { AccountProfile, Action, ChatMessage, Goal, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
@@ -13,6 +13,7 @@ import { ENGINES, ollamaModels, profileEnv, resolveBinary, runEngine } from './a
 import { DEFAULT_PROFILES } from './agents/profiles'
 import type { GmailLike } from './agents/gmail'
 import { buildRawDraft } from './agents/gmail'
+import { GoalRunner } from './agents/goals'
 import { SAMPLES } from './agents/samples'
 import { buildSourceBundle } from './agents/sources'
 import { routeCapture } from './agents/capture'
@@ -67,6 +68,8 @@ export class AgentHub {
   private limitsFile: string
   private triggersFile: string
   private chatDir: string
+  private goalDir: string
+  private goals: GoalRunner
   /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
   private chats = new Map<string, { sessionId?: string; messages: ChatMessage[] }>()
   /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
@@ -127,6 +130,33 @@ export class AgentHub {
       deps.push
     )
     this.supervisor = new Supervisor(this.execute, join(deps.userData, 'runs'), deps.push, this.gate)
+    this.goalDir = join(deps.userData, 'goals')
+    let restored: Goal[] = []
+    try {
+      restored = existsSync(this.goalDir) ? readdirSync(this.goalDir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(this.goalDir, f), 'utf8'))) : []
+    } catch {
+      restored = []
+    }
+    this.goals = new GoalRunner(
+      {
+        agents: () => this.registry.list().agents,
+        enqueue: (def, text, opts) => this.supervisor.enqueue(def, text, opts),
+        wait: (id) => this.supervisor.wait(id),
+        cancel: (id) => this.supervisor.cancel(id),
+        // The goal's shared workspace is an app-owned folder in the vault, readable by the user and by agents.
+        write: (rel, text) => {
+          const abs = join(deps.vaultRoot(), rel)
+          mkdirSync(dirname(abs), { recursive: true })
+          writeFileSync(abs, text)
+        },
+        save: (g) => {
+          mkdirSync(this.goalDir, { recursive: true })
+          writeFileSync(join(this.goalDir, `${g.id}.json`), JSON.stringify(g))
+        },
+        onChange: deps.push
+      },
+      restored
+    )
     void this.detectCli()
   }
 
@@ -144,6 +174,7 @@ export class AgentHub {
       cli: this.cli,
       sources: this.deps.sources() ?? [],
       gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
+      goals: this.goals.list().slice(-20),
       chats: Object.fromEntries([...this.chats].map(([id, c]) => [id, c.messages.slice(-100)])),
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
@@ -297,6 +328,18 @@ export class AgentHub {
     return this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true }).id
   }
 
+  startGoal(coordinatorId: string, text: string): string {
+    const def = this.registry.get(coordinatorId)
+    if (!def) throw new AgentError('That agent no longer exists.')
+    return this.goals.start(def, text).id
+  }
+  stopGoal(id: string) {
+    this.goals.stop(id)
+  }
+  resumeGoal(id: string) {
+    this.goals.resume(id)
+  }
+
   resetChat(agentId: string) {
     this.chats.set(agentId, { messages: [] })
     this.saveChat(agentId)
@@ -443,6 +486,7 @@ export class AgentHub {
     this.reviewRunId = null
   }
   async dispose() {
+    for (const g of this.goals.list()) this.goals.stop(g.id, 'The app was closed.')
     this.supervisor.cancelAll()
   }
 

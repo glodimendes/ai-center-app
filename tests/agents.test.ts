@@ -378,3 +378,99 @@ describe('gmail source and drafts', () => {
     expect(payloadText({ mimeType: 'text/html', body: { data: enc('<p>Hi <b>there</b></p>') } })).toBe('Hi there')
   })
 })
+
+import { GOAL_LIMITS, GoalRunner, coordinatorPrompt, parseDelegations, repeatKey } from '../electron/main/agents/goals'
+import type { Goal, Run } from '../shared/agents'
+
+describe('goals: coordinator delegating to agents', () => {
+  const agent = (id: string, perm = 'read') => parseAgent(id, `---\nname: ${id}\npermission: ${perm}\ndescription: does ${id}\n---\nx`)
+  const coord = agent('coord')
+  const fakeRun = (id: string, text: string, status: Run['status'] = 'done'): Run => ({ id, agentId: 'x', agentName: 'x', profile: 'claude', input: { from: 'u', to: 'x', text }, status, queuedAt: '', progress: [], output: { from: 'x', to: 'u', text } })
+
+  /** A supervisor stand-in: each enqueue answers from a script keyed by agent id. */
+  const rig = (script: Record<string, string[]>, agents = [coord, agent('writer'), agent('editor', 'propose')]) => {
+    const files: Record<string, string> = {}
+    const calls: { agent: string; text: string; parent?: string }[] = []
+    let n = 0
+    const runs = new Map<string, Run>()
+    const runner = new GoalRunner({
+      agents: () => agents,
+      enqueue: (def, text, opts) => {
+        calls.push({ agent: def.id, text, parent: opts.parentRunId })
+        const reply = script[def.id]?.shift() ?? 'no script'
+        const r = fakeRun(`r${++n}`, reply, reply === 'FAIL' ? 'error' : 'done')
+        runs.set(r.id, r)
+        return r
+      },
+      wait: async (id) => runs.get(id)!,
+      cancel: () => {},
+      write: (rel, text) => void (files[rel] = text),
+      save: () => {},
+      onChange: () => {}
+    })
+    return { runner, files, calls }
+  }
+  const finished = async (runner: GoalRunner, id: string) => {
+    await vi.waitFor(() => expect(['running']).not.toContain(runner.list().find((g) => g.id === id)!.status))
+    return runner.list().find((g) => g.id === id)!
+  }
+
+  it('parses delegate blocks, drops malformed entries, and treats no block as the final answer', () => {
+    const r = parseDelegations('Plan.\nDelegating now:\n```delegate\n[{"agent":"writer","message":"draft it"},{"agent":"x"},{"message":"m"}]\n```')
+    expect(r.text).toBe('Plan.')
+    expect(r.delegations).toEqual([{ agent: 'writer', message: 'draft it' }])
+    expect(parseDelegations('All done.')).toEqual({ text: 'All done.', delegations: [] })
+    expect(parseDelegations('```delegate\nnot json\n```').delegations).toEqual([])
+  })
+  it('runs turns: delegate, get the result back, then answer; the trail is written to the goal folder', async () => {
+    const { runner, files, calls } = rig({ coord: ['```delegate\n[{"agent":"writer","message":"write a haiku"}]\n```', 'Final: here is the haiku.'], writer: ['old pond / frog jumps in'] })
+    const g = runner.start(coord, 'make a haiku')
+    const done = await finished(runner, g.id)
+    expect(done.status).toBe('done')
+    expect(done.finalText).toBe('Final: here is the haiku.')
+    expect(calls.map((c) => c.agent)).toEqual(['coord', 'writer', 'coord'])
+    expect(calls[1].parent).toBe('r1')
+    expect(calls[2].text).toContain('old pond / frog jumps in')
+    expect(calls[0].text).toContain('writer: writer — does writer')
+    expect(Object.keys(files)).toEqual(expect.arrayContaining([`${g.folder}/plan.md`, `${g.folder}/01-writer.md`, `${g.folder}/result.md`]))
+  })
+  it('only read-only custom agents coordinate, and a coordinator cannot delegate to itself or to built-ins', async () => {
+    const { runner } = rig({})
+    expect(() => runner.start(agent('e', 'propose'), 'x')).toThrow(/permission "read"/)
+    expect(() => runner.start({ ...coord, builtin: true }, 'x')).toThrow(/your own agents/)
+    const { runner: r2, calls } = rig({ coord: ['```delegate\n[{"agent":"coord","message":"loop"},{"agent":"daily-brief","message":"hi"}]\n```', 'ok'] }, [coord, { ...agent('daily-brief'), builtin: true }])
+    const g = r2.start(coord, 'g')
+    const done = await finished(r2, g.id)
+    expect(calls.filter((c) => c.agent !== 'coord')).toEqual([])
+    expect(done.steps[0].delegations.map((d) => d.status)).toEqual(['error', 'error'])
+    expect(done.status).toBe('done')
+  })
+  it('stops and asks on a repeated delegation, then continues when the user says so', async () => {
+    const same = '```delegate\n[{"agent":"writer","message":"Write   a haiku"}]\n```'
+    const { runner } = rig({ coord: [same, same, 'Final after continue'], writer: ['one', 'two'] })
+    const g = runner.start(coord, 'g')
+    const stopped = await finished(runner, g.id)
+    expect(stopped.status).toBe('needs-input')
+    expect(stopped.reason).toMatch(/same thing twice/)
+    runner.resume(g.id)
+    expect((await finished(runner, g.id)).status).toBe('done')
+  })
+  it('limits turns and delegations in code', async () => {
+    const forever = Array(20).fill('```delegate\n[{"agent":"writer","message":"unique ' + '"}]\n```').map((s, i) => s.replace('unique ', `unique ${i}`))
+    const { runner, calls } = rig({ coord: forever, writer: Array(20).fill('r') })
+    const g = runner.start(coord, 'g')
+    const done = await finished(runner, g.id)
+    expect(done.status).toBe('needs-input')
+    expect(done.turns).toBeLessThanOrEqual(GOAL_LIMITS.maxTurns)
+    expect(done.delegations).toBeLessThanOrEqual(GOAL_LIMITS.maxDelegations)
+    expect(calls.length).toBeLessThanOrEqual(GOAL_LIMITS.maxTurns + GOAL_LIMITS.maxDelegations)
+  })
+  it('a failing coordinator turn ends the goal as an error; helpers behave', async () => {
+    const { runner } = rig({ coord: ['FAIL'] })
+    const g = runner.start(coord, 'g')
+    expect((await finished(runner, g.id)).status).toBe('error')
+    expect(repeatKey({ agent: 'a', message: 'Hi  There' })).toBe(repeatKey({ agent: 'a', message: 'hi there' }))
+    const goal = { text: 'T', coordinator: 'coord', steps: [] } as unknown as Goal
+    expect(coordinatorPrompt(goal, [coord])).toContain('There are no other agents')
+  })
+})

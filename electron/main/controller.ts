@@ -728,6 +728,15 @@ export class Controller implements Api {
   async allowRun(runId: string, raise: boolean) {
     this.agents.allowRun(runId, raise)
   }
+  async startGoal(coordinatorId: string, text: string): Promise<string> {
+    return this.agents.startGoal(coordinatorId, text)
+  }
+  async stopGoal(id: string) {
+    this.agents.stopGoal(id)
+  }
+  async resumeGoal(id: string) {
+    this.agents.resumeGoal(id)
+  }
   async chatSend(agentId: string, text: string): Promise<string> {
     return this.agents.sendChat(agentId, text)
   }

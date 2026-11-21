@@ -162,6 +162,33 @@ export interface ChatMessage {
   runId?: string
 }
 
+export interface GoalDelegation {
+  agent: string
+  message: string
+  runId?: string
+  status: 'queued' | 'done' | 'error'
+  result?: string
+}
+
+/** One goal a coordinator agent works on by delegating to other agents. */
+export interface Goal {
+  id: string
+  text: string
+  coordinator: string
+  status: 'running' | 'done' | 'stopped' | 'needs-input' | 'error'
+  /** Why it stopped or needs you (a limit, a loop, an error). */
+  reason?: string
+  createdAt: string
+  turns: number
+  delegations: number
+  steps: { turn: number; coordinatorRunId: string; delegations: GoalDelegation[] }[]
+  finalText?: string
+  /** Vault folder with the plan, each agent's output and the result. */
+  folder: string
+  /** Delegations already made (loop detection). */
+  seen: string[]
+}
+
 export interface AgentsState {
   agents: AgentDef[]
   errors: { id: string; message: string }[]
@@ -178,6 +205,7 @@ export interface AgentsState {
   samples: SampleInfo[]
   /** Chat transcripts per agent id (the last 100 messages each). */
   chats: Record<string, ChatMessage[]>
+  goals: Goal[]
   /** Folder the definitions are read from. */
   dir: string
   /** The unreviewed edits of a propose/act run, shown with Keep/Undo. */

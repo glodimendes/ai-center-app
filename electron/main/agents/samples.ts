@@ -13,6 +13,18 @@ export const SAMPLES: Sample[] = [
   {
     def: {
       ...base,
+      id: 'coordinator',
+      name: 'Coordinator',
+      profile: 'claude',
+      permission: 'read',
+      output: 'reply',
+      description: 'Example: give it a goal under Goals; it splits the work between your other agents and writes the final answer.',
+      instructions: `You are a careful project coordinator. Break the goal into the smallest useful steps, delegate each step to the agent whose description fits best, check what comes back, and only then write the final answer. Prefer a few well-specified delegations over many vague ones. If no agent fits a step, say so in the final answer instead of guessing.`
+    }
+  },
+  {
+    def: {
+      ...base,
       id: 'task-automation',
       name: 'Task automation',
       profile: 'claude',
