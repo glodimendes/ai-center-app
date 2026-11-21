@@ -1,22 +1,7 @@
 // Engine layer of the AI Center core. No Electron or UI imports: it must run headless later.
 
-export type EngineId = 'claude' | 'codex'
-
-/** One login of one CLI. `configDir` is that CLI's home (CLAUDE_CONFIG_DIR / CODEX_HOME); unset = the CLI's default account. */
-export interface AccountProfile {
-  id: string
-  engine: EngineId
-  label: string
-  configDir?: string
-  /** Share of the account's usage window agents may use (Phase 2). */
-  sharePct?: number
-}
-
-export interface Usage {
-  inputTokens?: number
-  outputTokens?: number
-  costUsd?: number
-}
+import type { AccountProfile, EngineId, Usage } from '@shared/agents'
+export type { AccountProfile, EngineId, Usage }
 
 /** What an engine reports while running, whatever the CLI's own format. */
 export type EngineEvent =
@@ -29,14 +14,18 @@ export type EngineEvent =
 /**
  * `edit`: file tools inside `cwd`, edits allowed (Update context).
  * `tools`: only the listed tools, read-only in practice (daily brief).
+ * `read`: may read files in `cwd`, nothing else, nothing written (custom agents with permission `read`).
  * `ask`: no tools, answer only (one-shot JSON questions).
  */
-export type RunMode = 'edit' | 'tools' | 'ask'
+export type RunMode = 'edit' | 'tools' | 'read' | 'ask'
 
 export interface RunSpec {
   profile: AccountProfile
   mode: RunMode
   prompt: string
+  /** Per-run override; unset = the cheap built-in default (CONTEXT_MODELS). */
+  model?: string
+  effort?: string
   /** Where the CLI runs. `ask` ignores it for Codex and uses an empty temp folder. */
   cwd: string
   allowedTools?: string[]

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Loader2, Undo2, Wand2 } from 'lucide-react'
+import { Check, Loader2, Undo2, Wand2 } from 'lucide-react'
 import type { ContextResult } from '@shared/types'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
-import { lineDiff } from '@/lib/diff'
+import { ChangesList } from './ChangesList'
 import { Button, Modal } from './ui'
 
 const EXAMPLES = [
@@ -26,7 +26,6 @@ export function ContextUpdate({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState<string[]>([])
   const [result, setResult] = useState<ContextResult | null>(null)
   const [error, setError] = useState('')
-  const [open, setOpen] = useState<Set<string>>(new Set())
   const box = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => window.api.onProgress((line) => setProgress((p) => (p.at(-1) === line ? p : [...p, line]))), [])
@@ -38,7 +37,6 @@ export function ContextUpdate({ onClose }: { onClose: () => void }) {
     try {
       const r = await api.contextUpdate(text.trim())
       setResult(r)
-      setOpen(new Set(r.changes.slice(0, 1).map((c) => c.path)))
       setPhase('review')
     } catch (e) {
       setError((e as Error).message)
@@ -151,39 +149,7 @@ export function ContextUpdate({ onClose }: { onClose: () => void }) {
             <div className="px-5 py-4 text-[12.5px] text-muted">No files were changed.</div>
           ) : (
             <div className="px-5 py-4">
-              {result.changes.map((c) => {
-                const isOpen = open.has(c.path)
-                const diff = lineDiff(c.before ?? '', c.after).filter((l) => l.kind !== 'same')
-                return (
-                  <div key={c.path} className="border border-line rounded-md mb-2">
-                    <button
-                      onClick={() => {
-                        const n = new Set(open)
-                        if (n.has(c.path)) n.delete(c.path)
-                        else n.add(c.path)
-                        setOpen(n)
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left"
-                    >
-                      {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      <span className="font-medium flex-1 truncate">{c.path}</span>
-                      {c.before === null && <span className="text-ok text-[11px]">new file</span>}
-                      <span className="text-ok text-[11px]">+{diff.filter((l) => l.kind === 'add').length}</span>
-                      <span className="text-danger text-[11px]">−{diff.filter((l) => l.kind === 'del').length}</span>
-                    </button>
-                    {isOpen && (
-                      <pre className="border-t border-line text-[11.5px] leading-relaxed p-2 font-mono whitespace-pre-wrap">
-                        {diff.map((l, i) => (
-                          <div key={i} className={l.kind === 'add' ? 'text-ok bg-ok/10' : 'text-danger bg-danger/10'}>
-                            {l.kind === 'add' ? '+ ' : '− '}
-                            {l.text || ' '}
-                          </div>
-                        ))}
-                      </pre>
-                    )}
-                  </div>
-                )
-              })}
+              <ChangesList changes={result.changes} />
             </div>
           )}
           </div>

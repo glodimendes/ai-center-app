@@ -21,7 +21,13 @@ export class ContextSession {
     private onProgress: (line: string) => void
   ) {}
 
-  async update(instruction: string): Promise<ContextResult> {
+  /** The unreviewed result, if any, so other views can show it. */
+  get pendingResult(): ContextResult | null {
+    return this.pending
+  }
+
+  /** `runner` swaps the built-in Update context agent for another one (a custom agent) while keeping the snapshot, diff and Keep/Undo. */
+  async update(instruction: string, runner?: () => Promise<AgentRun>): Promise<ContextResult> {
     if (this.running) throw new Error('A context update is already running.')
     if (this.pending) throw new Error('Keep or undo the previous context update first.')
     const vault = this.vault()
@@ -31,7 +37,7 @@ export class ContextSession {
       await vault.git.flush()
       const before = snapshotVault(vault.root)
       try {
-        this.agent = await runContextAgent(this.engine(), vault.root, instruction, this.onProgress)
+        this.agent = runner ? await runner() : await runContextAgent(this.engine(), vault.root, instruction, this.onProgress)
         const summary = await this.agent.done
         const after = snapshotVault(vault.root)
         const changes: ContextChange[] = []

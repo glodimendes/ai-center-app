@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CalendarRange, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
+import { AlertTriangle, CalendarRange, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
@@ -13,6 +13,7 @@ import { InboxView } from '@/views/Inbox'
 import { Docs } from '@/views/Docs'
 import { Review } from '@/views/Review'
 import { Settings } from '@/views/Settings'
+import { Agents } from '@/views/Agents'
 import { Alerts, alertItems } from '@/views/Alerts'
 
 /** Calendar glyph with today's day of the month. */
@@ -41,7 +42,8 @@ const NAV: { view: View; label: string; icon: (p: LucideProps) => React.ReactNod
   { view: 'alerts', label: 'Alerts', icon: AlertTriangle, key: '5' },
   { view: 'inbox', label: 'Inbox', icon: Inbox, key: '6' },
   { view: 'docs', label: 'Docs', icon: FileText, key: '7' },
-  { view: 'review', label: 'Review', icon: TrendingUp, key: '8' }
+  { view: 'review', label: 'Review', icon: TrendingUp, key: '8' },
+  { view: 'agents', label: 'Agents', icon: Bot, key: '9' }
 ]
 
 const RAIL_KEY = 'sidebar'
@@ -139,7 +141,7 @@ export function App() {
         </div>
         <nav className="px-2 flex flex-col gap-0.5">
           {NAV.map(({ view: v, label, icon: Icon, key }) => {
-            const count = v === 'inbox' && inboxCount > 0 ? inboxCount : v === 'alerts' && alerts.length > 0 ? alerts.length : 0
+            const count = v === 'inbox' && inboxCount > 0 ? inboxCount : v === 'alerts' && alerts.length > 0 ? alerts.length : v === 'agents' ? state.agents.approvals.filter((x) => x.status === 'pending').length + (state.agents.review ? 1 : 0) : 0
             const countClass = v === 'alerts' ? (urgent ? 'text-danger' : 'text-warn') : 'text-faint'
             return (
               <button
@@ -225,6 +227,7 @@ export function App() {
         {view === 'inbox' && <InboxView />}
         {view === 'docs' && <Docs />}
         {view === 'review' && <Review />}
+        {view === 'agents' && <Agents />}
         {view === 'settings' && <Settings />}
       </main>
       {palette && <CommandPalette onClose={() => setPalette(false)} onUpdateContext={() => setContextOpen(true)} />}

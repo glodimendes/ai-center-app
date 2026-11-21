@@ -343,6 +343,8 @@ export interface Settings {
   /** Generate the daily brief the first time the app opens each day. */
   briefAuto: boolean
   briefEmail: boolean
+  /** Where agent definitions live; default the vault's 06_Prompts/agents/. */
+  agentsDir?: string
   /** Calendars hidden from Today/Week/Brief (display only). */
   hiddenCalendars: string[]
   /** Per-event "busy"/"free" overrides, keyed by `${calendarId}:${eventId}`. */

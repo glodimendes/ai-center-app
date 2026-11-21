@@ -16,8 +16,9 @@ This folder is the git worktree `/Users/glodimendes/Programming/AI-Center-core` 
 
 ### Start here (handoff, 2026-11-21)
 
-State (2026-11-21): **Phase 0 is done and uncommitted** (commit when the user asks). Engine layer in `electron/main/agents/engines/` (types, process, claude-cli, codex-cli, models) plus `agents/profiles.ts`; `context/{agent,ask,brief}.ts` now run through it with the same flags as before; `tests/engines.test.ts` added (156 tests pass, 2 skipped); live Claude ask verified through the new path. This branch uses dev data `ai-center-core-dev/` and debug port 9334 (`main` keeps 9333). Not yet done: running the dev app to check the brief, Update context, Suggest estimates and Plan with a wish by eye (needs the user's OK to start the app), the Codex edit path live, and Phase 0's `usage` events are parsed but not stored anywhere yet.
-Next: Phase 1 (registry, supervisor, permissions, actions, Agents view). Settings `contextEngine`/`askEngine` still hold `'claude' | 'codex'`, which equal the default profile ids; real profile settings (e.g. `claude-eth` with `configDir: ~/.claude-eth`) arrive with Phase 2's Engines & accounts screen.
+State (2026-11-21): **Phase 0 is committed** (`1a8b683`, verified live: brief, Update context via Codex, Suggest estimates, Plan with a wish). **Phase 1 is written, uncommitted**: typecheck clean, `tests/agents.test.ts` + `tests/engines.test.ts` pass; **not yet run in the dev app** (Agents view ⌘9, a custom agent, approvals). Permission rule in code: `read` = read-only engine mode; `propose` and `act` always go through ContextSession review (Keep/Undo); `act` only auto-adds tasks; complete/event/email/API actions need an approve click (`permissions.canAutoRun`, `ApprovalStore`). Built-ins (Daily brief, Update context, Planner assistant) are listed read-only in the Agents view and still run from their own code paths. Not done in Phase 1: file watching of the agents folder (it is re-read on every state push), "New agent from this run", executors for create-event/email-draft/api-call (they fail visibly), data sources.
+**User preference:** don't run tests/typecheck unprompted while building; ask first with a reason.
+Next: try Phase 1 in the dev app with the user, then Phase 2 (usage, budgets, Engines & accounts; real profiles such as `claude-eth` with `configDir: ~/.claude-eth`). Settings `contextEngine`/`askEngine` still hold `'claude' | 'codex'`, which equal the default profile ids.
 1. Read the plan (`~/.claude-eth/plans/sequential-questing-sundae.md`) before each phase; run `git merge main` first.
 2. Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; the Antigravity CLI binary is `agy` (v1.5.9; `-p`, `--output-format stream-json`, `--model`, `--effort`, `--mode`, `acp` subcommand). `gemini` isn't installed.
 3. Nothing is pushed: `ai-center-core` is local only. Push only when the user asks.
@@ -43,6 +44,7 @@ Commit messages follow hard rule 5 (no mention of Claude).
    - `05_Tasks/planner/preferences.md`: frontmatter only; the body is kept.
    - `05_Tasks/briefs/YYYY-MM-DD.md`: the daily brief.
    - `06_Prompts/daily-brief.md`: the brief prompt, written only from Settings.
+   - `06_Prompts/agents/*.md` (or `settings.agentsDir`): custom agent definitions, written only from the Agents view. `05_Tasks/agent-output/<agent>/`: answers of agents with `output: file`, written by the app, never by the agent.
 4. **Calendar safety:**
    - Only planner-tagged events may be changed or deleted by the planner/Sync. macOS: `[planner:<id>]` in the notes, enforced inside the Swift helper too. Google: `extendedProperties.private.aiCenterPlanner`.
    - **Exception, user-approved 2026-11-09: the user's own hand edits.** The event panel (edit title/time, delete with confirm) and dragging an event on the grid call `Controller.editEvent` / `deleteEvent` → provider `userUpdate` / `userRemove` → helper `user-update` / `user-delete` (one occurrence; refuses planner events and read-only calendars). Never call these from Sync, the planner or any AI path.
@@ -89,7 +91,10 @@ electron/main/
                         a wish" prompt, validation, and writing it into week overrides; day rules live inside plan.ts
   calendar/             provider.ts (interface), macos.ts (→ native/calendar-helper, Swift/EventKit),
                         google.ts (OAuth loopback), sync.ts (pure diff), adopt.ts (pure: which calendar edits win)
-  agents/               core, no Electron/UI imports: engines/ (types, process: spawn+stream+timeout+profile env, claude-cli, codex-cli,
+  agent-hub.ts          app glue: runs agents through the supervisor, review via ContextSession, executes approved actions
+  agents/               core, no Electron/UI imports: definition.ts (Markdown+frontmatter), registry.ts, permissions.ts, actions.ts
+                        (ApprovalStore: only approve() runs an executor), supervisor.ts (queue, concurrency 1, runs/*.jsonl), runner.ts;
+                        engines/ (types, process: spawn+stream+timeout+profile env, claude-cli, codex-cli,
                         models), profiles.ts (account profiles; default = each CLI's own login)
   context/              agent.ts (Update context run + vault snapshot), session.ts (Update context: snapshot, diff, Keep/Undo),
                         revert.ts (undo only the agent's lines), brief.ts (daily brief prompt + runner),

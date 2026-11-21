@@ -1,4 +1,4 @@
-import type { AccountProfile } from './engines/types'
+import type { AccountProfile } from '@shared/agents'
 
 /** One profile per CLI, using each CLI's default login: exactly what the app did before profiles existed. */
 export const DEFAULT_PROFILES: AccountProfile[] = [

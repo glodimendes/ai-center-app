@@ -3,15 +3,20 @@ import type { Engine, EngineEvent } from './types'
 
 const FILE_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep']
 const NO_SHELL = ['Bash', 'WebFetch', 'WebSearch']
+const READ_ONLY = ['Read', 'Glob', 'Grep']
+const NO_WRITE = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch']
 
 /** Claude Code CLI. Claude can be restricted tool by tool, so every mode is enforced by flags, not by the prompt. */
 export const claudeCli: Engine = {
   id: 'claude',
   prepare(spec) {
-    const { model, effort } = CONTEXT_MODELS.claude
+    const model = spec.model ?? CONTEXT_MODELS.claude.model
+    const effort = spec.effort ?? CONTEXT_MODELS.claude.effort
     const base = ['-p', spec.prompt, '--model', model, '--effort', effort]
     const none = '--no-session-persistence'
     if (spec.mode === 'ask') return { binary: 'claude', args: [...base, '--output-format', 'json', '--tools', '', '--strict-mcp-config', none], cwd: spec.cwd, output: 'json' }
+    if (spec.mode === 'read')
+      return { binary: 'claude', args: [...base, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...READ_ONLY, '--disallowedTools', ...NO_WRITE, '--strict-mcp-config', none], cwd: spec.cwd, output: 'stream' }
     if (spec.mode === 'edit')
       return {
         binary: 'claude',

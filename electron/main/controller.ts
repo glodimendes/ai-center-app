@@ -17,6 +17,8 @@ import { needsFullPlan, planningDay } from './scheduler/cadence'
 import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
+import { AgentHub } from './agent-hub'
+import type { Action, AgentDef } from '@shared/agents'
 import { askJson } from './context/ask'
 import { describeWish, focusPins, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
@@ -37,6 +39,16 @@ export class Controller implements Api {
   private pulling: Promise<boolean> | null = null
   private lastPull = 0
   private context = new ContextSession(() => this.vault, () => this.settings.contextEngine, (line) => this.emit('context-progress', line))
+  private agents = new AgentHub({
+    vaultRoot: () => this.vault.root,
+    agentsDir: () => this.settings.agentsDir || join(this.vault.root, '06_Prompts/agents'),
+    userData: app.getPath('userData'),
+    context: this.context,
+    addTask: (section, body) => this.addTask(section, body),
+    completeTask: (id) => this.completeTask(id),
+    runBuiltin: () => this.generateBrief(),
+    push: () => this.push()
+  })
   // Plan stability: full re-plans only on demand, once per day, or when preferences change.
   // Everything else is incremental (existing blocks stay put; only their contents refresh).
   private lastPlan: Plan | null = null
@@ -361,7 +373,8 @@ export class Controller implements Api {
       calendar: { ...this.calendar, provider: this.cal.kind, connected: this.cal.connected, configured: this.cal.configured },
       settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined },
       brief: { running: this.briefRunning, error: this.briefError },
-      newTaskIds: this.newTaskIds(vault)
+      newTaskIds: this.newTaskIds(vault),
+      agents: this.agents.state()
     }
   }
 
@@ -687,6 +700,26 @@ export class Controller implements Api {
     return { done, failed }
   }
 
+  // --- agents -----------------------------------------------------------
+  runAgent(id: string, input: string): Promise<string> {
+    return this.agents.run(id, input)
+  }
+  async cancelRun(runId: string) {
+    this.agents.cancel(runId)
+  }
+  async saveAgent(def: AgentDef) {
+    this.agents.save(def)
+  }
+  async deleteAgent(id: string) {
+    this.agents.remove(id)
+  }
+  approveAction(id: string): Promise<Action> {
+    return this.agents.approve(id)
+  }
+  async rejectAction(id: string) {
+    this.agents.reject(id)
+  }
+
   // --- context updates -----------------------------------------------------
   async contextUpdate(instruction: string): Promise<ContextResult> {
     try {
@@ -700,10 +733,12 @@ export class Controller implements Api {
   }
   async contextKeep() {
     await this.context.keep()
+    this.agents.reviewResolved()
     this.push()
   }
   async contextUndo(): Promise<string[]> {
     const skipped = this.context.undo()
+    this.agents.reviewResolved()
     this.push()
     return skipped
   }
@@ -831,6 +866,7 @@ export class Controller implements Api {
   async dispose() {
     if (this.refreshTimer) clearInterval(this.refreshTimer)
     // Unreviewed agent edits are never kept implicitly.
+    await this.agents.dispose()
     this.context.cancel()
     await this.context.running
     this.context.undo()

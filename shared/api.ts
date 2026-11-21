@@ -1,3 +1,4 @@
+import type { Action, AgentDef, AgentsState } from './agents'
 import type {
   Block,
   BriefData,
@@ -74,6 +75,7 @@ export interface AppState {
   brief: { running: boolean; error?: string }
   /** Open tasks that appeared in the todo file from outside the app (an automation, Codex, Obsidian) and aren't reviewed yet. */
   newTaskIds: string[]
+  agents: AgentsState
 }
 
 /** Everything the renderer can ask the main process to do. */
@@ -166,6 +168,13 @@ export interface Api {
   syncApply(ops: SyncOp[]): Promise<{ done: number; failed: string[] }>
   closeCapture(): Promise<void>
   // context updates (agent edits the vault; user keeps or undoes)
+  // agents (custom agents from the agents folder; built-ins are listed but run from their own place)
+  runAgent(id: string, input: string): Promise<string>
+  cancelRun(runId: string): Promise<void>
+  saveAgent(def: AgentDef): Promise<void>
+  deleteAgent(id: string): Promise<void>
+  approveAction(id: string): Promise<Action>
+  rejectAction(id: string): Promise<void>
   contextUpdate(instruction: string): Promise<ContextResult>
   contextCancel(): Promise<void>
   contextKeep(): Promise<void>
@@ -177,7 +186,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, runAgent: true, cancelRun: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

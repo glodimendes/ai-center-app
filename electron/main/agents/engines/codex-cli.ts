@@ -12,11 +12,13 @@ export const codexCli: Engine = {
   id: 'codex',
   prepare(spec) {
     if (spec.mode === 'tools') throw new Error('Codex has no per-tool restrictions, so it can\'t run read-only tool agents like the daily brief.')
-    const { model, effort } = CONTEXT_MODELS.codex
+    const model = spec.model ?? CONTEXT_MODELS.codex.model
+    const effort = spec.effort ?? CONTEXT_MODELS.codex.effort
     const dir = mkdtempSync(join(tmpdir(), 'planner-codex-'))
     const last = join(dir, 'last.txt')
     const edit = spec.mode === 'edit'
-    const cwd = edit ? spec.cwd : dir
+    // `read` looks at the vault but can't write (read-only sandbox); `ask` sees nothing.
+    const cwd = edit || spec.mode === 'read' ? spec.cwd : dir
     const args = ['exec', '-m', model, '-c', `model_reasoning_effort="${effort}"`, '-C', cwd, '-s', edit ? 'workspace-write' : 'read-only', '--skip-git-repo-check', '--ephemeral', ...(edit ? ['--json'] : []), '-o', last, spec.prompt]
     return { binary: 'codex', args, cwd, output: edit ? 'stream' : 'none', lastMessageFile: last, tempDir: dir }
   },
