@@ -1,15 +1,19 @@
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
-import type { AccountProfile, Action, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
+import type { AccountProfile, Action, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
 import { ENGINES, profileEnv, resolveBinary, runEngine } from './agents/engines'
 import { DEFAULT_PROFILES } from './agents/profiles'
+import { SAMPLES } from './agents/samples'
+import { buildSourceBundle } from './agents/sources'
+import { routeCapture } from './agents/capture'
+import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
 import { budgetPause, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
 import { runAgentDef } from './agents/runner'
@@ -31,9 +35,13 @@ export interface HubDeps {
   /** Folder for definitions; default `<vault>/06_Prompts/agents`. */
   agentsDir: () => string
   userData: string
+  /** Triggers spend model calls on their own, so they run only in the packaged app (or with AI_CENTER_TRIGGERS=1). */
+  triggersEnabled: () => boolean
   /** Account profiles from settings; unset = the defaults. */
   profiles: () => AccountProfile[] | undefined
   saveProfiles: (p: AccountProfile[]) => void
+  sources: () => SourceDef[] | undefined
+  saveSources: (s: SourceDef[]) => void
   context: ContextSession
   addTask: (section: string[], body: string) => Promise<void>
   completeTask: (taskId: string) => Promise<void>
@@ -53,6 +61,9 @@ export class AgentHub {
   private codexSeen = new Map<string, number>()
   private cli: CliInfo[] = []
   private limitsFile: string
+  private triggersFile: string
+  /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
+  private lastFired: Record<string, number> = {}
 
   constructor(private deps: HubDeps) {
     this.limitsFile = join(deps.userData, 'limits.json')
@@ -60,6 +71,12 @@ export class AgentHub {
       if (existsSync(this.limitsFile)) for (const [k, v] of Object.entries(JSON.parse(readFileSync(this.limitsFile, 'utf8')))) this.limits.set(k, v as Limits)
     } catch {
       /* limits are re-read from the CLIs */
+    }
+    this.triggersFile = join(deps.userData, 'triggers.json')
+    try {
+      if (existsSync(this.triggersFile)) this.lastFired = JSON.parse(readFileSync(this.triggersFile, 'utf8'))
+    } catch {
+      /* worst case a schedule catches up once more */
     }
     this.registry = new AgentRegistry(deps.agentsDir)
     this.approvals = new ApprovalStore(
@@ -69,6 +86,24 @@ export class AgentHub {
           const { section, body } = a.payload as { section?: unknown; body?: unknown }
           if (!Array.isArray(section) || !section.every((x) => typeof x === 'string') || typeof body !== 'string' || !body.trim()) throw new Error('The proposal has no section or task text.')
           await deps.addTask(section as string[], body.trim())
+        },
+        // Handing work to another agent: still one click, and that run is bound by its own permission and review.
+        'run-agent': async (a) => {
+          const { agent, input } = a.payload as { agent?: unknown; input?: unknown }
+          const def = typeof agent === 'string' ? this.registry.get(agent) : undefined
+          if (!def) throw new Error(`There is no agent "${String(agent)}". Add it first.`)
+          this.supervisor.enqueue(def, typeof input === 'string' ? input : '', { from: a.agentId, parentRunId: a.runId })
+        },
+        // A new definition file is the app's own output; its permission can't exceed `propose` this way.
+        'new-agent': async (a) => {
+          const p = a.payload as Record<string, unknown>
+          const text = (k: string) => (typeof p[k] === 'string' ? (p[k] as string) : undefined)
+          const id = text('id') ?? ''
+          if (this.registry.get(id)) throw new Error(`An agent "${id}" already exists.`)
+          const permission = p.permission === 'propose' ? 'propose' : 'read'
+          const output = ['reply', 'file', 'suggestions', 'actions'].includes(String(p.output)) ? (p.output as AgentDef['output']) : 'reply'
+          const triggers = Array.isArray(p.triggers) && p.triggers.every((t) => typeof t === 'string') ? (p.triggers as string[]) : ['manual']
+          this.registry.save({ id, name: text('name') ?? id, profile: text('profile') ?? 'claude', permission, output, triggers, sources: [], instructions: text('instructions') ?? '', description: text('description') })
         },
         'complete-task': async (a) => {
           if (typeof a.payload.taskId !== 'string') throw new Error('The proposal names no task.')
@@ -93,9 +128,65 @@ export class AgentHub {
       limits: this.currentLimits(),
       totals: this.totals(),
       cli: this.cli,
+      sources: this.deps.sources() ?? [],
+      samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
     }
+  }
+
+  private markFired(id: string) {
+    this.lastFired[id] = Date.now()
+    try {
+      writeFileSync(this.triggersFile, JSON.stringify(this.lastFired))
+    } catch {
+      /* kept in memory */
+    }
+  }
+
+  private busy(agentId: string) {
+    return this.supervisor.list().some((r) => r.agentId === agentId && ['queued', 'paused', 'running'].includes(r.status))
+  }
+
+  /** Starts agents whose schedule or on-open trigger is due. An agent with a run already waiting or going is skipped, so triggers never pile up. */
+  fire(event: TickEvent, now = new Date()): string[] {
+    if (!this.deps.triggersEnabled()) return []
+    const defs = this.registry.list().agents
+    const started: string[] = []
+    for (const id of dueAgents(defs, this.lastFired, now, event)) {
+      const def = defs.find((d) => d.id === id)!
+      if (this.busy(id)) continue
+      this.markFired(id)
+      this.supervisor.enqueue(def, event === 'open' ? 'Started because the app was opened.' : 'Started by its schedule.', { from: 'trigger' })
+      started.push(id)
+    }
+    return started
+  }
+
+  /** A markdown file changed outside the app: runs agents watching it, at most once per 30 s each. Their own outputs never count. */
+  fileChanged(relPath: string) {
+    if (!this.deps.triggersEnabled()) return
+    const agentsRel = relative(this.deps.vaultRoot(), this.deps.agentsDir())
+    const ignore = (p: string) => p.startsWith('05_Tasks/agent-output/') || p.startsWith(`${agentsRel}/`) || p.startsWith('05_Tasks/briefs/')
+    const defs = this.registry.list().agents
+    for (const id of watchMatches(defs, relPath, ignore)) {
+      if (this.busy(id) || Date.now() - (this.lastFired[id] ?? 0) < 30_000) continue
+      this.markFired(id)
+      this.supervisor.enqueue(defs.find((d) => d.id === id)!, `File changed: ${relPath}`, { from: 'trigger' })
+    }
+  }
+
+  /** ⌘⇧Space text: `@agent message` starts that agent; everything else is an inbox line (the caller adds it). */
+  routeCapture(text: string): { kind: 'inbox' } | { kind: 'agent'; agent: string } {
+    const route = routeCapture(text, this.registry.list().agents)
+    if (route.kind === 'inbox') return { kind: 'inbox' }
+    if (route.kind === 'unknown') {
+      const names = this.registry.list().agents.map((a) => `@${a.id}`)
+      throw new Error(`No agent called "${route.name}".${names.length ? ` Agents: ${names.join(', ')}.` : ' There are no custom agents yet.'}`)
+    }
+    this.markFired(route.agent.id)
+    this.supervisor.enqueue(route.agent, route.message, { from: 'capture' })
+    return { kind: 'agent', agent: route.agent.name }
   }
 
   profiles(): AccountProfile[] {
@@ -153,6 +244,32 @@ export class AgentHub {
       this.deps.saveProfiles(list)
     }
     this.supervisor.allow(runId)
+  }
+
+  addSample(id: string) {
+    const sample = SAMPLES.find((x) => x.def.id === id)
+    if (!sample) throw new AgentError('No such sample.')
+    if (this.registry.get(id)) throw new AgentError(`"${sample.def.name}" is already added.`)
+    this.registry.save(sample.def)
+    this.deps.push()
+  }
+
+  saveSources(list: SourceDef[]) {
+    const ids = new Set<string>()
+    for (const s of list) {
+      if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(s.id) || ids.has(s.id)) throw new AgentError(`"${s.id}" is empty, invalid or used twice (lowercase letters, digits, dashes).`)
+      if (!['vault-path', 'file', 'url'].includes(s.kind)) throw new AgentError(`Unknown source kind for "${s.id}".`)
+      ids.add(s.id)
+    }
+    this.deps.saveSources(list)
+    this.deps.push()
+  }
+
+  /** Reads one source now, so the user sees what an agent would get. */
+  async previewSource(id: string): Promise<string> {
+    const def = (this.deps.sources() ?? []).find((s) => s.id === id)
+    if (!def) throw new AgentError('No such source.')
+    return (await buildSourceBundle([id], [def], this.deps.vaultRoot())).slice(0, 4000)
   }
 
   saveProfiles(list: AccountProfile[]) {
@@ -226,6 +343,7 @@ export class AgentHub {
     }
     const def = this.registry.get(id)
     if (!def) throw new Error('That agent no longer exists.')
+    this.markFired(id)
     return this.supervisor.enqueue(def, input).id
   }
 
@@ -262,7 +380,8 @@ export class AgentHub {
   private execute: Execute = async (run, def, onProgress, sig) => {
     const root = this.deps.vaultRoot()
     const date = isoDate(new Date())
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, onLimits: (l) => this.setLimits(def.profile, l) })
+    const sources = await buildSourceBundle(def.sources, this.deps.sources() ?? [], root)
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, run.input.text, { vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {

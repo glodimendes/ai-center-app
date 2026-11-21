@@ -8,12 +8,13 @@ import type { AccountProfile } from './engines/types'
 
 const ACTIONS_FORMAT = `If you want something done outside your own output (add or complete a task, create a calendar event, draft an email, call an API), do NOT do it yourself. End your answer with a fenced block (no introducing sentence or label before it) the app shows to the user for approval:
 \`\`\`actions
-[{"kind": "add-task | complete-task | create-event | email-draft | api-call", "title": "short label for the user", "payload": {"...": "what is needed to do it"}}]
+[{"kind": "add-task | complete-task | create-event | email-draft | api-call | run-agent | new-agent", "title": "short label for the user", "payload": {"...": "what is needed to do it"}}]
 \`\`\`
-Use payload {"section": ["Heading"], "body": "task text"} for add-task, {"taskId": "..."} for complete-task. Nothing in that block happens without the user's click.`
+Use payload {"section": ["Heading"], "body": "task text"} for add-task, {"taskId": "..."} for complete-task, {"agent": "agent-id", "input": "..."} for run-agent (hands work to another agent), and the agent's fields (id, name, permission, output, instructions, triggers) for new-agent. Nothing in that block happens without the user's click.`
 
-export function buildPrompt(def: AgentDef, input: string, date: string): string {
+export function buildPrompt(def: AgentDef, input: string, date: string, sources = ''): string {
   const parts = [def.instructions, `Today is ${date}.`]
+  if (sources) parts.push(sources)
   if (input.trim()) parts.push(`The user's input for this run:\n"""\n${input.trim()}\n"""`)
   if (def.permission === 'read') parts.push('You can only read files; you cannot change anything. Answer in plain text.')
   if (def.permission === 'propose') parts.push('Your file edits are shown to the user as a diff and kept only if they approve. Finish with a short plain-text summary of what you changed.')
@@ -30,6 +31,8 @@ export interface RunContext {
   /** The account's window usage as the CLI reported it during the run. */
   onLimits?: (limits: Omit<Limits, 'asOf'>) => void
   timeoutMs?: number
+  /** Text of the agent's data sources (see sources.ts), already fetched. */
+  sources?: string
 }
 
 /** Runs one agent definition through its engine, with the permission mapped to flags. Returns the final text. */
@@ -41,7 +44,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: engineMode(def.permission),
-    prompt: buildPrompt(def, input, ctx.date),
+    prompt: buildPrompt(def, input, ctx.date, ctx.sources),
     model: def.model,
     effort: def.effort,
     cwd,

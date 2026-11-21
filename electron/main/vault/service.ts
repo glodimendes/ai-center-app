@@ -33,6 +33,8 @@ export class VaultService {
   private changeTimer: NodeJS.Timeout | null = null
   /** Called with the ids of tasks the app's own edits create, so only lines added elsewhere count as new. */
   onOwnTaskIds: (ids: string[]) => void = () => {}
+  /** Vault-relative path of a markdown file changed from outside the app (Obsidian, an agent, an automation). */
+  onExternalChange: (relPath: string) => void = () => {}
   /** What the app itself last wrote per file: the watcher event that write causes is not news. */
   private ownWrites = new Map<string, string>()
   readonly git: VaultGit
@@ -457,6 +459,7 @@ export class VaultService {
         this.ownWrites.delete(path)
         if (existsSync(path) && readFileSync(path, 'utf8') === own) return
       }
+      this.onExternalChange(relative(this.root, path))
       if (this.changeTimer) clearTimeout(this.changeTimer)
       this.changeTimer = setTimeout(this.onChange, 200)
     })

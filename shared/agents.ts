@@ -92,7 +92,7 @@ export interface Run {
 }
 
 /** Everything with an effect outside the agent's own output: only ever proposed, then run when the user approves. */
-export type ActionKind = 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call'
+export type ActionKind = 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call' | 'run-agent' | 'new-agent'
 
 export interface Action {
   id: string
@@ -105,6 +105,16 @@ export interface Action {
   error?: string
   createdAt: string
   resolvedAt?: string
+}
+
+/** A place an agent may read from, defined once in Settings and referenced by id in an agent's `sources`. */
+export interface SourceDef {
+  id: string
+  kind: 'vault-path' | 'file' | 'url'
+  label: string
+  /** vault-path: relative to the vault; file: absolute or ~; a folder is read as its newest text files. */
+  path?: string
+  url?: string
 }
 
 export interface UsageTotal {
@@ -123,6 +133,14 @@ export interface CliInfo {
   error?: string
 }
 
+export interface SampleInfo {
+  id: string
+  name: string
+  description: string
+  needs?: string
+  added: boolean
+}
+
 export interface AgentsState {
   agents: AgentDef[]
   errors: { id: string; message: string }[]
@@ -134,6 +152,8 @@ export interface AgentsState {
   /** Agent runs per agent and profile, today and over the last 7 days. */
   totals: { today: UsageTotal[]; week: UsageTotal[] }
   cli: CliInfo[]
+  sources: SourceDef[]
+  samples: SampleInfo[]
   /** Folder the definitions are read from. */
   dir: string
   /** The unreviewed edits of a propose/act run, shown with Keep/Undo. */

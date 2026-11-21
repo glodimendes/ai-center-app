@@ -347,6 +347,8 @@ export interface Settings {
   agentsDir?: string
   /** Account profiles; unset = one default profile per CLI (claude, codex). */
   profiles?: import('./agents').AccountProfile[]
+  /** Data sources agents may read (Settings → Data sources). */
+  sources?: import('./agents').SourceDef[]
   /** Calendars hidden from Today/Week/Brief (display only). */
   hiddenCalendars: string[]
   /** Per-event "busy"/"free" overrides, keyed by `${calendarId}:${eventId}`. */

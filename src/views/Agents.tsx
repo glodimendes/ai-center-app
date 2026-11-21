@@ -134,6 +134,25 @@ export function Agents() {
               )
             })}
             {!a.agents.some((g) => !g.builtin) && <Empty>No custom agents yet. “New agent” writes a Markdown file into the folder above.</Empty>}
+            {a.samples.some((x) => !x.added) && (
+              <div className="pt-2">
+                <h2 className="text-[12px] font-semibold text-muted uppercase tracking-wide mb-2">Sample agents</h2>
+                {a.samples
+                  .filter((x) => !x.added)
+                  .map((x) => (
+                    <div key={x.id} className="flex items-center gap-3 border border-dashed border-line rounded-lg p-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium">{x.name}</div>
+                        <div className="text-[11.5px] text-muted">{x.description}</div>
+                        {x.needs && <div className="text-[11px] text-warn mt-0.5">Needs {x.needs}</div>}
+                      </div>
+                      <Button onClick={() => act(api.addSampleAgent(x.id), `${x.name} added. Edit it any time.`)}>
+                        <Plus size={13} /> Add
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            )}
           </section>
           <History runs={a.runs} />
         </div>

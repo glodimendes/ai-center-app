@@ -1,4 +1,4 @@
-import type { AccountProfile, Action, AgentDef, AgentsState } from './agents'
+import type { AccountProfile, Action, AgentDef, AgentsState, SourceDef } from './agents'
 import type {
   Block,
   BriefData,
@@ -169,11 +169,18 @@ export interface Api {
   closeCapture(): Promise<void>
   // context updates (agent edits the vault; user keeps or undoes)
   // agents (custom agents from the agents folder; built-ins are listed but run from their own place)
+  /** ⌘⇧Space: `@agent message` runs that agent; any other text goes to the inbox. */
+  capture(text: string): Promise<{ kind: 'inbox' } | { kind: 'agent'; agent: string }>
   runAgent(id: string, input: string): Promise<string>
   cancelRun(runId: string): Promise<void>
   /** A paused (over-budget) run starts once; `raise` also lifts the account's ceiling by 20 points. */
   allowRun(runId: string, raise: boolean): Promise<void>
   saveProfiles(list: AccountProfile[]): Promise<void>
+  /** Writes a sample agent's definition file into the agents folder. */
+  addSampleAgent(id: string): Promise<void>
+  saveSources(list: SourceDef[]): Promise<void>
+  /** What an agent would receive from this source (first 4000 characters). */
+  previewSource(id: string): Promise<string>
   testProfile(id: string): Promise<{ ok: boolean; message: string }>
   saveAgent(def: AgentDef): Promise<void>
   deleteAgent(id: string): Promise<void>
@@ -190,7 +197,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, runAgent: true, cancelRun: true, allowRun: true, saveProfiles: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

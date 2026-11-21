@@ -3,7 +3,7 @@ import { canAutoRun } from './permissions'
 import type { Action, ActionKind, Permission } from '@shared/agents'
 
 export type { Action, ActionKind }
-export const ACTION_KINDS: ActionKind[] = ['add-task', 'complete-task', 'create-event', 'email-draft', 'api-call']
+export const ACTION_KINDS: ActionKind[] = ['add-task', 'complete-task', 'create-event', 'email-draft', 'api-call', 'run-agent', 'new-agent']
 
 export type Executor = (action: Action) => Promise<void>
 

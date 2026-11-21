@@ -18,7 +18,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
-import type { AccountProfile, Action, AgentDef } from '@shared/agents'
+import type { AccountProfile, Action, AgentDef, SourceDef } from '@shared/agents'
 import { askJson } from './context/ask'
 import { describeWish, focusPins, sanitizeWish, weeksWithWish, wishPrompt } from './scheduler/wish'
 import { BRIEF_FORMAT, DEFAULT_BRIEF_TEMPLATE, runBrief } from './context/brief'
@@ -36,6 +36,7 @@ export class Controller implements Api {
   }
   private events: CalEvent[] = []
   private refreshTimer: NodeJS.Timeout | null = null
+  private triggerTimer: NodeJS.Timeout | null = null
   private pulling: Promise<boolean> | null = null
   private lastPull = 0
   private context = new ContextSession(() => this.vault, () => this.settings.contextEngine, (line) => this.emit('context-progress', line))
@@ -43,6 +44,9 @@ export class Controller implements Api {
     vaultRoot: () => this.vault.root,
     agentsDir: () => this.settings.agentsDir || join(this.vault.root, '06_Prompts/agents'),
     userData: app.getPath('userData'),
+    triggersEnabled: () => app.isPackaged || process.env.AI_CENTER_TRIGGERS === '1',
+    sources: () => this.settings.sources,
+    saveSources: (sources) => this.saveSettings({ sources }),
     profiles: () => this.settings.profiles,
     saveProfiles: (profiles) => this.saveSettings({ profiles }),
     context: this.context,
@@ -78,12 +82,14 @@ export class Controller implements Api {
     this.loadSyncState()
     this.openVault()
     this.refreshTimer = setInterval(() => void this.refreshCalendar().catch(() => {}), 10 * 60_000)
+    this.triggerTimer = setInterval(() => this.agents.fire('tick'), 60_000)
   }
 
   private openVault() {
     void this.vault?.close()
     this.vault = new VaultService(this.settings.vaultPath, () => this.settings.autoCommit, () => this.push())
     this.loadSeenTasks()
+    this.vault.onExternalChange = (p) => this.agents?.fileChanged(p)
     this.vault.onOwnTaskIds = (ids) => {
       if (!ids.length || !this.seenTasks) return
       for (const id of ids) this.seenTasks.add(id)
@@ -520,6 +526,12 @@ export class Controller implements Api {
     await this.context.running
     this.mutate(() => this.vault.addInbox(text))
   }
+  /** Quick capture: `@agent text` runs that agent, anything else is saved to the inbox. */
+  async capture(text: string): Promise<{ kind: 'inbox' } | { kind: 'agent'; agent: string }> {
+    const route = this.agents.routeCapture(text)
+    if (route.kind === 'inbox') await this.addInbox(text.trim())
+    return route
+  }
   async inboxToTask(itemId: string, text: string, section: string[]) {
     this.mutate(() => this.vault.inboxToTask(itemId, text, section))
   }
@@ -548,6 +560,7 @@ export class Controller implements Api {
 
   /** First open of the planning day (and on focus): generate the brief once if today's file is missing. */
   async maybeRunBrief() {
+    this.agents.fire('open')
     const day = this.planningDay()
     // Dev runs never spend a model call on their own; "Run daily brief" still works there.
     if (!app.isPackaged) return
@@ -708,6 +721,15 @@ export class Controller implements Api {
   }
   async allowRun(runId: string, raise: boolean) {
     this.agents.allowRun(runId, raise)
+  }
+  async addSampleAgent(id: string) {
+    this.agents.addSample(id)
+  }
+  async saveSources(list: SourceDef[]) {
+    this.agents.saveSources(list)
+  }
+  previewSource(id: string) {
+    return this.agents.previewSource(id)
   }
   async saveProfiles(list: AccountProfile[]) {
     this.agents.saveProfiles(list)
@@ -876,6 +898,7 @@ export class Controller implements Api {
 
   async dispose() {
     if (this.refreshTimer) clearInterval(this.refreshTimer)
+    if (this.triggerTimer) clearInterval(this.triggerTimer)
     // Unreviewed agent edits are never kept implicitly.
     await this.agents.dispose()
     this.context.cancel()

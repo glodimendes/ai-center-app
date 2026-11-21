@@ -10,6 +10,7 @@ import { StrategySettings } from './settings/StrategySettings'
 import { DayRules } from './settings/DayRules'
 import { BriefPromptEditor } from './settings/BriefPrompt'
 import { EnginesSettings } from './settings/Engines'
+import { SourcesSettings } from './settings/Sources'
 
 const DAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
@@ -85,6 +86,10 @@ export function Settings() {
 
           <Card title="Engines & accounts" desc="The AI CLIs this app runs, one profile per login. Agents pick a profile; when its 5-hour or weekly window reaches the ceiling, a run pauses and asks you.">
             <EnginesSettings />
+          </Card>
+
+          <Card title="Data sources" desc="Places agents may read from (vault files, files on this Mac, web pages). Defined once here; an agent lists the ids it needs. The text is passed as read-only data.">
+            <SourcesSettings />
           </Card>
 
           <Card title="Calendar" desc="Reads all your calendars to find free time and writes approved blocks into each area's calendar. Only events the planner created are ever changed, and edits you make in your calendar win.">
