@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Crepe } from '@milkdown/crepe'
+import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { FolderOpen, Loader2 } from 'lucide-react'
@@ -24,7 +25,16 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
   const baseline = useRef('')
   const acknowledged = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [status, setStatus] = useState<Status>('loading')
+  const [status, setStatusState] = useState<Status>('loading')
+  // Mirrors `status` so async callbacks and the cleanup see the current value, not the one they closed over.
+  const statusRef = useRef<Status>('loading')
+  const setStatus = useCallback((s: Status) => {
+    statusRef.current = s
+    setStatusState(s)
+  }, [])
+  const scrollTop = useRef(0)
+  const loadedPath = useRef('')
+  const scroller = useRef<HTMLDivElement>(null)
   const [review, setReview] = useState<{ next: string } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const vaultState = useStore((s) => s.state)
@@ -37,7 +47,13 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
       try {
         doc.current = await api.writeDoc(path, next, doc.current.hash)
         baseline.current = next
-        setStatus('saved')
+        // Keystrokes made while the write was in flight are not in the file yet: stay unsaved and save again.
+        const now = crepe.current?.getMarkdown()
+        if (now !== undefined && now !== next) {
+          setStatus('dirty')
+          if (timer.current) clearTimeout(timer.current)
+          timer.current = setTimeout(() => saveRef.current(), 800)
+        } else setStatus('saved')
       } catch (e) {
         if (/changed on disk/.test((e as Error).message)) setStatus('conflict')
         else {
@@ -46,7 +62,7 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
         }
       }
     },
-    [path, toast]
+    [path, toast, setStatus]
   )
 
   const save = useCallback(() => {
@@ -56,13 +72,18 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
     const reformats = doc.current.content.trimEnd() !== baseline.current.trimEnd()
     if (reformats && !acknowledged.current) setReview({ next })
     else void write(next)
-  }, [write])
+  }, [write, setStatus])
+  const saveRef = useRef(save)
+  saveRef.current = save
 
   // Create the editor for this file.
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
     acknowledged.current = false
+    // Same file reloading after an outside edit keeps its place; a different file starts at the top.
+    if (loadedPath.current !== path) scrollTop.current = 0
+    loadedPath.current = path
     api.readDoc(path).then(async (d) => {
       if (cancelled || !host.current) return
       doc.current = d
@@ -72,6 +93,8 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
         defaultValue: d.content,
         features: { [Crepe.Feature.Latex]: false, [Crepe.Feature.AI]: false, [Crepe.Feature.TopBar]: false } as Record<string, boolean>
       })
+      // Write Markdown the way the vault is written ("- " bullets, "*" emphasis), so saving doesn't rewrite every list.
+      editor.editor.config((ctx) => ctx.update(remarkStringifyOptionsCtx, (o) => ({ ...o, bullet: '-' as const, bulletOther: '*' as const, emphasis: '*' as const, strong: '*' as const, rule: '-' as const, listItemIndent: 'one' as const })))
       await editor.create()
       if (cancelled) return void editor.destroy()
       crepe.current = editor
@@ -86,21 +109,32 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
         })
       )
       setStatus('saved')
+      if (scroller.current) scroller.current.scrollTop = scrollTop.current
     }, (e) => toast(e.message, 'error'))
     return () => {
       cancelled = true
       if (timer.current) clearTimeout(timer.current)
-      void crepe.current?.destroy()
+      // Leaving (another doc, another page) within the autosave delay must not drop the last edits.
+      const ed = crepe.current
+      const d = doc.current
+      if (ed && d && statusRef.current === 'dirty' && d.content.trimEnd() === baseline.current.trimEnd()) {
+        const md = ed.getMarkdown()
+        if (md !== baseline.current) void api.writeDoc(path, md, d.hash).catch(() => {})
+      }
+      void ed?.destroy()
       crepe.current = null
     }
-  }, [path, reloadKey, save, toast])
+  }, [path, reloadKey, save, toast, setStatus])
 
   // External edits (Obsidian, Claude, Codex): reload if clean, flag if dirty.
   useEffect(() => {
     if (!doc.current || status === 'loading' || status === 'saving') return
     api.readDoc(path).then((d) => {
       if (!doc.current || d.hash === doc.current.hash) return
-      if (status === 'saved') setReloadKey((k) => k + 1)
+      if (status === 'saved') {
+        scrollTop.current = scroller.current?.scrollTop ?? 0
+        setReloadKey((k) => k + 1)
+      }
       else setStatus('conflict')
     }, () => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,7 +171,7 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
         {status === 'conflict' && (
           <>
             <span className="text-danger truncate min-w-0" title="Changed on disk by another app">Changed on disk by another app</span>
-            <Button onClick={() => setReloadKey((k) => k + 1)} title="Reload (discard mine)">
+            <Button onClick={() => (setStatus('loading'), setReloadKey((k) => k + 1))} title="Reload (discard mine)">
               Reload
             </Button>
           </>
@@ -146,7 +180,7 @@ export function DocEditor({ path, compact }: { path: string; compact?: boolean }
           <FolderOpen size={13} />
         </Button>
       </div>
-      <div className="doc-editor flex-1 overflow-y-auto px-8 @max-3xl:px-4">
+      <div ref={scroller} onScroll={(e) => (scrollTop.current = e.currentTarget.scrollTop)} className="doc-editor flex-1 min-h-0 overflow-y-auto px-8 @max-3xl:px-4">
         <div ref={host} />
       </div>
       {review && (
