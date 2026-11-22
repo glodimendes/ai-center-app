@@ -130,11 +130,11 @@ export function Brief() {
 
           <div className="grid grid-cols-2 @max-3xl:grid-cols-1 gap-6">
             <Card title="Emails / attention" icon={<Mail size={14} />} source={attention ? 'AI brief' : undefined}>
-              {attention ? <Md text={attention.body} /> : <NoBrief running={s.brief.running} />}
+              {attention ? <Md text={attention.body} limit={4} /> : <NoBrief running={s.brief.running} />}
             </Card>
             <Card title="Suggested priorities" icon={<Sparkles size={14} />} source={priorities ? 'AI brief' : 'From your plan'}>
               {priorities ? (
-                <Md text={priorities.body} />
+                <Md text={priorities.body} limit={4} />
               ) : (
                 <ol className="list-decimal pl-5 text-[12.5px] space-y-1">
                   {topTasks.map((t) => (
@@ -295,27 +295,49 @@ function TaskList({ title, tasks, tone }: { title: string; tasks: Task[]; tone?:
   )
 }
 
-/** Brief sections as tidy cards content: numbered items become ranked rows, "**Group**" lines become small headings, bullets and checkboxes keep their nesting. Built as React nodes, so nothing the model writes can inject markup. */
-function Md({ text, ranked }: { text: string; ranked?: boolean }) {
+const HEADING = (line: string) => line.match(/^#{3,6}\s+(.+)/) ?? line.match(/^\s*\*\*([^*]+?):?\*\*:?\s*$/)
+/** A line that starts a new point: a numbered item, a top-level bullet or a plain paragraph (not a heading, not a nested bullet). */
+const STARTS_POINT = (line: string) => !HEADING(line) && !/^\s+[-*]\s/.test(line)
+
+/**
+ * Brief sections as tidy cards content: numbered items become ranked rows, "**Group**" lines become small headings, bullets and
+ * checkboxes keep their nesting. Built as React nodes, so nothing the model writes can inject markup. With `limit`, only the
+ * first points show (a point keeps its nested lines and the heading above it), with a button for the rest.
+ */
+function Md({ text, ranked, limit }: { text: string; ranked?: boolean; limit?: number }) {
+  const [expanded, setExpanded] = useState(false)
   const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim() && !/^\s*-{3,}\s*$/.test(l))
   const none = lines.length === 1 && /^(?:[-*]\s*)?none\.?$/i.test(lines[0].trim())
   if (none) return <p className="text-[12.5px] text-muted">Nothing here today.</p>
+  const starts = lines.flatMap((l, i) => (STARTS_POINT(l) ? [i] : []))
+  let cut = lines.length
+  if (limit && starts.length > limit) {
+    cut = starts[limit]
+    while (cut > 0 && HEADING(lines[cut - 1])) cut--
+  }
+  const hidden = starts.length - (limit ?? starts.length)
+  const shown = expanded ? lines : lines.slice(0, cut)
   return (
     <div className="text-[13px] leading-snug flex flex-col gap-1.5">
-      {lines.map((line, i) => {
+      {shown.map((line, i) => {
         const k = `l${i}`
-        const h = line.match(/^#{3,6}\s+(.+)/) ?? line.match(/^\s*\*\*([^*]+?):?\*\*:?\s*$/)
+        const h = HEADING(line)
         if (h) return <div key={k} className="text-[11px] uppercase tracking-wide font-semibold text-faint pt-2 first:pt-0">{inline(h[1], k)}</div>
         const n = line.match(/^\s*(\d+)[.)]\s+(.+)/)
-        if (n)
+        if (n) {
+          // The number is the marker: a checkbox the model adds after it ("1. [ ] …") is dropped, a checked one strikes the item through.
+          const cb = n[2].match(/^\[( |x|X)\]\s*(.*)$/)
+          const body = cb ? cb[2] : n[2]
+          const done = Boolean(cb && cb[1] !== ' ')
           return ranked !== false ? (
             <div key={k} className="flex items-start gap-3 rounded-xl border border-line/60 bg-bg px-3 py-2">
               <span className="shrink-0 w-5 h-5 rounded-full grid place-items-center text-[11px] font-semibold bg-accent-soft text-accent">{n[1]}</span>
-              <span className="min-w-0 break-words pt-px">{inline(n[2], k)}</span>
+              <span className={cx('min-w-0 break-words pt-px', done && 'text-muted line-through')}>{inline(body, k)}</span>
             </div>
           ) : (
-            <div key={k} className="flex gap-2"><span className="text-faint tabular-nums">{n[1]}.</span><span className="min-w-0 break-words">{inline(n[2], k)}</span></div>
+            <div key={k} className="flex gap-2"><span className="text-faint tabular-nums">{n[1]}.</span><span className={cx('min-w-0 break-words', done && 'text-muted line-through')}>{inline(body, k)}</span></div>
           )
+        }
         const b = line.match(/^(\s*)[-*]\s+(\[( |x|X)\]\s+)?(.+)/)
         if (b) {
           const done = b[3] && b[3] !== ' '
@@ -333,6 +355,11 @@ function Md({ text, ranked }: { text: string; ranked?: boolean }) {
         }
         return <p key={k} className="min-w-0 break-words">{inline(line.trim(), k)}</p>
       })}
+      {hidden > 0 && (
+        <button onClick={() => setExpanded(!expanded)} className="self-start mt-1 text-[12px] font-medium text-accent hover:underline">
+          {expanded ? 'Show less' : `Show ${hidden} more`}
+        </button>
+      )}
     </div>
   )
 }

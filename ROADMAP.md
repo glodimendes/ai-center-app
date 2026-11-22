@@ -118,7 +118,7 @@ Home should become editable and modular: people arrange the cards that show thei
 - **Blocks:** resize, draw, edit tasks in a block, remove with Undo, postpone, keep-tasks-whole option.
 - **Time logging:** actual versus planned in weekly files; budget bars.
 - **Calendar:** macOS Calendar provider (Swift EventKit helper) with Google API as the alternative; protected calendars; tagged-only sync with a confirm dialog (week or single day); calendar edits win; hand edits of the user's own events; visibility and Busy/Free per calendar and per event; web edits pulled without opening Calendar.app.
-- **Daily brief:** in-app, first open per day, read-only, with an editable prompt; polished cards; TEMPORARY INBOX suggestions behind an Add click.
+- **Daily brief:** in-app, first open per day, read-only, with an editable prompt; polished cards (priority rows without stray checkboxes, long cards folded after 4 points with Show more); TEMPORARY INBOX suggestions behind an Add click.
 - **Update context (⌘U):** Codex or Claude edits the vault; diff review with Keep/Undo; undo reverts only the AI's lines.
 - **Vault framework (2026-11-22):** every vault path in `shared/paths.ts`, plain lowercase folders, root `AGENTS.md` + `CLAUDE.md`; shipped templates (`vault/framework.ts`); a chosen folder gets the files it lacks; the missing-files check at every start; Setup with sample agents; the Home checklist; a new vault gets its own git history.
 - **Agent organization (2026-11-22):** only agents made or accepted in the app count; files other tools write are found and imported (Claude Code and Codex formats read leniently) or ignored; named, ordered groups; Chat pins; frontmatter with an unquoted `: ` is read instead of failing.
