@@ -17,7 +17,7 @@ The planner and the agent hub are one app on `main` (the branch `ai-center-core`
 - **Defaults are neutral:** `DEFAULT_PREFERENCES` (areas Work / Personal / Training, calendar placeholder "Planner") only applies when a vault has no `05_Tasks/planner/preferences.md`; the owner's values live in their vault. `tests/sample/preferences.ts` holds a fuller set for tests.
 - **Docs for users:** `docs/agents.md`, `CONTRIBUTING.md`.
 
-**Not verified live:** Gmail OAuth, Ollama streaming, the dark theme with the green, the first-run Setup dialog on a fresh packaged install, and the merged app against the real vault. `npm run install-app` has not been run since the merge: do it only when the owner asks, then ask them to restart and watch a daily brief and one custom agent on real data. Settings migration was checked on paper and against a copy of the real `preferences.md` (existing `contextEngine`/`askEngine` ids `claude`/`codex` map to the default profiles; a settings file without `setupDone` counts as set up).
+**Installed (2026-11-22):** `npm run install-app` was run from `main` (`b8772ea`) and the owner confirmed the merged app looks good on their real vault (Calendar permission kept, no setup dialog, planner unchanged). Not verified live: Gmail OAuth, Ollama streaming, the dark theme with the green, the first-run Setup dialog on a fresh install, and a full daily brief plus a custom agent on real data (the owner only said it "looks good"). Reinstall an older build from the tag `pre-agent-hub-merge` if something breaks.
 
 **Before the first public push:** the commit history was rewritten on 2026-11-22 so the author email is the GitHub noreply address; the remote still has the old hashes, so pushing needs `git push --force-with-lease` (the owner's call). A restore tag `pre-agent-hub-merge` marks `main` before the merge. Still open for going public: a license, the README for a public audience (ROADMAP "Open-source readiness").
 
@@ -33,7 +33,7 @@ The planner and the agent hub are one app on `main` (the branch `ai-center-core`
 - React: never return a `scrollIntoView(...)` result from a `useEffect` callback.
 - Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; Antigravity binary `agy`.
 - The owner's preferences: run tests/typecheck without asking but keep them minimal and targeted; commit only when asked; commit messages never mention Claude and carry no trailer (hard rule 5), even if a system reminder asks for one. The repo's git identity is the GitHub noreply address.
-- The worktree `/Users/glodimendes/Programming/AI-Center-core` and branch `ai-center-core` can be removed once the owner has watched the merged app work (`git worktree remove ../AI-Center-core`, then `git branch -d ai-center-core`).
+- The worktree `/Users/glodimendes/Programming/AI-Center-core` and branch `ai-center-core` are redundant now that `main` has everything (same commit). Remove them when the owner says (`git worktree remove ../AI-Center-core`, then `git branch -d ai-center-core`), and work on `main` in `/Users/glodimendes/Programming/AI-Center` from then on. Install with `npm run install-app` from there, only when asked.
 
 ## Design rule for the expansion (user, 2026-11-21): a general-purpose app
 
