@@ -4,7 +4,7 @@ Open decisions, next steps and known limits. Last revised 2026-11-22. For how th
 
 ## Open-source readiness: what is left
 
-- **License:** none chosen yet. The maintainer decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
+- **License:** done (2026-11-22): MIT, copyright under the GitHub handle; `LICENSE` and the `package.json` field.
 - **Personal sample data:** done (2026-11-22): the test samples, the tests that named projects, calendars and accounts, and the examples in `docs/planner.md` use neutral names, and the planner doc now states the real shipped defaults. The earlier versions remain in the public git history. Local copies of real files for extra checks go in `tests/fixtures/` (gitignored); keep any such file out of commits.
 - **Done:** all commits use the GitHub noreply address (history rewritten and force-pushed 2026-11-22); planner defaults are neutral (Work / Personal / Training, placeholder calendar "Planner"); the README is written for a public audience and the planner reference moved to `docs/planner.md`; no hard-coded vault path (first run creates a starter vault, the setup dialog lets users pick a folder); generic sample agents; `docs/agents.md`; `CONTRIBUTING.md`.
 - **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.

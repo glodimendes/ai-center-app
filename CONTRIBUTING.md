@@ -7,3 +7,4 @@
 - Keep it general-purpose: add generic building blocks (engines, sources, actions, triggers), not features for one use case. Use cases belong in optional sample agents.
 - Safety rules are part of the design: agents only propose outside effects, the user approves them, and vault edits are line-local. Read `AGENTS.md` ("Hard rules") before changing anything that writes files or calendars.
 - Never commit vault content, tokens or personal data.
+- By contributing you agree that your contributions are licensed under the MIT license (`LICENSE`).

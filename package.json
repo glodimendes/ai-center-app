@@ -3,7 +3,8 @@
   "productName": "AI Center",
   "version": "0.1.0",
   "private": true,
-  "description": "Motion-style routine organizer for the AI Center vault",
+  "description": "A macOS planner over plain Markdown notes and your calendar, with AI agents you define",
+  "license": "MIT",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {

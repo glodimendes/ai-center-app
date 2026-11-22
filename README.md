@@ -7,17 +7,17 @@ A macOS desktop app that plans your week from a folder of plain Markdown notes a
 - **Agents you define.** An agent is a Markdown file: instructions, a permission level, the data it may read and how it runs. Chat with them one at a time or all together, hand part of an answer to another agent, queue work for a busy one, and approve everything that has an effect outside the agent's own answer.
 - **Local and inspectable.** Your notes are files (an Obsidian vault works as is), every change the app makes is a small git commit you can undo, and AI edits are shown as a diff you keep or undo.
 
-> Status: version 0.1, a personal project that runs daily for its author on macOS; expect rough edges. No license has been chosen yet; see [Contributing](#contributing).
+> Status: version 0.1, a personal project that runs daily for its author on macOS; expect rough edges. Open source under the [MIT license](LICENSE).
 
 ## What it looks like in use
 
 | | |
 |---|---|
-| **Home** | A greeting, today's timeline, planned hours per area, deadlines, and an optional AI-written daily brief. |
+| **Home** | A greeting, today's timeline, planned hours per area, deadlines, and an optional AI-written daily brief. Until you are set up, a short checklist of what is left. |
 | **Today / Week** | The plan as blocks on a timeline. Drag tasks onto time, resize blocks, log what you actually did, re-plan with a sentence ("keep Friday afternoon free"). |
 | **Tasks / Inbox** | Your task file as an editable list; a quick-capture shortcut (⌘⇧Space) for raw thoughts. |
 | **Chat** | A central conversation (tag agents with `@`) and one conversation per agent. Answers render tables and lists; **Hand over** sends a whole answer, one section or a selection to another agent, with a suggested best fit. |
-| **Agents** | Create and edit agents, add examples (a coordinator, an email triager, a routine coach), see what is running, waiting and what it cost. |
+| **Agents** | Create and edit agents, add examples (a coordinator, a task automator, a routine coach, an email triager), see what is running, waiting and what it cost. |
 | **Docs / Review** | A Markdown editor for your notes; planned versus actual time and a weekly review. |
 
 The planner is documented screen by screen in [docs/planner.md](docs/planner.md), and agents in [docs/agents.md](docs/agents.md).
@@ -26,7 +26,7 @@ The planner is documented screen by screen in [docs/planner.md](docs/planner.md)
 
 - A Mac with Apple Silicon. The install script builds an arm64 app.
 - [Node.js](https://nodejs.org) and npm, a recent version (developed on Node 24).
-- Xcode Command Line Tools (`xcode-select --install`), used to compile the small Swift helper that talks to macOS Calendar.
+- Xcode Command Line Tools (`xcode-select --install`), used to compile the small Swift helper that talks to macOS Calendar. They include git, which keeps your notes' history; set your name and email once (`git config --global user.name …` and `user.email …`) so the app can commit.
 - Optional, for AI features: the command-line tools of the services you already use. Agents can run on [Claude Code](https://claude.com/claude-code) (`claude`), Codex (`codex`), Antigravity (`agy`), a local [Ollama](https://ollama.com) model, or any command that reads a prompt and prints text. Sign in to each CLI yourself; the app never asks for your password. The planner works without any of them.
 
 ## Install
@@ -45,15 +45,19 @@ npm run install-app
 **First launch**
 
 1. macOS may say the app is from an unidentified developer, because it is not notarized. Right-click the app and choose **Open** once.
-2. A setup dialog asks where your notes live. Pick an existing folder (an Obsidian vault works) or accept the starter vault it creates for you, with a few example tasks.
-3. Allow Calendar access when asked, or skip it; the planner then shows planned blocks without calendar events. Choose which calendars the app reads and which one it writes planner blocks to in **Settings → Calendar** (the default is a placeholder calendar called "Planner", so pick yours before the first sync).
-4. In **Settings → Engines & accounts**, check that the AI tools you use are found. **Test** on an account runs one tiny request.
+2. A setup dialog covers four choices:
+   - **Your notes folder.** Accept the starter vault the app creates (with example tasks and its own git history), or choose a folder you already have, such as an Obsidian vault. A chosen folder gets the framework files it lacks (see [the vault](#your-notes-folder-the-vault)); nothing you wrote is changed.
+   - **AI tools.** Which command-line tools were found, and how to install the missing ones.
+   - **Calendar.** macOS Calendar or Google Calendar.
+   - **Sample agents.** Optional ready-made agents, added as files you can edit or delete.
+3. Home then shows a **Get set up** checklist with a button for each open step: connect the calendar, set your areas, run the first sync, add a first agent. Choose which calendars the app reads and which one it writes planner blocks to in **Settings → Calendar** (the default is a placeholder calendar called "Planner", so pick yours before the first sync).
+4. In **Settings → Engines & accounts**, **Test** on an account runs one tiny request to check that it works.
 
 **About signing.** `install-app` signs the app with a local self-signed certificate named "AI Center Dev" if you have one in your login keychain, so that macOS keeps the Calendar permission across rebuilds. Without that certificate it still builds, with a warning, but macOS will ask for Calendar access again after every rebuild. `scripts/sign-app.sh` explains how to create the certificate.
 
 **Updating.** Pull, run `npm ci` if dependencies changed, then `npm run install-app` again and restart the app. Your notes and settings are untouched.
 
-**Just trying it.** `npm run dev` runs a hot-reloading copy against a scratch vault in `.dev-vault/` with its own data folder. It never opens your real notes, so it is safe to experiment with.
+**Just trying it.** `npm run dev` runs a hot-reloading copy against a scratch vault in `.dev-vault/` with its own data folder; on a fresh clone the app creates it as a starter vault. It never opens your real notes, so it is safe to experiment with.
 
 ## Your notes folder (the vault)
 
@@ -103,4 +107,8 @@ Stack: Electron, electron-vite, React 19, Tailwind 4, zustand, Milkdown, vitest.
 
 ## Contributing
 
-Issues and ideas are welcome. Before changing anything, read [CONTRIBUTING.md](CONTRIBUTING.md) and the hard rules in [AGENTS.md](AGENTS.md); it is also the starting point if you work on the code with an AI assistant. Open decisions and next steps are in [ROADMAP.md](ROADMAP.md). A license will be added before the project accepts outside code.
+Issues and ideas are welcome. Before changing anything, read [CONTRIBUTING.md](CONTRIBUTING.md) and the hard rules in [AGENTS.md](AGENTS.md); it is also the starting point if you work on the code with an AI assistant. Open decisions and next steps are in [ROADMAP.md](ROADMAP.md).
+
+## License
+
+[MIT](LICENSE). Contributions are accepted under the same license.
