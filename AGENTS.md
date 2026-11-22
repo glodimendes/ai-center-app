@@ -19,10 +19,21 @@ The planner and the agent hub are one app on `main` (the branch `ai-center-core`
 
 **Installed (2026-11-22):** `npm run install-app` was run from `main` (`b8772ea`) and the owner confirmed the merged app looks good on their real vault (Calendar permission kept, no setup dialog, planner unchanged). Not verified live: Gmail OAuth, Ollama streaming, the dark theme with the green, the first-run Setup dialog on a fresh install, and a full daily brief plus a custom agent on real data (the owner only said it "looks good"). Reinstall an older build from the tag `pre-agent-hub-merge` if something breaks.
 
+**Added after the install (2026-11-22, committed on `main`, NOT installed, none of it watched on real data):**
+- **Home:** the greeting varies by time of day and weekday (`src/lib/greeting.ts`: seven bands incl. late night, seeded by date so it is stable within a day). Brief cards render through a safe React Markdown renderer (ranked priority rows, checkboxes, group headings; `Md` in `Brief.tsx`). The "AI preparation opportunities" card and its brief section are gone (it should come back as an agent). `BRIEF_FORMAT` no longer asks for that heading.
+- **Chat formatting:** `src/lib/markdown.tsx` (render) + `src/lib/mdparse.ts` (pure parser, tested): tables, nested lists, checkboxes, code with Copy, `[[note]]` and relative `.md` links open in Docs. Answers split into **segments** (a heading section, or each top-level block or list item) so a part can be handed on.
+- **Hand over** (`components/MessageActions.tsx`): under every agent message, per segment (hover arrow) and on selected text. Menu: other agents ranked by `shared/route.ts` `rankAgents` (word overlap, no model call, top one tagged Suggested), Add as task (QuickAdd with `initialText`), Copy. Picking an agent opens its chat with the quote in the composer (`store.handOff`, drafts per conversation, `origins`); the origin thread gets a "Sent to X ↗" note (`ChatMessage.role: 'note'`, `chatSend(agentId, text, origin)`). Also Ask again and run details.
+- **Agents suggest handoffs:** conversation runs get `handoffFormat` (`agents/runner.ts`); `run-agent` and `add-task` are parsed from the answer and shown as one line under that message (`ApprovalCard compact`). `run-agent` always needs a click; an `act` agent's chat `add-task` does not (owner's decision). Approved handoffs continue in the target's own chat.
+- **Queue:** `Supervisor` persists waiting conversation turns and handoffs (`queue.json` in app data, `restore()` at start, `shutdown()` on quit keeps the file); busy agents no longer refuse chat turns (cap 5 pending per agent, `MAX_PENDING`); the composer stays enabled and unanswered turns show as dashed `PendingTurn` bubbles with a stop button. Scheduled/trigger runs are not restored.
+- **Handoff packet:** `AgentMessage.packet` (`HandoffPacket`: objective, input, expect, context files, origin), rendered by `renderPacket`; input over `SPILL_CHARS` (2000) is written to `05_Tasks/agent-output/handoffs/<chainId>/` and passed as a path (only if the target's `workdir` can reach it). `Run.chainId/hops`; `MAX_HOPS` 3 and a duplicate guard (`repeatKey` from `goals.ts`) enforced in the `run-agent` executor. The thread a handoff came from gets "X answered ↗"; the answer offers **Send back to X**. Agents → Activity groups chains with tokens and cost (`shared/chains.ts`).
+- **Model dropdown:** the agent editor lists the models the account can run (`availableModels` in `engines/models.ts`: Claude fixed list, Codex's own `models_cache.json`, Ollama's server); `AgentHub.save` refuses an unavailable model.
+- **Protocols:** the app uses A2A's vocabulary (task states, context id, message, artifact), not its wire protocol; MCP `propose_handoff` and an A2A adapter are ROADMAP items. See `docs/agents.md`.
+- **Verified:** 243 tests; in the dev app (`.dev-vault`): greeting, brief cards, chat rendering, the Hand over menu and its Suggested tag, the quoted draft, the compact proposal line, and three queued turns answered in order with a fake `command` engine. **Not verified:** an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex/Ollama on screen.
+
 **Before the first public push:** the commit history was rewritten on 2026-11-22 so the author email is the GitHub noreply address; the remote still has the old hashes, so pushing needs `git push --force-with-lease` (the owner's call). A restore tag `pre-agent-hub-merge` marks `main` before the merge. Still open for going public: a license, the README for a public audience (ROADMAP "Open-source readiness").
 
 **Open items, in rough priority:**
-1. Improve chat and agents (the owner has a list; ask them). The agent editor doesn't validate model names (a bad `model:` only fails at run time).
+1. Install and watch the new chat/agents work on the real vault (only when the owner asks), then more chat/agents improvements: live streaming of answers (engines already emit `text` events), "Ask an agent" from task rows, Home cards, Docs and ⌘K, an "AI preparation" agent to replace the removed Home card. Ask the owner what they want next.
 2. Modular, editable Home (ROADMAP idea): widgets backed by agents and outputs.
 3. Phase 2/3 leftovers: route the built-in brief/estimates through the budget gate and `limits`; watch the agents folder; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
 4. Open-source readiness (ROADMAP).
@@ -141,7 +152,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 145 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
+npm test              # 243 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9334 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
