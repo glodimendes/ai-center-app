@@ -5,7 +5,7 @@ import type { CalEvent, DayRule, Preferences, Task, WeekData } from '@shared/typ
 import { plan } from '../electron/main/scheduler/plan'
 import { needsFullPlan, planningDay } from '../electron/main/scheduler/cadence'
 import { focusPins, sanitizeWish, weeksWithWish } from '../electron/main/scheduler/wish'
-import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
+import { TEST_PREFERENCES as DEFAULT_PREFERENCES } from './sample/preferences'
 import { parseTasks } from '../electron/main/vault/parser'
 import { applyVariant, planMetrics } from '../electron/main/scheduler/variants'
 

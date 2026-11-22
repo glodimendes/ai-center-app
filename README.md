@@ -104,7 +104,7 @@ The next day is tried only after all of that fails, subject to the daily, deep-w
 
 **Your calendar edits win:** move or resize a planner event in your calendar and it becomes a pin at the new time; delete it and it isn't recreated (its time stays free until Re-plan; its work is planned elsewhere).
 
-**Sync** (button, Week view): covers today + 7 days. It writes blocks to the category's calendar (Thesis/Courses/Outside → Study Schedule, Training → Sports, Personal → Personal), only touches events the planner created (hidden tag), and shows every add, move and remove for confirmation first. Container events and breaks are never written.
+**Sync** (button, Week view): covers today + 7 days. It writes blocks to the calendar named on each area (Settings → Areas; the defaults use a placeholder calendar called "Planner", so pick yours before the first sync), only touches events the planner created (hidden tag), and shows every add, move and remove for confirmation first. Container events and breaks are never written.
 
 ## Safety
 

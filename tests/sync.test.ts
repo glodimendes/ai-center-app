@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Block, CalEvent, CalendarInfo } from '@shared/types'
 import { buildSyncDiff } from '../electron/main/calendar/sync'
 import { calendarEdits } from '../electron/main/calendar/adopt'
-import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
+import { TEST_PREFERENCES as DEFAULT_PREFERENCES } from './sample/preferences'
 
 const now = new Date(2026, 10, 9, 7, 0)
 const calendars: CalendarInfo[] = [

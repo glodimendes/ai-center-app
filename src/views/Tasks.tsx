@@ -105,7 +105,7 @@ export function Tasks() {
             const roots = sec.taskIds.map((id) => byId.get(id)!).filter((t) => t && matches(t))
             if (cmp) roots.sort(cmp) // stable: ties keep their file order
             if (!roots.length && (query || cat)) return null
-            // a collapsed parent heading (ETH) hides its sub-headings too
+            // a collapsed parent heading hides its sub-headings too
             if ([...collapsed].some((k) => key.startsWith(k + '>'))) return null
             const isCollapsed = collapsed.has(key)
             const depth = sec.path.length - 1

@@ -147,7 +147,7 @@ export function Settings() {
                   <ol className="text-[12.5px] text-muted list-decimal pl-5 space-y-1 mb-4">
                     <li>
                       Make sure your Google account is in macOS: <b>System Settings → Internet Accounts → Google</b>, with <b>Calendars</b> switched on. (If the
-                      Calendar app already shows Study Schedule and Sports, you're set.)
+                      Calendar app already shows your Google calendars, you're set.)
                     </li>
                     <li>Click <b>Allow calendar access</b> and confirm the macOS prompt. No Google Cloud project, no cost, no weekly re-login.</li>
                   </ol>

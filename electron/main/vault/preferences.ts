@@ -3,6 +3,11 @@ import type { CategoryPref, Preferences } from '@shared/types'
 
 export const PREFERENCES_FILE = '05_Tasks/planner/preferences.md'
 
+/**
+ * What a new vault starts with: generic areas that match the starter todo list (Work, Personal) plus Training.
+ * Calendar names are placeholders: pick your own in Settings → Areas. Everything personal lives in the vault's
+ * own `05_Tasks/planner/preferences.md`, which takes over from this the moment it exists.
+ */
 export const DEFAULT_PREFERENCES: Preferences = {
   workingHours: {
     mon: ['08:00', '21:00'],
@@ -26,94 +31,52 @@ export const DEFAULT_PREFERENCES: Preferences = {
   staleOverdueDays: 14,
   completedTaskMinutes: 15,
   strategy: { deadlineWeight: 2, priorityWeight: 1, deadlineGuardDays: 2, spreadDays: 5 },
-  allocation: {
-    enabled: true,
-    hours: {
-      thesis: { mon: 4, tue: 2, wed: 4, thu: 2, fri: 4, sat: 2 },
-      courses: { mon: 2, tue: 3, wed: 1, thu: 3, fri: 1 },
-      outside: { mon: 1, tue: 1, wed: 2, thu: 1, fri: 2, sat: 1 },
-      personal: { mon: 0.5, tue: 0.5, wed: 0.5, thu: 0.5, fri: 0.5, sat: 1, sun: 1 }
-    }
-  },
+  // Weekly hours per area are opt-in: switch it on and set the grid in the weekly review.
+  allocation: { enabled: false, hours: {} },
   breaks: [
     { label: 'Lunch', window: ['12:00', '14:00'], minutes: 60 },
     { label: 'Dinner', window: ['19:00', '21:00'], minutes: 45 }
   ],
   horizonDays: 14,
   syncDays: 7,
-  ignoreCalendars: ['Holidays in Switzerland', 'Feriados no Brasil'],
-  protectedCalendars: ['Birthdays', 'ETH Classes', 'ETH Tests', 'Family'],
+  ignoreCalendars: ['Holidays'],
+  protectedCalendars: ['Birthdays', 'Holidays'],
   categories: [
     {
-      key: 'thesis',
-      label: 'Thesis',
-      headings: ['Thesis'],
-      calendar: 'Study Schedule',
-      containers: ['Thesis Deep Work'],
-      defaultEstimateMinutes: 90,
-      deepWork: true,
-      window: ['08:00', '19:00'],
-      budget: { minHours: 18, maxHours: 22 },
-      preferredWindows: [['08:00', '12:30']],
-      minBlockMinutes: 60,
-      weight: 1.5,
-      timing: 'asap',
-      reserveQuota: true,
-      color: '#6366f1'
-    },
-    {
-      key: 'courses',
-      label: 'Courses',
-      headings: ['AI in Education', 'RTAI', 'DMS'],
-      calendar: 'Study Schedule',
-      containers: ['Course Consolidation'],
+      key: 'work',
+      label: 'Work',
+      headings: ['Work'],
+      calendar: 'Planner',
+      containers: [],
       defaultEstimateMinutes: 60,
       deepWork: true,
-      window: ['08:00', '20:00'],
-      preferredWindows: [['13:30', '17:30']],
+      window: ['08:00', '19:00'],
+      preferredWindows: [['08:00', '12:30']],
       minBlockMinutes: 45,
       weight: 1.2,
       timing: 'asap',
-      reserveQuota: false,
-      color: '#0ea5e9'
-    },
-    {
-      key: 'outside',
-      label: 'Outside work',
-      headings: ['Work', 'Mentoria', 'BRASA', 'Tamanduá', 'Masters'],
-      calendar: 'Study Schedule',
-      containers: ['Outside Work'],
-      defaultEstimateMinutes: 30,
-      window: ['08:00', '21:00'],
-      budget: { maxHours: 12 },
-      preferredWindows: [['14:00', '19:00']],
-      minBlockMinutes: 30,
-      weight: 1,
-      timing: 'asap',
-      reserveQuota: false,
-      color: '#f59e0b'
+      color: '#6366f1'
     },
     {
       key: 'personal',
       label: 'Personal',
       headings: ['Personal', 'Temporary Inbox'],
-      calendar: 'Personal',
+      calendar: 'Planner',
       containers: [],
-      defaultEstimateMinutes: 15,
+      defaultEstimateMinutes: 30,
       window: ['09:00', '20:00'],
       preferredWindows: [['17:00', '20:00']],
       minBlockMinutes: 30,
       weight: 0.8,
       timing: 'asap',
-      reserveQuota: false,
       color: '#10b981'
     },
     {
       key: 'training',
       label: 'Training',
       headings: ['Training'],
-      calendar: 'Sports',
-      containers: ['Sport', 'Running'],
+      calendar: 'Planner',
+      containers: [],
       defaultEstimateMinutes: 60,
       window: ['07:00', '21:30'],
       preferredWindows: [
@@ -130,7 +93,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
       key: 'other',
       label: 'Other',
       headings: [],
-      calendar: 'Personal',
+      calendar: 'Planner',
       containers: [],
       defaultEstimateMinutes: 30,
       color: '#94a3b8'

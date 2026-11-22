@@ -7,9 +7,9 @@ import { ChangesList } from './ChangesList'
 import { Button, Modal } from './ui'
 
 const EXAMPLES = [
-  'I dropped DMS this semester; keep only RTAI and AI in Education.',
-  'Thesis submission moved to 15 March 2027.',
-  'Priority this month: internship applications before master’s research.'
+  'I dropped one of my courses this semester; remove it from my context.',
+  'The project deadline moved to 15 March 2027.',
+  'Priority this month: job applications before side projects.'
 ]
 
 type Phase = 'write' | 'running' | 'review' | 'error'

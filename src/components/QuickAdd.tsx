@@ -10,7 +10,7 @@ import { act, useStore } from '@/store/app'
 export function QuickAdd({ section, placeholder, autoFocus, onDone }: { section?: string[]; placeholder?: string; autoFocus?: boolean; onDone?: () => void }) {
   const sections = useStore((s) => s.state!.vault.sections)
   const [text, setText] = useState('')
-  const [target, setTarget] = useState(section ? section.join('>') : (sections.find((s) => s.path.join('>') === 'ETH>Thesis') ?? sections[0])?.path.join('>') ?? '')
+  const [target, setTarget] = useState(section ? section.join('>') : sections[0]?.path.join('>') ?? '')
 
   const submit = async () => {
     if (!text.trim() || !target) return
