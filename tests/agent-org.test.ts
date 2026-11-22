@@ -103,7 +103,20 @@ describe('agent organization', () => {
   it('reports why a file cannot be imported', () => {
     expect(() => readForeignAgent('empty.md', '---\nname: x\n---\n', () => false)).toThrow(/no instructions/)
     const { reg, put } = setup()
-    put('bad.md', '---\nname: [unclosed\n---\nText\n')
+    put('bad.md', '---\nname: x\n  bad: indent: here\n---\nText\n')
     expect(reg.found()[0].error).toMatch(/YAML/)
+  })
+})
+
+describe('frontmatter written by hand or by AI tools', () => {
+  it('reads a description with an unquoted ": " instead of failing', async () => {
+    const { parseAgent } = await import('../electron/main/agents/definition')
+    const text = '---\nname: Course tutor\nprofile: claude\npermission: read\noutput: reply\ntriggers: [manual]\nsources: [a, b]\ndescription: Tutor for my courses (A, B): diagnostic questions, hints first.\n---\n\nTeach me.\n'
+    const def = parseAgent('course-tutor', text)
+    expect(def.description).toBe('Tutor for my courses (A, B): diagnostic questions, hints first.')
+    expect(def.triggers).toEqual(['manual'])
+    expect(def.sources).toEqual(['a', 'b'])
+    // nested YAML that is really broken still reports the error
+    expect(() => parseAgent('x', '---\nname: x\n  bad: indent: here\n---\nHi\n')).toThrow(/YAML/)
   })
 })

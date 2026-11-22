@@ -16,6 +16,36 @@ const list = (v: unknown, field: string): string[] => {
   return v.map(String)
 }
 
+/**
+ * The frontmatter as YAML. Files written by hand or by AI tools often have an unquoted ": " inside a value
+ * (`description: Tutor: hints first`), which YAML rejects; then simple `key: value` lines are read instead, the
+ * value being everything after the first colon (a value starting with [, { or a quote is still read as YAML).
+ * Anything more complex (indented lines) keeps the YAML error.
+ */
+function readFrontmatter(src: string): unknown {
+  try {
+    return load(src)
+  } catch (e) {
+    const out: Record<string, unknown> = {}
+    for (const line of src.split(/\r?\n/)) {
+      if (!line.trim() || line.trim().startsWith('#')) continue
+      const m = line.match(/^([A-Za-z][\w-]*):\s*(.*)$/)
+      if (!m) throw e
+      const v = m[2].trim()
+      let value: unknown = v === '' ? null : v
+      if (/^[[{"']/.test(v)) {
+        try {
+          value = load(v)
+        } catch {
+          /* keep the text */
+        }
+      }
+      out[m[1]] = value
+    }
+    return out
+  }
+}
+
 /** Reads one agent file: YAML frontmatter, then the instructions. Throws AgentError with a message fit for the UI. */
 export function parseAgent(id: string, text: string): AgentDef {
   if (!ID_RE.test(id)) throw new AgentError(`"${id}" isn't a valid agent id (lowercase letters, digits and dashes).`)
@@ -23,7 +53,7 @@ export function parseAgent(id: string, text: string): AgentDef {
   if (!m) throw new AgentError('Missing the --- frontmatter block at the top.')
   let fm: any
   try {
-    fm = load(m[1])
+    fm = readFrontmatter(m[1])
   } catch (e) {
     throw new AgentError(`Frontmatter isn't valid YAML: ${(e as Error).message.split('\n')[0]}`)
   }
@@ -86,7 +116,7 @@ export function readForeignAgent(file: string, text: string, taken: (id: string)
   let fm: any = {}
   if (m) {
     try {
-      fm = load(m[1]) ?? {}
+      fm = readFrontmatter(m[1]) ?? {}
     } catch (e) {
       throw new AgentError(`Frontmatter isn't valid YAML: ${(e as Error).message.split('\n')[0]}`)
     }
