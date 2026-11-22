@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, CalendarClock, CheckCircle2, Gauge, Hourglass, ShieldAlert, Timer } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronRight, Gauge, Hourglass, ShieldAlert, Timer } from 'lucide-react'
 import type { PlanWarning, Task } from '@shared/types'
 import { addDays, isoDate } from '@shared/time'
 import { api } from '@/lib/api'
@@ -58,6 +58,8 @@ export function Alerts() {
   const { state, go, setDay, selectBlock } = useStore()
   const s = state!
   const [area, setArea] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggle = (k: string) => setCollapsed((c) => (c.has(k) ? new Set([...c].filter((x) => x !== k)) : new Set(c).add(k)))
   const items = useMemo(() => alertItems(s.plan.warnings, s.vault.tasks), [s.plan.warnings, s.vault.tasks])
   const areas = [...new Set(items.map((i) => i.task?.category ?? i.warnings[0].category).filter((c): c is string => Boolean(c)))]
   const shown = items.filter((i) => !area || (i.task?.category ?? i.warnings[0].category) === area)
@@ -74,7 +76,7 @@ export function Alerts() {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <Header title="Alerts" sub={items.length ? `${items.length} to look at` : 'All clear'} />
-      <div className="px-5 @max-3xl:px-3 py-2 border-b border-line">
+      <div className="px-6 @max-3xl:px-3 py-2.5 border-b border-line/50">
         <div className="flex flex-wrap gap-1">
           <Chip active={!area} onClick={() => setArea(null)}>
             All areas
@@ -97,15 +99,17 @@ export function Alerts() {
           {GROUPS.map((g) => {
             const list = shown.filter((i) => i.group === g.key)
             if (!list.length) return null
+            const closed = collapsed.has(g.key)
             return (
               <section key={g.key}>
-                <div className="flex items-center gap-2">
+                <button onClick={() => toggle(g.key)} className="w-full flex items-center gap-2 text-left" title={closed ? 'Expand' : 'Collapse'}>
+                  {closed ? <ChevronRight size={14} className="text-faint" /> : <ChevronDown size={14} className="text-faint" />}
                   <g.icon size={15} className={g.tone} />
                   <h2 className="text-[14px] font-semibold">{g.title}</h2>
                   <span className="text-[12px] text-faint">{list.length}</span>
-                </div>
-                <p className="text-[12px] text-muted mt-0.5 mb-2">{g.hint}</p>
-                <div className="rounded-2xl border border-line bg-panel divide-y divide-line/70">
+                </button>
+                {!closed && <p className="text-[12px] text-muted mt-0.5 mb-2 pl-[22px]">{g.hint}</p>}
+                {!closed && <div className="mt-2 rounded-2xl border border-line/60 bg-panel divide-y divide-line/50">
                   {list.map((item, i) =>
                     item.task ? (
                       <div key={item.task.id} className="px-2 py-2">
@@ -150,7 +154,7 @@ export function Alerts() {
                       </div>
                     )
                   )}
-                </div>
+                </div>}
               </section>
             )
           })}

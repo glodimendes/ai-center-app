@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, CalendarRange, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, MessageCircle, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { AlertTriangle, Bell, BookOpen, CalendarRange, House, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, MessageCircle, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
@@ -36,17 +36,19 @@ function TodayIcon({ size = 15 }: LucideProps) {
   )
 }
 
-const NAV: { view: View; label: string; icon: (p: LucideProps) => React.ReactNode; key: string }[] = [
-  { view: 'brief', label: 'Brief', icon: Sun, key: '1' },
-  { view: 'today', label: 'Today', icon: TodayIcon, key: '2' },
-  { view: 'week', label: 'Week', icon: CalendarRange, key: '3' },
-  { view: 'tasks', label: 'Tasks', icon: ListChecks, key: '4' },
-  { view: 'alerts', label: 'Alerts', icon: AlertTriangle, key: '5' },
-  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '6' },
-  { view: 'docs', label: 'Docs', icon: FileText, key: '7' },
-  { view: 'review', label: 'Review', icon: TrendingUp, key: '8' },
-  { view: 'chat', label: 'Chat', icon: MessageCircle, key: '9' },
-  { view: 'agents', label: 'Agents', icon: Bot, key: '0' }
+/** Sidebar order. Groups are drawn as a labelled section (a plain divider in the icon rail); group 0 (Home) has no label. ⌘ shortcuts follow the order (⌘0 is the tenth). */
+const GROUPS = ['', 'Organize', 'Work', 'Insights']
+const NAV: { view: View; label: string; icon: (p: LucideProps) => React.ReactNode; key: string; group: number }[] = [
+  { view: 'brief', label: 'Home', icon: House, key: '1', group: 0 },
+  { view: 'today', label: 'Today', icon: TodayIcon, key: '2', group: 1 },
+  { view: 'week', label: 'Week', icon: CalendarRange, key: '3', group: 1 },
+  { view: 'tasks', label: 'Tasks', icon: ListChecks, key: '4', group: 1 },
+  { view: 'inbox', label: 'Inbox', icon: Inbox, key: '5', group: 1 },
+  { view: 'chat', label: 'Chat', icon: MessageCircle, key: '6', group: 2 },
+  { view: 'agents', label: 'Agents', icon: Bot, key: '7', group: 2 },
+  { view: 'alerts', label: 'Alerts', icon: Bell, key: '8', group: 3 },
+  { view: 'docs', label: 'Docs', icon: BookOpen, key: '9', group: 3 },
+  { view: 'review', label: 'Review', icon: TrendingUp, key: '0', group: 3 }
 ]
 
 const RAIL_KEY = 'sidebar'
@@ -86,9 +88,20 @@ export function App() {
   const { state, view, go } = useStore()
   const [palette, setPalette] = useState(false)
   const [contextOpen, setContextOpen] = useState(false)
+  const [contextDraft, setContextDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [rail, toggleRail] = useSidebar()
   const [errorsOpen, setErrorsOpen] = useState(false)
+
+  // Views can open Update context with a ready-made instruction.
+  useEffect(() => {
+    const open = (e: Event) => {
+      setContextDraft(String((e as CustomEvent).detail ?? ''))
+      setContextOpen(true)
+    }
+    window.addEventListener('open-context-update', open)
+    return () => window.removeEventListener('open-context-update', open)
+  }, [])
 
   useEffect(() => {
     bootstrap().catch((e) => setError(String(e?.message ?? e)))
@@ -143,18 +156,24 @@ export function App() {
           )}
         </div>
         <nav className="px-2 flex flex-col gap-0.5">
-          {NAV.map(({ view: v, label, icon: Icon, key }) => {
+          {NAV.map(({ view: v, label, icon: Icon, key, group }, idx) => {
             const count = v === 'inbox' && inboxCount > 0 ? inboxCount : v === 'alerts' && alerts.length > 0 ? alerts.length : v === 'agents' ? state.agents.approvals.filter((x) => x.status === 'pending').length + (state.agents.review ? 1 : 0) : 0
             const countClass = v === 'alerts' ? (urgent ? 'text-danger' : 'text-warn') : 'text-faint'
             return (
+              <Fragment key={v}>
+              {idx > 0 && NAV[idx - 1].group !== group &&
+                (rail ? (
+                  <div className="my-1.5 mx-2 border-t border-line/60" />
+                ) : (
+                  <div className={cx('px-2.5 pb-0.5 text-[11px] font-medium text-faint', group === 1 ? 'mt-3 pt-3 border-t border-line/60' : 'mt-3')}>{GROUPS[group]}</div>
+                ))}
               <button
-                key={v}
                 onClick={() => go(v)}
                 title={rail ? `${label}${count ? ` (${count})` : ''} · ⌘${key}` : undefined}
                 className={cx(
                   'group relative flex items-center gap-2.5 py-1.5 rounded-md text-left',
                   rail ? 'justify-center px-0' : 'px-2.5',
-                  view === v ? 'bg-panel shadow-sm font-medium' : 'text-muted hover:bg-panel/60 hover:text-ink'
+                  view === v ? 'bg-accent-soft text-accent font-semibold' : 'text-muted hover:bg-panel/60 hover:text-ink'
                 )}
               >
                 <Icon size={15} />
@@ -168,6 +187,7 @@ export function App() {
                   </>
                 )}
               </button>
+              </Fragment>
             )
           })}
         </nav>
@@ -234,8 +254,8 @@ export function App() {
         {view === 'agents' && <Agents />}
         {view === 'settings' && <Settings />}
       </main>
-      {palette && <CommandPalette onClose={() => setPalette(false)} onUpdateContext={() => setContextOpen(true)} />}
-      {contextOpen && <ContextUpdate onClose={() => setContextOpen(false)} />}
+      {palette && <CommandPalette onClose={() => setPalette(false)} onUpdateContext={() => (setContextDraft(''), setContextOpen(true))} />}
+      {contextOpen && <ContextUpdate initialText={contextDraft} onClose={() => (setContextOpen(false), setContextDraft(''))} />}
       {state.settings.setupDone === false && <Setup />}
       <Toasts />
     </div>

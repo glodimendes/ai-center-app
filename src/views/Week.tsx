@@ -50,14 +50,14 @@ export function Week() {
         </Button>
       </Header>
 
-      <div className="border-b border-line px-5 @max-3xl:px-3 py-3 flex gap-x-6 @max-3xl:gap-x-3 items-start">
+      <div className="border-b border-line/50 px-6 @max-3xl:px-3 py-2.5 flex gap-x-6 @max-3xl:gap-x-3 items-start">
         <div className="min-w-0 flex-1">
           <BudgetBars week={week} />
         </div>
         {warnings.length > 0 && (
           <button onClick={() => go('alerts')} className="ml-auto shrink-0 flex items-center gap-1.5 text-[12px] text-warn hover:underline whitespace-nowrap" title="View and fix alerts">
             <AlertTriangle size={12} /> {warnings.length}
-            <span className="@max-3xl:hidden">alert{warnings.length > 1 ? 's' : ''}: view and fix</span>
+            <span className="@max-3xl:hidden">alert{warnings.length > 1 ? 's' : ''}</span>
           </button>
         )}
       </div>

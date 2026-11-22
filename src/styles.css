@@ -11,7 +11,7 @@
   --color-muted: #6b6f7a;
   --color-faint: #a2a6b0;
   --color-accent: #265537;
-  --color-accent-soft: #e6f0ea;
+  --color-accent-soft: #d9ebe0;
   --color-danger: #dc2626;
   --color-warn: #b45309;
   --color-warn-soft: #fff7e6;
@@ -34,7 +34,7 @@
     --color-faint: #5d6372;
     /* a lighter tint of the brand green: #265537 is too dark to read on the dark theme */
     --color-accent: #3d8b5c;
-    --color-accent-soft: #15261c;
+    --color-accent-soft: #1b3a28;
     --color-warn: #f0b35a;
     --color-warn-soft: #2a2213;
   }
@@ -87,3 +87,6 @@ button { cursor: default; }
 .doc-editor .milkdown .ProseMirror h2 { font-size: 20px; font-weight: 600; margin-top: 22px; }
 .doc-editor .milkdown .ProseMirror h3 { font-size: 16px; font-weight: 600; margin-top: 18px; }
 .doc-editor .milkdown .ProseMirror p, .doc-editor .milkdown .ProseMirror li { line-height: 1.6; }
+
+/* Lighter, rounder line icons to match the softer surfaces */
+svg.lucide { stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

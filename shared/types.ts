@@ -381,17 +381,8 @@ export interface CalendarStatus {
   error?: string
 }
 
-export interface TaskNote {
-  path: string
-  title: string
-  status?: string
-  updated?: string
-  next: string[]
-}
-
 export interface BriefData {
   date: string
   /** Brief written by the Codex daily-brief automation to 05_Tasks/briefs/<date>.md, split by "## " headings. */
   codex: { path: string; sections: { title: string; body: string }[] } | null
-  notes: TaskNote[]
 }

@@ -1,6 +1,6 @@
 import { NO_AREA } from '@shared/categories'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, CalendarClock, CheckSquare, Dumbbell, Flag, Inbox, Loader2, Mail, Notebook, Plus, RefreshCw, Sparkles, Timer } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Dumbbell, Flag, Inbox, Loader2, Mail, Plus, RefreshCw, Sparkles, Timer } from 'lucide-react'
 import type { BriefData, Block, CalEvent, Task } from '@shared/types'
 import { addDays, fmtDuration, fmtHM, isoDate, minutesOfDay } from '@shared/time'
 import { api } from '@/lib/api'
@@ -84,6 +84,11 @@ export function Brief() {
         <Button kind="ghost" disabled={s.brief.running} onClick={() => act(api.generateBrief())} label="Run daily brief" title="Run the daily brief now (Claude Haiku, read-only)">
           {s.brief.running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
         </Button>
+        {toLog.length > 0 && (
+          <Button kind="ghost" onClick={() => (setDay(today), selectBlock(toLog[0].id), go('today'))} className="text-accent" title="Blocks from today that have ended and aren't logged yet">
+            {toLog.length} block{toLog.length > 1 ? 's' : ''} to log
+          </Button>
+        )}
         <Button onClick={() => (setDay(today), go('today'))}>Open Today</Button>
       </Header>
       <div className="flex-1 overflow-y-auto">
@@ -140,47 +145,12 @@ export function Brief() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-3 @max-5xl:grid-cols-2 @max-3xl:grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <Card title="Due" icon={<Flag size={14} />}>
               <TaskList title="Overdue" tasks={overdue} tone="danger" />
               <TaskList title="Today" tasks={dueToday} />
               <TaskList title="Next 7 days" tasks={dueWeek} />
               {!overdue.length && !dueToday.length && !dueWeek.length && <div className="text-[12px] text-muted">No deadlines this week.</div>}
-            </Card>
-            <Card title="Active task notes" icon={<Notebook size={14} />}>
-              <div className="flex flex-col gap-2.5">
-                {brief?.notes.map((n) => (
-                  <button key={n.path} onClick={() => useStore.getState().openDoc(n.path)} className="text-left">
-                    <div className="text-[12.5px] font-medium">{n.title}</div>
-                    {n.status && <div className="text-[11px] text-muted truncate">{n.status}</div>}
-                    {n.next.slice(0, 2).map((x, i) => (
-                      <div key={i} className="text-[11.5px] text-faint truncate">→ {x.replace(/[*`]/g, '')}</div>
-                    ))}
-                  </button>
-                ))}
-              </div>
-            </Card>
-            <Card title="Needs you" icon={<CheckSquare size={14} />}>
-              {toLog.length > 0 && (
-                <button onClick={() => (setDay(today), selectBlock(toLog[0].id), go('today'))} className="w-full text-left px-3 py-2 rounded-md bg-accent-soft text-[12px] mb-3">
-                  <b className="text-accent">{toLog.length} block{toLog.length > 1 ? 's' : ''} to log</b> <span className="text-muted">from today</span>
-                </button>
-              )}
-              <div className="flex flex-col gap-1">
-                {s.plan.warnings
-                  .filter((w) => w.kind !== 'unscheduled' && w.kind !== 'stale')
-                  .slice(0, 6)
-                  .map((w, i) => (
-                    <div key={i} className="flex gap-1.5 text-[11.5px] text-warn min-w-0 break-words">
-                      <AlertTriangle size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{w.message}</span>
-                    </div>
-                  ))}
-                {staleIds.size > 0 && (
-                  <button onClick={() => go('review')} className="text-left text-[11.5px] text-muted mt-1">
-                    {staleIds.size} stale task{staleIds.size > 1 ? 's' : ''} to reschedule or drop →
-                  </button>
-                )}
-              </div>
             </Card>
           </div>
 
@@ -287,7 +257,7 @@ function Card({ title, icon, source, children }: { title: string; icon: ReactNod
   return (
     <section className="rounded-2xl border border-line bg-panel p-5 min-w-0">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-accent">{icon}</span>
+        <span className="grid place-items-center w-7 h-7 rounded-lg bg-accent-soft text-accent">{icon}</span>
         <h2 className="text-[14px] font-semibold flex-1 min-w-0 truncate">{title}</h2>
         {source && <span className="text-[10.5px] text-faint truncate max-w-[50%]" title={source}>{source}</span>}
       </div>
@@ -299,8 +269,8 @@ function Card({ title, icon, source, children }: { title: string; icon: ReactNod
 function Stat({ icon, label, value, sub, tone, children }: { icon: ReactNode; label: string; value: string; sub?: string; tone?: 'warn'; children?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-line bg-panel px-5 py-4 min-w-0">
-      <div className="flex items-center gap-1.5 text-[12px] text-muted">
-        {icon} {label}
+      <div className="flex items-center gap-2 text-[12px] text-muted">
+        <span className="grid place-items-center w-6 h-6 rounded-md bg-accent-soft text-accent">{icon}</span> {label}
       </div>
       <div className={cx('text-[22px] font-semibold mt-1 truncate', tone === 'warn' && 'text-warn')}>{value}</div>
       {sub && <div className="text-[12px] text-faint truncate">{sub}</div>}

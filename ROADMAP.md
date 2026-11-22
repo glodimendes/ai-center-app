@@ -137,3 +137,7 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
   - routine as settings: Day rules, in-app weekly review (archive, focus, week grid, picks), block ownership decided (app owns);
   - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish (with focus on a heading, after the user's "make tomorrow's first half of the day focus on Tamanduá" failed: the prompt didn't name today/tomorrow and a wish could only set area hours), "New in your todo list".
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.
+
+## Idea (user, 2026-11-22): a modular, editable Home
+
+Home (formerly Brief) should become editable and modular: people arrange the cards that show their main agent interactions and outputs, scheduled or not (e.g. a daily-brief agent's answer, an agent's latest output file, a chat shortcut, today's plan, due tasks). Not designed yet; build it from generic primitives (widgets backed by agents, sources and views), not around one use case. The fixed "Active task notes" card was removed for this reason (it depended on one personal note convention).

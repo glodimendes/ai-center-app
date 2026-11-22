@@ -20,7 +20,7 @@ export function InboxView() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <Header title="Inbox" sub="Braindump: raw ideas from 05_Tasks/braindump-inbox.md. Triage them into tasks. ⌘⇧Space captures from anywhere while the app is open." />
+      <Header title="Inbox" sub="Raw ideas to triage into tasks · ⌘⇧Space captures from anywhere" />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-5 @max-3xl:px-3 py-5">
           <div className="flex gap-2">
@@ -30,9 +30,9 @@ export function InboxView() {
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && capture()}
               placeholder="Capture a thought…"
-              className="flex-1 h-9 px-3 rounded-lg border border-line bg-panel text-[13.5px] outline-none focus:border-accent"
+              className="flex-1 h-10 px-3.5 rounded-xl border border-line/70 bg-panel text-[13.5px] outline-none focus:border-accent"
             />
-            <Button kind="primary" onClick={capture} className="h-9">
+            <Button kind="primary" onClick={capture} className="h-10 rounded-xl">
               Capture
             </Button>
           </div>
@@ -58,7 +58,7 @@ function Item({ item }: { item: InboxItem }) {
   const [text, setText] = useState(item.text.replace(/\.$/, ''))
   const [target, setTarget] = useState(sections[0]?.path.join('>') ?? '')
   return (
-    <div className="group py-1.5 px-2 -mx-2 rounded-md hover:bg-sunken/70">
+    <div className="group py-1.5 px-2 -mx-2 rounded-lg hover:bg-sunken/70">
       <div className="flex items-center gap-2">
         <span className="flex-1 min-w-0 break-words text-[13px]">
           {item.text}
@@ -99,7 +99,7 @@ function NewTasks() {
   const tasks = s.newTaskIds.map((id) => s.vault.tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t))
   if (!tasks.length) return null
   return (
-    <section className="mt-6 rounded-lg border border-accent/40 bg-accent-soft/40 p-3">
+    <section className="mt-6 rounded-xl border border-accent/30 bg-accent-soft/40 p-4">
       <div className="flex flex-wrap items-center gap-2 mb-1">
         <h3 className="text-[13px] font-semibold flex-1 min-w-0">New in your todo list</h3>
         <Button onClick={() => act(api.acknowledgeTasks(tasks.map((t) => t.id)), 'All kept')}>

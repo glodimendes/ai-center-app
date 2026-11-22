@@ -4,8 +4,9 @@ import { addDays, fmtDuration, isoDate, isoWeek, parseDate, weekStart } from '@s
 import { useStore } from '@/store/app'
 import { categoryOf, cx, inlineMd } from '@/lib/util'
 import { BudgetBars } from '@/components/BudgetBars'
-import { DocEditor } from '@/components/DocEditor'
-import { Button, Dot, Empty, Header } from '@/components/ui'
+import { PrioritiesPanel } from '@/components/PrioritiesPanel'
+import { Button, Dot, Header } from '@/components/ui'
+import { DueList } from '@/components/DueList'
 import { WeeklyReview } from '@/components/WeeklyReview'
 
 export function Review() {
@@ -24,7 +25,7 @@ export function Review() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <Header title={`Weekly review · ${week}`} sub="How the week went, compared with the plan. Adjust priorities on the right.">
+      <Header title={`Weekly review · ${week}`} sub="The week against the plan">
         <Button kind="primary" onClick={() => setReviewing(true)} label="Review & plan the week" title="Guided weekly review: last week, tidy, focus, hours, re-plan and sync">
           <ClipboardCheck size={13} />
         </Button>
@@ -41,21 +42,20 @@ export function Review() {
       </Header>
       <div className="flex-1 min-h-0 flex @max-5xl:flex-col @max-5xl:overflow-y-auto">
         <div className="flex-1 overflow-y-auto px-6 @max-3xl:px-4 py-5 min-w-0 @max-5xl:flex-none @max-5xl:overflow-visible">
-          <div className="grid grid-cols-4 @max-3xl:grid-cols-2 gap-3 mb-6">
-            <Stat label="Time logged" value={fmtDuration(actual)} />
-            <Stat label="Planned (logged blocks)" value={fmtDuration(planned)} />
-            <Stat label="Difference" value={`${actual >= planned ? '+' : ''}${fmtDuration(actual - planned)}`} tone={actual >= planned ? 'ok' : 'warn'} />
-            <Stat label="Blocks skipped" value={String(skipped)} tone={skipped ? 'warn' : undefined} />
+          <div className="grid grid-cols-3 @max-3xl:grid-cols-2 gap-3 mb-6">
+            <Stat label="Time logged" value={fmtDuration(actual)} note={`of ${fmtDuration(planned)} planned`} />
+            <Stat label="Against plan" value={`${actual >= planned ? '+' : ''}${fmtDuration(actual - planned)}`} tone={actual >= planned ? 'ok' : 'warn'} />
+            {skipped > 0 && <Stat label="Blocks skipped" value={String(skipped)} tone="warn" />}
           </div>
 
-          <h2 className="text-[13px] font-semibold mb-3">Budgets</h2>
+          <h2 className="text-[14px] font-semibold mb-3">Budgets</h2>
           <BudgetBars week={week} wide />
 
-          <h2 className="text-[13px] font-semibold mt-8 mb-2">Logged blocks</h2>
-          {!log.length && <Empty>Nothing logged this week yet. Click a block in Today or Week to log your time.</Empty>}
+          <h2 className="text-[13px] font-semibold mt-9 mb-2">Logged blocks</h2>
+          {!log.length && <p className="text-[12.5px] text-faint">Nothing logged yet. Click a block in Today or Week to log your time.</p>}
           <div className="flex flex-col">
             {log.map((l) => (
-              <div key={l.blockId} className="flex items-center gap-3 py-1.5 border-b border-line/60 text-[12.5px]">
+              <div key={l.blockId} className="flex items-center gap-3 py-2 border-b border-line/40 text-[12.5px]">
                 <span className="w-24 shrink-0 whitespace-nowrap text-muted">
                   {parseDate(l.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })} {l.start.slice(11, 16)}
                 </span>
@@ -74,26 +74,18 @@ export function Review() {
 
           {doneThisWeek.length > 0 && (
             <>
-              <h2 className="text-[13px] font-semibold mt-8 mb-2">Finished in logged blocks</h2>
+              <h2 className="text-[14px] font-semibold mt-9 mb-2">Finished in logged blocks</h2>
               {doneThisWeek.map((t) => (
                 <div key={t!.id} className="text-[12.5px] py-0.5 text-muted" dangerouslySetInnerHTML={{ __html: '✓ ' + inlineMd(t!.title) }} />
               ))}
             </>
           )}
 
-          <h2 className="text-[13px] font-semibold mt-8 mb-2">Due by end of week, still open</h2>
-          {!slipped.length && <Empty>Nothing slipped.</Empty>}
-          {slipped.map((t) => (
-            <div key={t.id} className="flex flex-wrap gap-x-2 text-[12.5px] py-0.5">
-              <span className={cx('w-20 shrink-0', t.due! < isoDate(new Date()) ? 'text-danger' : 'text-muted')}>{t.due}</span>
-              <span className="min-w-0 break-words" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
-              <span className="text-faint text-[11px]">{t.section.join(' › ')}</span>
-            </div>
-          ))}
+          <h2 className="text-[14px] font-semibold mt-9 mb-3">Due by the end of the week</h2>
+          <DueList tasks={slipped} />
         </div>
-        <div className="w-[460px] shrink-0 border-l border-line flex flex-col min-h-0 bg-panel @max-5xl:w-auto @max-5xl:min-h-[480px] @max-5xl:border-l-0 @max-5xl:border-t">
-          <div className="px-5 pt-3 pb-1 text-[12px] text-faint">Current priorities</div>
-          <DocEditor path="04_Context_Docs/current-priorities.md" />
+        <div className="w-[380px] shrink-0 border-l border-line/50 flex flex-col min-h-0 bg-panel @max-5xl:w-auto @max-5xl:min-h-[480px] @max-5xl:border-l-0 @max-5xl:border-t border-line/50">
+          <PrioritiesPanel />
         </div>
       </div>
       {reviewing && <WeeklyReview onClose={() => setReviewing(false)} />}
@@ -101,11 +93,12 @@ export function Review() {
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
+function Stat({ label, value, tone, note }: { label: string; value: string; tone?: 'ok' | 'warn'; note?: string }) {
   return (
-    <div className="rounded-lg border border-line bg-panel px-4 py-3 min-w-0">
+    <div className="rounded-xl border border-line/60 bg-panel px-4 py-3.5 min-w-0">
       <div className="text-[11px] text-muted truncate" title={label}>{label}</div>
       <div className={cx('text-[20px] font-semibold mt-0.5 truncate', tone === 'ok' && 'text-ok', tone === 'warn' && 'text-warn')}>{value}</div>
+      {note && <div className="text-[11px] text-faint truncate">{note}</div>}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DocInfo } from '@shared/types'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cx } from '@/lib/util'
 import { DocEditor } from '@/components/DocEditor'
 import { Empty } from '@/components/ui'
@@ -24,19 +25,19 @@ export function Docs() {
 
   return (
     <div className="flex-1 min-h-0 flex">
-      <aside className="w-64 @max-4xl:w-48 shrink-0 border-r border-line flex flex-col min-h-0">
+      <aside className="w-64 @max-4xl:w-48 shrink-0 border-r border-line/50 flex flex-col min-h-0">
         <div className="drag-region h-14 shrink-0 flex items-end px-3 pb-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a doc…"
-            className="no-drag w-full h-7 px-2.5 rounded-md bg-sunken text-[12.5px] outline-none placeholder:text-faint"
+            className="no-drag w-full h-8 px-3 rounded-lg bg-sunken text-[12.5px] outline-none placeholder:text-faint"
           />
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-4">
           {!query && pinned.length > 0 && <Group title="Quick access" docs={pinned} active={docPath} onOpen={openDoc} />}
           {[...groups].map(([g, list]) => (
-            <Group key={g} title={g} docs={list} active={docPath} onOpen={openDoc} />
+            <Group key={g} title={g} docs={list} active={docPath} onOpen={openDoc} collapsible forceOpen={Boolean(query)} />
           ))}
         </div>
       </aside>
@@ -48,15 +49,24 @@ export function Docs() {
   )
 }
 
-function Group({ title, docs, active, onOpen }: { title: string; docs: DocInfo[]; active: string | null; onOpen: (p: string) => void }) {
+function Group({ title, docs, active, onOpen, collapsible, forceOpen }: { title: string; docs: DocInfo[]; active: string | null; onOpen: (p: string) => void; collapsible?: boolean; forceOpen?: boolean }) {
+  const hasActive = docs.some((d) => d.path === active)
+  const [open, setOpen] = useState(false)
+  const shown = !collapsible || open || hasActive || forceOpen
   return (
-    <div className="mt-3">
-      <h3 className="px-2 text-[12px] text-faint mb-0.5">{title}</h3>
-      {docs.map((d) => (
+    <div className="mt-2">
+      {collapsible ? (
+        <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-1 px-2 py-1 text-[12px] text-faint hover:text-ink">
+          {shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {title} <span className="ml-auto text-[11px]">{docs.length}</span>
+        </button>
+      ) : (
+        <h3 className="px-2 text-[12px] text-faint mb-0.5">{title}</h3>
+      )}
+      {shown && docs.map((d) => (
         <button
           key={title + d.path}
           onClick={() => onOpen(d.path)}
-          className={cx('w-full text-left px-2 py-1 rounded-md text-[12.5px] truncate', active === d.path ? 'bg-accent-soft text-accent font-medium' : 'hover:bg-sunken')}
+          className={cx('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] truncate', active === d.path ? 'bg-accent-soft text-accent font-medium' : 'hover:bg-sunken')}
           title={d.path}
         >
           {d.title}

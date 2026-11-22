@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { SORTS } from '@/lib/taskSort'
 import { AlertTriangle, ChevronLeft, ChevronRight, CloudUpload, ListChecks, Moon, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { addDays, fmtDuration, isoDate, parseDate } from '@shared/time'
 import { api } from '@/lib/api'
@@ -28,6 +29,7 @@ export function Today() {
   // Narrow windows: the task list is a drawer over the timeline, hidden while a task is dragged out of it.
   const [listOpen, setListOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [allLater, setAllLater] = useState(false)
   // Sort and filters stay tucked away until used; an active filter keeps them visible so it can't be forgotten.
   const filtersActive = view.areas.length > 0 || view.show !== 'all'
   const showFilters = filtersOpen || filtersActive
@@ -120,7 +122,7 @@ export function Today() {
           onDragStart={() => setDragging(true)}
           onDragEnd={() => (setDragging(false), setListOpen(false))}
           className={cx(
-            'w-[380px] shrink-0 border-r border-line flex flex-col min-h-0 bg-bg',
+            'w-[380px] shrink-0 border-r border-line/50 flex flex-col min-h-0 bg-bg',
             '@max-3xl:absolute @max-3xl:inset-y-0 @max-3xl:left-0 @max-3xl:z-30 @max-3xl:w-[min(380px,92%)] @max-3xl:shadow-2xl',
             !listOpen && '@max-3xl:hidden',
             dragging && '@max-3xl:opacity-0 @max-3xl:pointer-events-none'
@@ -209,11 +211,16 @@ export function Today() {
             {todays.map((t) => (
               <TaskRow key={t.id} task={t} draggable showSection skipRepeats />
             ))}
-            <h3 className="px-2 pt-3 pb-1 text-[12px] text-faint">{todays.length ? 'Other tasks' : 'Tasks'} · drag onto the timeline</h3>
+            <h3 className="px-2 pt-3 pb-1 text-[12px] text-faint">{todays.length ? 'Other tasks' : 'Tasks'}</h3>
             {!ordered.length && <div className="px-2 py-2 text-[12px] text-faint">No tasks match.</div>}
-            {later.map((t) => (
+            {(allLater || filter ? later : later.slice(0, LATER_SHOWN)).map((t) => (
               <TaskRow key={t.id} task={t} draggable showSection skipRepeats />
             ))}
+            {!allLater && !filter && later.length > LATER_SHOWN && (
+              <button onClick={() => setAllLater(true)} className="w-full px-2 py-2 text-left text-[12px] text-faint hover:text-ink">
+                Show {later.length - LATER_SHOWN} more
+              </button>
+            )}
           </div>
         </section>
 
@@ -237,33 +244,7 @@ export function Today() {
   )
 }
 
-const PRI = { urgent: 0, high: 1, medium: 2, low: 3 } as const
-const finish = (s: AppState, t: Task) => s.plan.taskFinish[t.id] ?? '9999'
-const byDue = (a: Task, b: Task) => (a.due ?? '9999').localeCompare(b.due ?? '9999')
-
-const SORTS: { key: string; label: string; cmp: (s: AppState) => (a: Task, b: Task) => number }[] = [
-  { key: 'plan', label: 'Planned time', cmp: (s) => (a, b) => finish(s, a).localeCompare(finish(s, b)) },
-  { key: 'due', label: 'Deadline', cmp: (s) => (a, b) => byDue(a, b) || finish(s, a).localeCompare(finish(s, b)) },
-  { key: 'priority', label: 'Priority', cmp: (s) => (a, b) => PRI[a.priority] - PRI[b.priority] || byDue(a, b) || finish(s, a).localeCompare(finish(s, b)) },
-  {
-    key: 'area',
-    label: 'Area',
-    cmp: (s) => {
-      const order = s.vault.preferences.categories.map((c) => c.key)
-      return (a, b) => order.indexOf(a.category) - order.indexOf(b.category) || finish(s, a).localeCompare(finish(s, b))
-    }
-  },
-  {
-    key: 'estimate',
-    label: 'Shortest first',
-    cmp: (s) => {
-      const est = (t: Task) => t.estimateMin ?? s.vault.preferences.categories.find((c) => c.key === t.category)?.defaultEstimateMinutes ?? 30
-      return (a, b) => est(a) - est(b) || finish(s, a).localeCompare(finish(s, b))
-    }
-  },
-  { key: 'file', label: 'As in the file', cmp: (s) => (a, b) => s.vault.tasks.indexOf(a) - s.vault.tasks.indexOf(b) }
-]
-
+const LATER_SHOWN = 12
 const SHOW: { key: string; label: string; test: (t: Task, s: AppState) => boolean }[] = [
   { key: 'all', label: 'All open', test: () => true },
   { key: 'planned', label: 'Planned', test: (t, s) => Boolean(s.plan.taskFinish[t.id]) },
