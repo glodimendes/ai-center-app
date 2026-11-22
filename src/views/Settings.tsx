@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { CalendarDays, Clock, Cpu, Database, ExternalLink, FolderOpen, LayoutGrid, Settings as SettingsIcon, Sun } from 'lucide-react'
 import { cx } from '@/lib/util'
 import type { Preferences, Weekday } from '@shared/types'
+import { BRIEFS_DIR, PREFERENCES_FILE, TODOS_FILE } from '@shared/paths'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { Button, Header } from '@/components/ui'
@@ -236,7 +237,7 @@ export function Settings() {
           )}
           {page === 'brief' && (
             <>
-            <Card title="Daily brief" desc="Prepared by Claude Haiku (cheapest) with read-only access to your vault, Gmail and calendar. It can't send, draft, label or delete anything; suggested todos wait for your click. Saved to 05_Tasks/briefs/.">
+            <Card title="Daily brief" desc={`Prepared by Claude Haiku (cheapest) with read-only access to your vault, Gmail and calendar. It can't send, draft, label or delete anything; suggested todos wait for your click. Saved to ${BRIEFS_DIR}/.`}>
               <label className="flex items-center gap-2 text-[12.5px]">
                 <input type="checkbox" checked={s.settings.briefAuto} onChange={(e) => act(api.saveSettings({ briefAuto: e.target.checked }))} />
                 Prepare it automatically the first time I open the app each day (after 04:00)
@@ -251,13 +252,13 @@ export function Settings() {
           )}
           {page === 'areas' && (
             <>
-            <Card title="Todo headings → areas" desc="Every heading from 05_Tasks/daily-todos.md. Click a colour to assign it; sub-headings inherit from their parent unless you set them. The number is how many tasks sit directly under the heading.">
+            <Card title="Todo headings → areas" desc={`Every heading from ${TODOS_FILE}. Click a colour to assign it; sub-headings inherit from their parent unless you set them. The number is how many tasks sit directly under the heading.`}>
               <HeadingMap prefs={prefs} setPrefs={setPrefs} />
             </Card>
             <Card title="Areas" desc="Add or remove areas; set colour, calendar, which of your calendar events (e.g. “Thesis Deep Work”) get filled, and the windows each area is planned in. Training is an area like the others, with a gap around it.">
               {!s.vault.preferencesFileExists && (
                 <div className="mb-3 text-[12px] bg-warn-soft text-warn px-3 py-2 rounded-md">
-                  Using built-in defaults. Click “Create preferences file” to save them as 05_Tasks/planner/preferences.md in your vault (readable by Claude and Codex too).
+                  Using built-in defaults. Click “Create preferences file” to save them as {PREFERENCES_FILE} in your vault (readable by Claude and Codex too).
                 </div>
               )}
               <AreaSettings prefs={prefs} setPrefs={setPrefs} calendars={calendars} />

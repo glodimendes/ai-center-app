@@ -30,6 +30,7 @@ describe('buildBriefPrompt', () => {
     expect(p.endsWith(BRIEF_FORMAT)).toBe(true)
     for (const h of ['## Calendar', '## Emails / Attention', '## Suggested Priorities', '## Temporary Inbox Suggestions']) expect(p).toContain(h)
     expect(p).toContain('You can only read.')
+    expect(p).not.toContain('## Active Task Notes')
     expect(DEFAULT_BRIEF_TEMPLATE).not.toContain('## ')
   })
 

@@ -345,7 +345,7 @@ export interface Settings {
   /** Generate the daily brief the first time the app opens each day. */
   briefAuto: boolean
   briefEmail: boolean
-  /** Where agent definitions live; default the vault's 06_Prompts/agents/. */
+  /** Where agent definitions live; default the vault's AGENTS_DIR (shared/paths.ts). */
   agentsDir?: string
   /** Account profiles; unset = one default profile per CLI (claude, codex). */
   profiles?: import('./agents').AccountProfile[]
@@ -383,6 +383,6 @@ export interface CalendarStatus {
 
 export interface BriefData {
   date: string
-  /** Brief written by the Codex daily-brief automation to 05_Tasks/briefs/<date>.md, split by "## " headings. */
+  /** Brief written by the Codex daily-brief automation to briefFile(date) (shared/paths.ts), split by "## " headings. */
   codex: { path: string; sections: { title: string; body: string }[] } | null
 }

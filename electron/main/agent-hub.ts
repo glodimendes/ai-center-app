@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
 import type { AccountProfile, Action, ChatMessage, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
 import { isoDate } from '@shared/time'
+import { AGENT_OUTPUT_DIR, BRIEFS_DIR, HANDOFFS_DIR } from '@shared/paths'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
@@ -35,14 +36,14 @@ const MAX_PENDING = 5
 
 /** The planner's built-in AI paths, listed beside custom agents. Their behaviour stays in code (fixed safety); they are not files. */
 const BUILTINS: AgentDef[] = [
-  { id: 'daily-brief', name: 'Daily brief', profile: 'claude', permission: 'read', output: 'file', sources: [], triggers: ['on-open'], builtin: true, description: 'Reads the vault, today’s calendar and Gmail; writes 05_Tasks/briefs/YYYY-MM-DD.md. Edit its prompt in Settings.', instructions: '' },
+  { id: 'daily-brief', name: 'Daily brief', profile: 'claude', permission: 'read', output: 'file', sources: [], triggers: ['on-open'], builtin: true, description: `Reads the vault, today’s calendar and Gmail; writes ${BRIEFS_DIR}/YYYY-MM-DD.md. Edit its prompt in Settings.`, instructions: '' },
   { id: 'update-context', name: 'Update context', profile: 'codex', permission: 'propose', output: 'reply', sources: [], triggers: ['manual'], builtin: true, description: 'Edits the vault from a sentence (⌘U); you review the diff and Keep or Undo.', instructions: '' },
   { id: 'planner-assistant', name: 'Planner assistant', profile: 'claude', permission: 'read', output: 'suggestions', sources: [], triggers: ['manual'], builtin: true, description: 'Suggest estimates (Tasks) and Plan with a wish (Re-plan). No tools; you approve every result.', instructions: '' }
 ]
 
 export interface HubDeps {
   vaultRoot: () => string
-  /** Folder for definitions; default `<vault>/06_Prompts/agents`. */
+  /** Folder for definitions; default `<vault>/AGENTS_DIR`. */
   agentsDir: () => string
   userData: string
   /** Triggers spend model calls on their own, so they run only in the packaged app (or with AI_CENTER_TRIGGERS=1). */
@@ -243,7 +244,7 @@ export class AgentHub {
   fileChanged(relPath: string) {
     if (!this.deps.triggersEnabled()) return
     const agentsRel = relative(this.deps.vaultRoot(), this.deps.agentsDir())
-    const ignore = (p: string) => p.startsWith('05_Tasks/agent-output/') || p.startsWith(`${agentsRel}/`) || p.startsWith('05_Tasks/briefs/')
+    const ignore = (p: string) => p.startsWith(`${AGENT_OUTPUT_DIR}/`) || p.startsWith(`${agentsRel}/`) || p.startsWith(`${BRIEFS_DIR}/`)
     const defs = this.registry.list().agents
     for (const id of watchMatches(defs, relPath, ignore)) {
       if (this.busy(id) || Date.now() - (this.lastFired[id] ?? 0) < 30_000) continue
@@ -541,7 +542,7 @@ export class AgentHub {
   private makePacket(def: AgentDef, fromName: string, a: Action, p: { objective: unknown; input: string; expect: unknown }, chainId: string): HandoffPacket {
     const packet: HandoffPacket = { from: a.agentId, objective: typeof p.objective === 'string' && p.objective.trim() ? p.objective.trim() : a.title, input: p.input, expect: typeof p.expect === 'string' && p.expect.trim() ? p.expect.trim() : undefined }
     if (p.input.length > SPILL_CHARS) {
-      const dir = join('05_Tasks/agent-output/handoffs', chainId)
+      const dir = join(HANDOFFS_DIR, chainId)
       const abs = join(this.deps.vaultRoot(), dir)
       const reachable = !def.workdir || join(dir).startsWith(def.workdir.replace(/\/$/, '') + '/')
       if (reachable) {
@@ -642,7 +643,7 @@ export class AgentHub {
     }
     if (def.output === 'file' && text) {
       // The app writes the answer itself: an agent never needs write access for its own output.
-      const rel = join('05_Tasks/agent-output', def.id, `${date}-${run.id}.md`)
+      const rel = join(AGENT_OUTPUT_DIR, def.id, `${date}-${run.id}.md`)
       mkdirSync(dirname(join(root, rel)), { recursive: true })
       writeFileSync(join(root, rel), `# ${def.name} · ${date}\n\n${text}\n`)
       run.outputFile = rel

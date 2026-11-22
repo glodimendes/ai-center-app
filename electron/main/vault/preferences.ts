@@ -1,12 +1,11 @@
 import { dump, load } from 'js-yaml'
 import type { CategoryPref, Preferences } from '@shared/types'
-
-export const PREFERENCES_FILE = '05_Tasks/planner/preferences.md'
+import { TODOS_FILE, WEEKLY_DIR } from '@shared/paths'
 
 /**
  * What a new vault starts with: generic areas that match the starter todo list (Work, Personal) plus Training.
  * Calendar names are placeholders: pick your own in Settings → Areas. Everything personal lives in the vault's
- * own `05_Tasks/planner/preferences.md`, which takes over from this the moment it exists.
+ * own preferences file (`PREFERENCES_FILE` in shared/paths.ts), which takes over from this the moment it exists.
  */
 export const DEFAULT_PREFERENCES: Preferences = {
   workingHours: {
@@ -143,11 +142,11 @@ const BODY = `
 Read by the AI Center app to auto-schedule tasks. Edit here or in the app's Settings.
 
 - \`workingHours\`: per weekday window the scheduler may use (\`null\` = day off).
-- \`categories\`: how todo headings in \`05_Tasks/daily-todos.md\` map to categories. \`headings\` are case-insensitive substrings (deepest heading wins). \`calendar\` is the Google calendar blocks are written to; \`containers\` are existing event titles in that calendar that the planner fills with tasks instead of creating new blocks. \`budget\` sets weekly min/max hours.
+- \`categories\`: how todo headings in \`${TODOS_FILE}\` map to categories. \`headings\` are case-insensitive substrings (deepest heading wins). \`calendar\` is the Google calendar blocks are written to; \`containers\` are existing event titles in that calendar that the planner fills with tasks instead of creating new blocks. \`budget\` sets weekly min/max hours.
 - \`dayRules\`: rules for some days. \`when: weekdays\` applies on every listed weekday; \`when: pick\` on one of them per week (the one with the least calendar time; changeable per week in the weekly review). \`maxMinutes: 0\` keeps the listed \`areas\` (empty = all work areas) out between \`from\` and \`to\`; above 0 caps them for the day.
 - \`training.category\`: the training area. Its tasks (e.g. under a Training heading, with \`repeat:\` rules) are planned like any other area's, with a gap around them and outside the daily work cap.
 - Task lines may carry optional metadata: \`~2h\` estimate, \`due:2026-11-12\` or \`by 12/11\` deadline, \`!urgent\` / \`!high\` / \`!low\` priority.
-- Weekly logs (planned vs actual time) live in \`05_Tasks/weekly/\`.
+- Weekly logs (planned vs actual time) live in \`${WEEKLY_DIR}/\`.
 `
 
 export function serializePreferences(prefs: Preferences, existing?: string): string {

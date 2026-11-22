@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DocInfo } from '@shared/types'
+import { ABOUT_ME_FILE, GOALS_FILE, PRIORITIES_FILE } from '@shared/paths'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -7,7 +8,7 @@ import { cx } from '@/lib/util'
 import { DocEditor } from '@/components/DocEditor'
 import { Empty } from '@/components/ui'
 
-const PINNED = ['04_Context_Docs/current-priorities.md', '04_Context_Docs/goals-and-direction.md', '01_Profile/personal-context.md']
+const PINNED = [PRIORITIES_FILE, GOALS_FILE, ABOUT_ME_FILE]
 
 export function Docs() {
   const { docPath, openDoc } = useStore()

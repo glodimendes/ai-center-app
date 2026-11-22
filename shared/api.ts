@@ -110,7 +110,7 @@ export interface Api {
   // brief
   getBrief(date: string): Promise<BriefData>
   generateBrief(): Promise<void>
-  /** Brief prompt: the user's editable instructions (vault 06_Prompts/daily-brief.md) + the fixed output format. */
+  /** Brief prompt: the user's editable instructions (vault BRIEF_PROMPT_FILE) + the fixed output format. */
   getBriefPrompt(): Promise<{ custom: string | null; defaultText: string; format: string }>
   saveBriefPrompt(text: string | null): Promise<void>
   // calendar display & availability
@@ -136,7 +136,7 @@ export interface Api {
   /** This week's own hours per area per weekday; null goes back to the Settings grid. */
   setWeekGrid(week: string, grid: Record<string, Partial<Record<Weekday, number>>> | null): Promise<void>
   setWeekNotes(week: string, notes: string): Promise<void>
-  /** Weekly review: moves checked tasks to 05_Tasks/archive/done-YYYY.md. Returns how many moved. */
+  /** Weekly review: moves checked tasks to archiveFile(year). Returns how many moved. */
   archiveDone(): Promise<number>
   /** Claude Haiku or Codex (settings.askEngine) suggests ~estimates for open tasks without one (no tools; nothing is written). */
   suggestEstimates(): Promise<EstimateSuggestion[]>

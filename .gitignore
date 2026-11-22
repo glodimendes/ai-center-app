@@ -16,3 +16,6 @@ settings.json
 plan-cache.json
 sync-state.json
 google-tokens*
+
+# Coordination notes between AI sessions (names personal vault files)
+UPDATE-CHANNEL.md

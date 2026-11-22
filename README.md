@@ -57,16 +57,22 @@ npm run install-app
 
 ## Your notes folder (the vault)
 
-Everything the app uses is a plain file in one folder:
+Everything the app uses is a plain file in one folder. A new vault starts with this layout:
 
 ```
-05_Tasks/daily-todos.md        your tasks (headings are areas, "- [ ]" lines are tasks)
-05_Tasks/braindump-inbox.md    quick captures
-05_Tasks/briefs/               the daily briefs
-05_Tasks/agent-output/         answers of agents that write to files, handoff files
-06_Prompts/agents/             one Markdown file per agent
-04_Context_Docs/               notes, priorities (read by the daily brief and agents)
+AGENTS.md                    entry point for AI tools: what to load for which task (CLAUDE.md points to it)
+projects/                    one note per project
+workflows/                   the rules every AI follows: assistant-file-update-rules.md, context-maintenance.md
+context/                     about-me.md, current-priorities.md ("## Active Priority Areas", shown in Review), other context
+tasks/daily-todos.md         your tasks (headings are areas, "- [ ]" lines are tasks)
+tasks/braindump-inbox.md     quick captures
+tasks/briefs/ weekly/ planner/ agent-output/ archive/
+                             written by the app: daily briefs, weekly logs, planner settings, agent answers, done tasks
+prompts/daily-brief.md       the daily brief's instructions (edited in Settings)
+prompts/agents/              one Markdown file per agent
 ```
+
+`decisions/` and `references/` are optional. AI tools may read the app's folders but never edit them; the rules files say so.
 
 The app edits single lines, found again by task id, so you can keep editing the same files in Obsidian or any editor at the same time. By default each change is committed to the folder's own git history ("auto-commit" can be turned off in Settings).
 

@@ -2,9 +2,6 @@ import { dump, load } from 'js-yaml'
 import type { CategoryPref, LogEntry, Pin, WeekData, WeekOverrides } from '@shared/types'
 import { fmtDuration } from '@shared/time'
 
-export const WEEKLY_DIR = '05_Tasks/weekly'
-export const weeklyFile = (week: string) => `${WEEKLY_DIR}/${week}.md`
-
 const DATA_RE = /```yaml planner\r?\n([\s\S]*?)```/
 
 export function parseWeekly(text: string, week: string): WeekData {

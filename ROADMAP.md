@@ -13,14 +13,11 @@ Open decisions, next steps and known limits. Last revised 2026-11-22. For how th
 
 **Goal:** a defined framework (organization and rules) that AI Center works upon from the first launch, so anyone who installs it can use it without reverse-engineering someone else's vault. It also has to stay adjustable: users keep their own layout and edits, and the framework can be updated without overwriting them.
 
-**Where it falls short today.** A fresh install gets a three-file starter vault (`00_START_HERE.md`, `05_Tasks/daily-todos.md`, `05_Tasks/braindump-inbox.md`, plus empty folders), but the app and its prompts assume more:
-- the Update context prompt tells the AI to read `03_Workflows/context-maintenance.md` and `03_Workflows/assistant-file-update-rules.md`, which a new vault doesn't have;
-- Update context and the Review screen expect `04_Context_Docs/current-priorities.md` with an "## Active Priority Areas" numbered list; Docs pins files such as `goals-and-direction.md`; the daily brief reads `02_Projects/` and `04_Context_Docs/`;
-- folder names are spread over the code (`vault/service.ts`, `vault/starter.ts`, prompts) and the rules live partly in code, partly in a user's own notes.
+**Where it stands (2026-11-22).** Every vault path is in one module, `shared/paths.ts`, used by the code, the prompts and the UI texts, and the layout uses plain lowercase names. A fresh install gets a starter vault with the pieces the app expects: `AGENTS.md` (entry point with a "What to load" table) and `CLAUDE.md` (`@AGENTS.md`), `workflows/assistant-file-update-rules.md` and `context-maintenance.md` (generic, short), `context/about-me.md`, `context/current-priorities.md` (with "## Active Priority Areas"), `tasks/daily-todos.md`, `tasks/braindump-inbox.md`, plus empty `projects/` and `prompts/agents/`. Still missing: mapping a vault that uses another layout (an old numbered vault must be renamed by hand today), and the first-run flow.
 
 **Proposed scope** (to be refined with the maintainer before building):
-1. **One layout spec, without numbered prefixes.** Define the vault layout once as roles (tasks, projects, context, rules, agents and prompts) with a folder name each, in a single module used by the starter, the Docs groups, the prompts and the docs, and document it for users. New vaults get plain names (provisionally `tasks/`, `projects/`, `context/`, `rules/`, `prompts/agents/`); the numbered folders in use today (`05_Tasks`, `06_Prompts`, …) are an old convention, not a requirement. Existing vaults keep working unchanged: the layout is detected or mapped per vault, and renaming is offered, never forced. Which files the app owns versus the user is part of the spec (see `AGENTS.md` rule 3).
-2. **Ship the rules with the starter vault.** Generic `context-maintenance.md` and `assistant-file-update-rules.md` (what an AI may edit, what needs confirmation), a `current-priorities.md` template, and a `00_START_HERE.md` that explains the layout. Update context must work on a fresh vault with no errors.
+1. **One layout spec, without numbered prefixes.** Done 2026-11-22: `shared/paths.ts` defines it (`AGENTS.md`, `context/`, `projects/`, `workflows/`, `tasks/`, `prompts/agents/`, `decisions/`, `references/`), used by the starter, the Docs groups, the prompts and the UI. Still open: existing vaults with another layout (the old numbered folders `05_Tasks`, `06_Prompts`, …) should be detected or mapped per vault and renaming offered, never forced; today they must be renamed by hand. Which files the app owns versus the user is part of the spec (see `AGENTS.md` rule 3).
+2. **Ship the rules with the starter vault.** (First version done; versioning still open.) Generic `context-maintenance.md` and `assistant-file-update-rules.md` (what an AI may edit, what needs confirmation), a `current-priorities.md` template, and a vault `AGENTS.md` that explains the layout (with a `CLAUDE.md` pointer). Update context must work on a fresh vault with no errors.
 3. **A real first-run flow.** Choose a folder (new starter or existing); when adopting an existing vault, detect missing framework pieces and offer to add them (never overwrite, line-local edits only); then areas, calendar, AI engines and optional sample agents. A short dialog covers the essentials (folder, calendar, AI tools); a checklist card on Home (calendar connected, engine found, areas set, first sync done, first agent) stays until everything is done or dismissed.
 4. **Rules enforced, not just written.** Surface the hard rules the code already enforces (approvals for outside effects, line-local edits, protected calendars, AI diffs reviewed) in the setup and in Settings, so users know what the framework guarantees.
 5. **Adjustable.** Folder names and key file paths are settings (there is already `settings.agentsDir`), so users with an existing vault map their own layout instead of renaming it.
@@ -33,7 +30,7 @@ Open decisions, next steps and known limits. Last revised 2026-11-22. For how th
 
 ## Open decisions
 
-1. **Braindump feature.** The maintainer will specify it. **Don't design or build it before the spec.** It relates to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
+1. **Braindump feature.** The maintainer will specify it. **Don't design or build it before the spec.** It relates to the Inbox view and ⌘⇧Space capture, which write to `tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
 
 Decided: **the app owns the calendar blocks it creates** (2026-11-11). The weekly grid and day rules shape the week, Sync is the approval, and calendar edits by the user win. If another tool also writes blocks to the same calendars, its blocks are filled as containers and may sit next to the app's.
 
@@ -47,13 +44,14 @@ Decided: **the app owns the calendar blocks it creates** (2026-11-11). The weekl
   - single-day sync (**Sync day**): syncing one day must leave planner events on other days untouched, including out-of-date ones; and a full Sync must leave untagged events (the user's own, other tools') untouched;
   - checking off a repeating task inside a block: the block keeps showing it checked, the next occurrence appears only in a later block, unchecking right away leaves a single open line;
   - Today's trash on a repeating task skips one occurrence; the Tasks view still deletes the series;
-  - the weekly review on real data, especially **Archive checked tasks** (it removes `[x]` lines; they go to `05_Tasks/archive/done-YYYY.md`);
+  - the weekly review on real data, especially **Archive checked tasks** (it removes `[x]` lines; they go to `tasks/archive/done-YYYY.md`);
   - a day rule, a habit (`3x/week`), Wrap up, Suggest estimates, Plan with a wish (also through Codex);
   - narrow windows, including dragging a task from Today's narrow drawer onto the timeline (CDP can't drive HTML5 drag);
   - the chat and agents work: an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex and Ollama.
 - **Live streaming of agent answers** (engines already emit `text` events).
 - **"Ask an agent"** from task rows, Home cards, Docs and ⌘K, with the item as context.
-- **An agent to replace the removed "AI preparation opportunities" Home card.**
+- **The daily brief as an agent.** The maintainer wants the built-in brief to become an agent (or part of one) in the hub, instead of its own code path in `context/brief.ts`. To keep: read-only tools, calendar only from the app's visible calendars, Gmail read-only, the Home cards (they parse the `## ` headings of `BRIEF_FORMAT`, which then belongs to the agent's output contract), suggested todos only on a click, no auto-run in dev. The vault's `prompts/daily-brief.md` can stay as the agent's instructions; the app-specific parts (output format, read-only rule, calendar handling) stay in code, not in the prompt.
+- **An agent to replace the removed "AI preparation opportunities" Home card.** Exists as a user-defined agent in the maintainer's vault (the daily brief no longer covers it); shipping a generic sample is optional.
 - **Phase 2/3 leftovers:** route the built-in brief and estimates through the budget gate and `limits`; watch the agents folder for changes; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
 
 ## Protocols, later

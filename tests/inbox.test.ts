@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { addInboxItem, removeInboxItem } from '../electron/main/vault/edits'
 import { parseInbox } from '../electron/main/vault/parser'
 
-const FILE = '05_Tasks/braindump-inbox.md'
+const FILE = 'tasks/braindump-inbox.md'
 const base = '# Braindump\n\n## 2026-11-10\n\n- Look into local race dates\n\n## Routing Notes\n\n- Portfolio ideas go to projects.\n'
 
 describe('inbox', () => {

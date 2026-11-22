@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { BookOpen, Wand2 } from 'lucide-react'
+import { PRIORITIES_FILE } from '@shared/paths'
 import { api } from '@/lib/api'
 import { useStore } from '@/store/app'
 import { inlineMd } from '@/lib/util'
 import { Button } from '@/components/ui'
 
-const PATH = '04_Context_Docs/current-priorities.md'
+const PATH = PRIORITIES_FILE
 
 /** The ranked list under the "priorities" heading (numbered or bulleted), plus the doc's "Last updated". */
 export function parsePriorities(md: string): { items: string[]; updated?: string } {

@@ -1,4 +1,5 @@
 import type { CalEvent } from '@shared/types'
+import { BRIEFS_DIR, CONTEXT_DIR, PRIORITIES_FILE, PROJECTS_DIR, START_FILE, TODOS_FILE } from '@shared/paths'
 import { ENGINES, EngineTimeout, failureMessage, runEngine } from '../agents/engines'
 import { findProfile } from '../agents/profiles'
 
@@ -18,15 +19,16 @@ const READ_TOOLS = [
 ]
 const BLOCKED = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent', 'mcp__claude_ai_Google_Calendar']
 
-// The user may edit the instructions (stored in the vault at 06_Prompts/daily-brief.md), but the
+// The user may edit the instructions (stored in the vault at BRIEF_PROMPT_FILE), but the
 // output format is always appended: the app parses those exact headings.
 export const DEFAULT_BRIEF_TEMPLATE = `Give me a concise morning brief for {{date}} covering today's calendar, important emails (if included) and anything requiring my attention.
 
 The current directory is my AI Center vault.
-- Check 05_Tasks/daily-todos.md for today's open todos.
-- Check 05_Tasks/ for active task notes and handoffs.
-- Use 02_Projects/ and 04_Context_Docs/ only when clearly relevant to today's calendar, emails, todos or task notes.
-- Don't reread 00_START_HERE.md.
+- Read ${TODOS_FILE} for today's open todos; mark overdue items and anything due in the next 3 days.
+- Read ${PRIORITIES_FILE} and order everything by it.
+- Read yesterday's file in ${BRIEFS_DIR}/ only to carry over items that are still open.
+- Open ${PROJECTS_DIR}/ or ${CONTEXT_DIR}/ files only when an email, event or todo concerns them.
+- Don't reread ${START_FILE}.
 {{email}}
 
 Today's calendar (from my calendars):
@@ -40,7 +42,6 @@ Reply with ONLY the brief in Markdown, using exactly these level-2 headings, in 
 ## Calendar
 ## Emails / Attention
 ## Todos by Topic
-## Active Task Notes
 ## Suggested Priorities
 ## Temporary Inbox Suggestions
 

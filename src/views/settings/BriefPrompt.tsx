@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
+import { BRIEF_PROMPT_FILE } from '@shared/paths'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { Button } from '@/components/ui'
 
 const textarea = 'w-full px-2 py-1.5 rounded-md border border-line bg-bg text-[12px] font-mono leading-relaxed outline-none focus:border-accent resize-y'
 
-/** Editor for the daily brief instructions (06_Prompts/daily-brief.md). The output format stays fixed. */
+/** Editor for the daily brief instructions (BRIEF_PROMPT_FILE). The output format stays fixed. */
 export function BriefPromptEditor() {
   const running = useStore((st) => st.state!.brief.running)
   const [saved, setSaved] = useState<string | null>(null)
@@ -35,7 +36,7 @@ export function BriefPromptEditor() {
     <div className="mt-4 pt-4 border-t border-line">
       <div className="text-[12.5px] font-medium mb-1">Prompt</div>
       <p className="text-[11.5px] text-muted mb-2">
-        Saved in your vault as 06_Prompts/daily-brief.md. Placeholders: <code>{'{{date}}'}</code> today's date, <code>{'{{calendar}}'}</code> today's events,{' '}
+        Saved in your vault as {BRIEF_PROMPT_FILE}. Placeholders: <code>{'{{date}}'}</code> today's date, <code>{'{{calendar}}'}</code> today's events,{' '}
         <code>{'{{email}}'}</code> the email instruction (depends on “Include email”). Anything you leave out is added at the end, so the calendar is never dropped.
       </p>
       <textarea className={textarea} rows={14} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} disabled={saved === null} />

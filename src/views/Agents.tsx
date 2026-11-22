@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { groupChains } from '@shared/chains'
+import { TASKS_DIR } from '@shared/paths'
 import { Goals } from '@/components/Goals'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
 import { Button, Header, Modal } from '@/components/ui'
@@ -339,7 +340,7 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
               <input className={field} value={d.workdir ?? ''} onChange={(e) => set({ workdir: e.target.value || undefined })} placeholder="whole vault" />
             </label>
             <label className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
-              <span className="text-muted">Runs on its own (one per line: schedule: 07:00, on-open, file-watch: 05_Tasks/*.md)</span>
+              <span className="text-muted">Runs on its own (one per line: schedule: 07:00, on-open, file-watch: {TASKS_DIR}/*.md)</span>
               <textarea className="px-3 py-2 rounded-xl border border-line bg-bg text-[13px] font-mono outline-none focus:border-accent resize-none" rows={2} value={d.triggers.filter((t) => t !== 'manual').join('\n')} onChange={(e) => set({ triggers: ['manual', ...e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)] })} />
             </label>
           </div>

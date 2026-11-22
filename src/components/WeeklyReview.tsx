@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Archive, CloudUpload } from 'lucide-react'
 import type { Weekday } from '@shared/types'
 import { addDays, fmtDuration, isoDate, isoWeek, weekStart } from '@shared/time'
+import { ARCHIVE_DIR } from '@shared/paths'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { categoryOf, cx, inlineMd } from '@/lib/util'
@@ -122,7 +123,7 @@ export function WeeklyReview({ onClose }: { onClose: () => void }) {
 
         <Step n={2} title="Tidy the todo list">
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={!doneCount} onClick={() => act(api.archiveDone()).then((n) => n !== undefined && useStore.getState().toast(`Moved ${n} done task${n === 1 ? '' : 's'} to 05_Tasks/archive/`))}>
+            <Button disabled={!doneCount} onClick={() => act(api.archiveDone()).then((n) => n !== undefined && useStore.getState().toast(`Moved ${n} done task${n === 1 ? '' : 's'} to ${ARCHIVE_DIR}/`))}>
               <Archive size={13} /> Archive {doneCount} checked task{doneCount === 1 ? '' : 's'}
             </Button>
             <span className="text-faint">Moves them out of daily-todos.md into this year's archive file, under their heading. Open tasks stay.</span>

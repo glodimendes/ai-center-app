@@ -1,4 +1,5 @@
 import type { AgentDef } from '@shared/agents'
+import { TODOS_FILE, WEEKLY_DIR } from '@shared/paths'
 
 /** Agents the user can add from the Agents view. They are ordinary definition files once added, and can be edited or deleted. */
 export interface Sample {
@@ -31,7 +32,7 @@ export const SAMPLES: Sample[] = [
       permission: 'read',
       output: 'actions',
       description: 'Reads your open tasks and suggests which ones an agent could do or prepare; Accept hands the heavy part to an agent for review.',
-      instructions: `Read 05_Tasks/daily-todos.md (the open tasks). Find at most 5 tasks where an AI agent could do or prepare the heavy part (research, a first draft, summarising, collecting data, drafting an email), and skip anything that needs the user's own judgement or presence.
+      instructions: `Read ${TODOS_FILE} (the open tasks). Find at most 5 tasks where an AI agent could do or prepare the heavy part (research, a first draft, summarising, collecting data, drafting an email), and skip anything that needs the user's own judgement or presence.
 
 For each one, propose an action of kind "run-agent" with payload {"agent": "<id of an existing custom agent that fits, or a new agent>", "input": "<a precise instruction including the task text verbatim>"}. If no existing agent fits, propose a "new-agent" action instead with payload {"id": "kebab-id", "name": "...", "permission": "read" or "propose", "output": "reply" or "file", "instructions": "...", "triggers": ["manual"]}.
 
@@ -51,7 +52,7 @@ Keep the task text in its original language. In your answer, give one line per s
       description: 'Example: tell it which routine to look after (training, study, a language…); it reads your notes and tasks and proposes the next steps as tasks.',
       instructions: `You look after one of my routines. The routine is named in my message for this run (for example "training" or "Spanish practice"); if it isn't, ask me which one in your answer and propose nothing.
 
-Find what I have written about it: search the vault's notes and the task list (05_Tasks/daily-todos.md) for that routine, and read the newest weekly files in 05_Tasks/weekly/ to see what I actually did. Any data sources given below are extra evidence. Do not invent facts about what I did.
+Find what I have written about it: search the vault's notes and the task list (${TODOS_FILE}) for that routine, and read the newest weekly files in ${WEEKLY_DIR}/ to see what I actually did. Any data sources given below are extra evidence. Do not invent facts about what I did.
 
 Judge consistency and load from what is written, then propose the next 3 to 5 steps. Each is an "add-task" action with payload {"section": ["<the heading where that routine's tasks live>"], "body": "<task line in my existing style, with an estimate like ~1h and a due: date if useful>"}. Match the language and format of the existing tasks.
 

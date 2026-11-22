@@ -1,4 +1,5 @@
 import type { AgentDef, Goal, GoalDelegation, Run } from '@shared/agents'
+import { GOALS_OUTPUT_DIR } from '@shared/paths'
 
 /** Limits are enforced here, never by asking the coordinator to behave. */
 export const GOAL_LIMITS = { maxTurns: 8, maxDelegations: 12, maxPerTurn: 4, resultChars: 6000 }
@@ -92,7 +93,7 @@ export class GoalRunner {
     if (coordinator.permission !== 'read') throw new Error('A coordinator must have permission "read": it only delegates, it never edits files itself.')
     if (!text.trim()) throw new Error('Describe the goal first.')
     const id = `g${Date.now().toString(36)}${++this.seq}`
-    const goal: Goal = { id, text: text.trim(), coordinator: coordinator.id, status: 'running', createdAt: new Date().toISOString(), turns: 0, delegations: 0, steps: [], folder: `05_Tasks/agent-output/goals/${id}`, seen: [], origin, context }
+    const goal: Goal = { id, text: text.trim(), coordinator: coordinator.id, status: 'running', createdAt: new Date().toISOString(), turns: 0, delegations: 0, steps: [], folder: `${GOALS_OUTPUT_DIR}/${id}`, seen: [], origin, context }
     this.goals.set(id, goal)
     this.deps.write(`${goal.folder}/plan.md`, `# Goal\n\n${goal.text}\n\nCoordinator: ${coordinator.name}\nStarted: ${goal.createdAt}\n`)
     this.persist(goal)

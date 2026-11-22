@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Eye, Plus, Trash2 } from 'lucide-react'
 import type { SourceDef } from '@shared/agents'
+import { PROJECTS_DIR } from '@shared/paths'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui'
 import { input } from './AreaSettings'
 
 const KIND_HELP: Record<SourceDef['kind'], string> = {
-  'vault-path': 'A file or folder inside the vault (e.g. 02_Projects/notes.md).',
+  'vault-path': `A file or folder inside the vault (e.g. ${PROJECTS_DIR}/notes.md).`,
   file: 'Any file or folder on this Mac (absolute path or ~/…).',
   url: 'A web page or text file (http/https), fetched when an agent runs.',
   gmail: 'Recent mail from your connected Gmail, matching a Gmail search. Agents can read it and propose drafts; nothing is ever sent.'
@@ -87,7 +88,7 @@ export function SourcesSettings() {
           ) : s.kind === 'url' ? (
             <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={s.url ?? ''} placeholder="https://…" onBlur={(e) => e.target.value.trim() !== (s.url ?? '') && edit(s.id, { url: e.target.value.trim() })} />
           ) : (
-            <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={s.path ?? ''} placeholder={s.kind === 'vault-path' ? '02_Projects/…' : '~/Documents/…'} onBlur={(e) => e.target.value.trim() !== (s.path ?? '') && edit(s.id, { path: e.target.value.trim() })} />
+            <input className={cx(input, 'w-full font-mono text-[11.5px]')} defaultValue={s.path ?? ''} placeholder={s.kind === 'vault-path' ? `${PROJECTS_DIR}/…` : '~/Documents/…'} onBlur={(e) => e.target.value.trim() !== (s.path ?? '') && edit(s.id, { path: e.target.value.trim() })} />
           )}
           <div className="text-[11px] text-faint">{KIND_HELP[s.kind]}</div>
           {preview?.id === s.id && <pre className="text-[11px] bg-sunken rounded-md p-2 max-h-48 overflow-auto whitespace-pre-wrap">{preview.text}</pre>}

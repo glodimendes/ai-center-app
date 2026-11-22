@@ -6,6 +6,7 @@ import type { Api, AppState, EstimateSuggestion, PlanOption, PlanVariant, Wish }
 import type { CalEvent, CalendarStatus, ContextResult, Plan, Settings, SyncOp, Task, VaultState } from '@shared/types'
 import { addDays, isoDate, isoWeek, localISO, startOfDay, weekStart } from '@shared/time'
 import { nextOccurrence } from '@shared/repeat'
+import { AGENTS_DIR, briefFile } from '@shared/paths'
 import { VaultService } from './vault/service'
 import { GoogleCalendar } from './calendar/google'
 import { MacCalendar } from './calendar/macos'
@@ -45,7 +46,7 @@ export class Controller implements Api {
   private gmail = new GmailAuth(() => ({ id: this.settings.googleClientId, secret: this.settings.googleClientSecret }))
   private agents = new AgentHub({
     vaultRoot: () => this.vault.root,
-    agentsDir: () => this.settings.agentsDir || join(this.vault.root, '06_Prompts/agents'),
+    agentsDir: () => this.settings.agentsDir || join(this.vault.root, AGENTS_DIR),
     userData: app.getPath('userData'),
     triggersEnabled: () => app.isPackaged || process.env.AI_CENTER_TRIGGERS === '1',
     sources: () => this.settings.sources,
@@ -571,7 +572,7 @@ export class Controller implements Api {
     // Dev runs never spend a model call on their own; "Run daily brief" still works there.
     if (!app.isPackaged) return
     if (!this.settings.briefAuto || this.briefRunning || this.context.running || this.briefAttemptDay === day) return
-    if (this.vault.read(`05_Tasks/briefs/${isoDate(new Date())}.md`) !== null) return
+    if (this.vault.read(briefFile(isoDate(new Date()))) !== null) return
     this.briefAttemptDay = day
     await this.generateBrief().catch(() => {})
   }

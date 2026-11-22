@@ -16,7 +16,7 @@ const cats = DEFAULT_PREFERENCES.categories
 const todos = readFileSync(join(__dirname, 'sample/daily-todos.md'), 'utf8')
 const inbox = readFileSync(join(__dirname, 'sample/braindump-inbox.md'), 'utf8')
 const realTodos = join(__dirname, 'fixtures/daily-todos.md')
-const FILE = '05_Tasks/daily-todos.md'
+const FILE = 'tasks/daily-todos.md'
 
 const diffLines = (a: string, b: string) => {
   const x = a.split('\n')
@@ -243,7 +243,7 @@ describe('takeDone (weekly review tidy)', () => {
 
 describe('inbox', () => {
   it('parses dated items and ignores routing notes', () => {
-    const items = parseInbox(inbox, '05_Tasks/braindump-inbox.md')
+    const items = parseInbox(inbox, 'tasks/braindump-inbox.md')
     expect(items.map((i) => i.text)).toContain('A community hackathon.')
     expect(items.some((i) => i.text.includes('Portfolio and internship ideas'))).toBe(false)
   })

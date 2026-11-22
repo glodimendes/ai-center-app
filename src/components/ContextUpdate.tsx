@@ -16,7 +16,7 @@ type Phase = 'write' | 'running' | 'review' | 'error'
 
 /**
  * Free-text context update: the instruction goes to Claude Code / Codex, which edits the
- * vault following 03_Workflows/context-maintenance.md. Nothing is kept until you say so.
+ * vault following its context-maintenance rules (MAINTENANCE_FILE). Nothing is kept until you say so.
  */
 export function ContextUpdate({ onClose, initialText = '' }: { onClose: () => void; initialText?: string }) {
   const engine = useStore((s) => s.state?.settings.contextEngine ?? 'codex')

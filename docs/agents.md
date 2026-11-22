@@ -4,7 +4,7 @@ AI Center lets you define your own agents. An agent is a Markdown file; the app 
 
 ## An agent file
 
-Agents live in `06_Prompts/agents/` of your vault (or the folder set in Settings). One file each:
+Agents live in `prompts/agents/` of your vault (or the folder set in Settings). One file each:
 
 ```markdown
 ---
@@ -15,7 +15,7 @@ output: file             # reply | file | suggestions | actions
 triggers: [manual, "schedule: 17:00"]
 sources: [project-notes] # ids from Settings → Data sources
 model: claude-sonnet-5-5 # optional; empty = the profile's or the cheap default
-workdir: 02_Projects     # optional folder inside the vault
+workdir: projects     # optional folder inside the vault
 budget: 60               # optional: pause when the account's window is at 60%
 ---
 
@@ -37,7 +37,7 @@ Whatever the permission, anything with an effect outside the agent's own output 
 ## Output
 
 - `reply`: the answer is shown in the run history.
-- `file`: the app saves the answer under `05_Tasks/agent-output/<agent>/`.
+- `file`: the app saves the answer under `tasks/agent-output/<agent>/`.
 - `suggestions` / `actions`: the agent ends with an `actions` block (`add-task`, `complete-task`, `create-event`, `email-draft`, `api-call`, `run-agent`, `new-agent`); each becomes a card you approve or reject.
 
 ## Triggers
@@ -67,7 +67,7 @@ In a conversation an agent may also propose a handoff or a task itself; it appea
 
 **Waiting turns.** An agent works on one thing at a time. A message or handoff sent while it is busy waits in the queue instead of failing: it shows in the chat as a dashed bubble ("Waiting · 2 ahead", with a stop button), runs when its turn comes, and is kept if you quit the app (up to 5 waiting messages per agent). Runs started by a schedule are not kept.
 
-**What a handoff carries.** An agent-proposed handoff is a small packet: the *objective*, the *material*, the *form of the answer* and, for long material, a vault file in `05_Tasks/agent-output/handoffs/` that the receiver reads first. The receiver sees nothing of the sender's conversation. A chain stops after 3 handoffs in a row, and the same ask is never sent twice in one chain. When the receiver is done, the thread it came from gets "<Agent> answered ↗", and its answer offers **Send back to <Agent>**, which quotes it into your chat with the sender for you to edit and send. Agents → Activity groups a chain with its total tokens and cost.
+**What a handoff carries.** An agent-proposed handoff is a small packet: the *objective*, the *material*, the *form of the answer* and, for long material, a vault file in `tasks/agent-output/handoffs/` that the receiver reads first. The receiver sees nothing of the sender's conversation. A chain stops after 3 handoffs in a row, and the same ask is never sent twice in one chain. When the receiver is done, the thread it came from gets "<Agent> answered ↗", and its answer offers **Send back to <Agent>**, which quotes it into your chat with the sender for you to edit and send. Agents → Activity groups a chain with its total tokens and cost.
 
 **How this relates to other agent protocols.** The open standard for agents talking across systems is A2A (Agent2Agent, Linux Foundation; IBM's ACP merged into it). It is a network protocol between separately hosted agents, which this local app doesn't need, so the app borrows its vocabulary instead: a run is a task (queued = submitted, running = working, paused = input-required, done = completed, error = failed, cancelled = canceled), a chain id plays the part of its context id, a handoff packet is its message, and an output file is its artifact. MCP is the sibling protocol for tools.
 
@@ -79,4 +79,4 @@ Each message is a normal run: it queues, respects the usage ceiling and your rev
 
 ## Goals
 
-A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `05_Tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.
+A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.
