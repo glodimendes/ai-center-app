@@ -7,9 +7,9 @@ import { act, useStore } from '@/store/app'
  * Natural quick add: "Apply to UBS ~1h by 15/11 !high". The text is written to the
  * section as-is, so the vault keeps exactly what was typed.
  */
-export function QuickAdd({ section, placeholder, autoFocus, onDone }: { section?: string[]; placeholder?: string; autoFocus?: boolean; onDone?: () => void }) {
+export function QuickAdd({ section, placeholder, autoFocus, onDone, initialText }: { section?: string[]; placeholder?: string; autoFocus?: boolean; onDone?: () => void; initialText?: string }) {
   const sections = useStore((s) => s.state!.vault.sections)
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialText ?? '')
   const [target, setTarget] = useState(section ? section.join('>') : sections[0]?.path.join('>') ?? '')
 
   const submit = async () => {

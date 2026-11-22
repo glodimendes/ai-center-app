@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Pencil, Plus, Square, Trash2 } from 'lucide-react'
 import type { AgentDef, AgentOutput, Permission, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
+import { groupChains } from '@shared/chains'
 import { Goals } from '@/components/Goals'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
 import { Button, Header, Modal } from '@/components/ui'
@@ -152,15 +153,28 @@ function Activity() {
 
 function History({ runs }: { runs: Run[] }) {
   const [open, setOpen] = useState<string | null>(null)
-  const list = [...runs].reverse()
+  // Runs started by a handoff are grouped under a header with the chain's total tokens and cost; single runs stay as they were.
+  const list = groupChains(runs).flatMap((c) => [...(c.runs.length > 1 ? [{ header: c } as const] : []), ...c.runs.map((x) => ({ run: x.run, depth: c.runs.length > 1 ? x.depth + 1 : 0 }))])
   return (
     <section>
       <h2 className="text-[13px] font-medium text-muted mb-2">Recent runs</h2>
       {!list.length && <div className="text-[13px] text-faint">Nothing has run yet.</div>}
       <div className="rounded-2xl border border-line/70 divide-y divide-line/60 overflow-hidden">
-        {list.map((r) => (
+        {list.map((row) => {
+          if ('header' in row) {
+            const c = row.header
+            return (
+              <div key={`chain-${c.id}`} className="px-4 py-2 text-[12px] text-muted bg-sunken/50 flex gap-2">
+                <span className="font-medium">Handoff chain</span>
+                <span>{c.runs.length} runs</span>
+                <span className="text-faint">{[c.tokens ? `${c.tokens} tokens` : '', c.costUsd ? `$${c.costUsd.toFixed(3)}` : ''].filter(Boolean).join(' · ')}</span>
+              </div>
+            )
+          }
+          const { run: r, depth } = row
+          return (
           <div key={r.id}>
-            <button onClick={() => setOpen(open === r.id ? null : r.id)} className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-left">
+            <button onClick={() => setOpen(open === r.id ? null : r.id)} style={{ paddingLeft: 16 + depth * 18 }} className="w-full flex items-center gap-2 pr-4 py-2.5 text-[13px] text-left">
               {open === r.id ? <ChevronDown size={12} className="text-faint" /> : <ChevronRight size={12} className="text-faint" />}
               {r.status === 'running' && <Loader2 size={12} className="animate-spin text-accent" />}
               <span className="font-medium">{r.agentName}</span>
@@ -189,7 +203,8 @@ function History({ runs }: { runs: Run[] }) {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
@@ -232,6 +247,17 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
   const profiles = useStore((st) => st.state)!.agents.profiles
   const [d, setD] = useState(def)
   const [error, setError] = useState('')
+  // Models this account can run; null while loading. Empty = the engine picks its own.
+  const [models, setModels] = useState<string[] | null>(null)
+  useEffect(() => {
+    let live = true
+    setModels(null)
+    api.agentModels(d.profile).then((m) => live && setModels(m), () => live && setModels([]))
+    return () => {
+      live = false
+    }
+  }, [d.profile])
+  const unavailable = Boolean(d.model && models && models.length > 0 && !models.includes(d.model))
   const set = (p: Partial<AgentDef>) => setD({ ...d, ...p })
   const field = 'h-9 px-3 rounded-xl border border-line bg-bg text-[13.5px] outline-none focus:border-accent'
   const slug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
@@ -258,7 +284,7 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
         <div className="grid grid-cols-2 gap-4 @max-3xl:grid-cols-1 text-[13px]">
           <label className="flex flex-col gap-1.5">
             <span className="text-muted">Account</span>
-            <select className={field} value={d.profile} onChange={(e) => set({ profile: e.target.value })}>
+            <select className={field} value={d.profile} onChange={(e) => set({ profile: e.target.value, model: undefined })}>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -296,8 +322,17 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
               </select>
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-muted">Model (empty = default)</span>
-              <input className={field} value={d.model ?? ''} onChange={(e) => set({ model: e.target.value || undefined })} />
+              <span className="text-muted">Model</span>
+              <select className={cx(field, unavailable && 'border-danger text-danger')} value={d.model ?? ''} disabled={!models?.length && !d.model} onChange={(e) => set({ model: e.target.value || undefined })}>
+                <option value="">{models && !models.length ? 'Chosen by the account' : 'Account default'}</option>
+                {unavailable && <option value={d.model}>{d.model} (not available)</option>}
+                {(models ?? []).map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              {unavailable && <span className="text-[12px] text-danger">This account can't run “{d.model}”. Pick one from the list.</span>}
             </label>
             <label className="flex flex-col gap-1.5">
               <span className="text-muted">Folder in the vault</span>

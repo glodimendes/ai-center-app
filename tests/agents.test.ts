@@ -7,7 +7,7 @@ import { AgentRegistry } from '../electron/main/agents/registry'
 import { ApprovalStore, parseActions } from '../electron/main/agents/actions'
 import { canAutoRun, engineMode, needsReview } from '../electron/main/agents/permissions'
 import { Supervisor, type Execute } from '../electron/main/agents/supervisor'
-import { buildPrompt } from '../electron/main/agents/runner'
+import { buildPrompt, handoffFormat, renderPacket } from '../electron/main/agents/runner'
 import { claudeCli } from '../electron/main/agents/engines/claude-cli'
 import { codexCli } from '../electron/main/agents/engines/codex-cli'
 import { findProfile } from '../electron/main/agents/profiles'
@@ -219,6 +219,41 @@ describe('supervisor', () => {
     expect(lines.map((l) => l.type)).toEqual(['queued', 'progress', 'end'])
     rmSync(dir, { recursive: true })
   })
+
+  it('keeps waiting conversation turns and handoffs across a restart, but not scheduled runs or running ones', async () => {
+    const dir = tmp()
+    const file = join(dir, 'queue.json')
+    const g = gate()
+    const exec: Execute = async () => (await g.p, { text: 'ok' })
+    const first = new Supervisor(exec, null, () => {}, undefined, file)
+    first.enqueue(def, 'running now')
+    first.enqueue(def, 'chat turn', { from: 'chat', chat: true })
+    first.enqueue(def, 'scheduled', { from: 'trigger' })
+    first.enqueue(def, 'handed', { from: 'other', packet: { from: 'other', objective: 'o', input: 'i' }, chainId: 'c1', hops: 1 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).map((x: { text: string }) => x.text)).toEqual(['chat turn', 'handed'])
+    // quitting must not wipe what is waiting
+    first.shutdown()
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toHaveLength(2)
+
+    const seen: string[] = []
+    const second = new Supervisor(async (run) => (seen.push(run.input.text), { text: 'ok' }), null, () => {}, undefined, file)
+    expect(second.restore((id) => (id === def.id ? def : undefined))).toBe(2)
+    await vi.waitFor(() => expect(seen).toEqual(['chat turn', 'handed']))
+    expect(second.list().find((r) => r.input.text === 'handed')).toMatchObject({ chainId: 'c1', hops: 1, input: { packet: { objective: 'o' } } })
+    rmSync(dir, { recursive: true })
+  })
+
+  it('counts what waits behind an agent, and gives every run a chain', async () => {
+    const g = gate()
+    const sup = new Supervisor(async () => (await g.p, { text: '' }), null)
+    const a = sup.enqueue(def, '1', { chat: true })
+    sup.enqueue(def, '2', { chat: true })
+    sup.enqueue(def, '3')
+    expect(sup.pendingFor(def.id)).toBe(2)
+    expect(sup.pendingFor(def.id, false)).toBe(3)
+    expect(a.chainId).toBe(a.id)
+    g.release()
+  })
 })
 
 describe('prompt', () => {
@@ -229,6 +264,34 @@ describe('prompt', () => {
     const act = buildPrompt(parseAgent('a', FILE), '', '2026-11-21')
     expect(act).toContain('```actions')
     expect(act).toContain('Today is 2026-11-21')
+  })
+
+  it('lets conversation runs propose a handoff, without doubling the actions block of agents that already have one', () => {
+    const peers = [{ id: 'researcher', description: 'Finds papers' }]
+    const chat = buildPrompt(parseAgent('a', '---\npermission: read\n---\nHelp.'), 'hi', '2026-11-22', '', false, handoffFormat(peers))
+    expect(chat).toContain('run-agent')
+    expect(chat).toContain('- researcher: Finds papers')
+    expect(chat).toContain("without the user's click")
+    expect(buildPrompt(parseAgent('a', FILE), '', '2026-11-22', '', false, handoffFormat(peers)).match(/```actions/g)).toHaveLength(1)
+    // a resumed turn is only the user's message
+    expect(buildPrompt(parseAgent('a', FILE), 'next', '2026-11-22', '', true, handoffFormat(peers))).toBe('next')
+  })
+
+  it('renders a handoff packet so the receiver can work without the sender\'s conversation', () => {
+    const text = renderPacket({ from: 'a', objective: 'Summarise X', input: 'long text', expect: 'five bullets', context: ['05_Tasks/agent-output/handoffs/c/01-a-to-b.md'] }, 'Researcher')
+    expect(text).toContain('Handed over by Researcher.')
+    expect(text).toContain('Objective: Summarise X')
+    expect(text).toContain('Expected answer: five bullets')
+    expect(text).toContain('Read first:\n- 05_Tasks/agent-output/handoffs/c/01-a-to-b.md')
+    expect(text).toContain('long text')
+    expect(renderPacket({ from: 'a', objective: 'o', input: '' }, 'A')).not.toContain('Material')
+  })
+
+  it('parses a handoff proposed at the end of a chat answer', () => {
+    const t = 'Here is the plan.\n```actions\n[{"kind":"run-agent","title":"Ask Research","payload":{"agent":"researcher","input":"find papers on X"}}]\n```'
+    const r = parseActions(t)
+    expect(r.text).toBe('Here is the plan.')
+    expect(r.actions).toEqual([{ kind: 'run-agent', title: 'Ask Research', payload: { agent: 'researcher', input: 'find papers on X' } }])
   })
 })
 

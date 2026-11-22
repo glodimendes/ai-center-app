@@ -67,12 +67,30 @@ export interface AgentDef {
   instructions: string
 }
 
-/** Input and output of a run are messages, so agents can later talk to each other (Phase 7). */
+/** What one agent hands to another (A2A-style): enough for the receiver to work without the sender's conversation. */
+export interface HandoffPacket {
+  /** Id of the agent that handed it over. */
+  from: string
+  /** What the receiver should achieve. */
+  objective: string
+  /** The material to work on (may be a short head of a longer text kept in `context`). */
+  input: string
+  /** The form the answer should take. */
+  expect?: string
+  /** Vault files to read (e.g. the full text of a long input). */
+  context?: string[]
+  /** The conversation it came from (`_central` or an agent id), where the answer is announced. */
+  origin?: string
+}
+
+/** Input and output of a run are messages, so agents can talk to each other. */
 export interface AgentMessage {
   from: string
   to: string
   text: string
   attachments?: string[]
+  /** Set when another agent handed this work over. */
+  packet?: HandoffPacket
 }
 
 export type RunStatus = 'queued' | 'paused' | 'running' | 'done' | 'error' | 'cancelled'
@@ -86,6 +104,10 @@ export interface Run {
   /** Set while status is `paused`: why the run waits for the user (budget). */
   pauseReason?: string
   parentRunId?: string
+  /** The first run of the chain of handoffs this run belongs to (its own id when it starts one). */
+  chainId?: string
+  /** How many handoffs deep this run is (0 = not handed over). */
+  hops?: number
   input: AgentMessage
   status: RunStatus
   queuedAt: string
@@ -155,13 +177,16 @@ export interface SampleInfo {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'agent'
+  /** `note` is a line the app adds (e.g. "Sent to Research"); it is never part of what an agent sees. */
+  role: 'user' | 'agent' | 'note'
   /** Who wrote an agent message (central chat shows several agents in one thread). */
   agentId?: string
   text: string
   t: string
   /** The run that produced it (agent messages). */
   runId?: string
+  /** note: the conversation it points to (an agent id). */
+  link?: string
 }
 
 export interface GoalDelegation {

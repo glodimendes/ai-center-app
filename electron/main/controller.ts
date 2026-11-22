@@ -740,8 +740,8 @@ export class Controller implements Api {
   async centralSend(text: string) {
     this.agents.sendCentral(text)
   }
-  async chatSend(agentId: string, text: string): Promise<string> {
-    return this.agents.sendChat(agentId, text)
+  async chatSend(agentId: string, text: string, origin?: string): Promise<string> {
+    return this.agents.sendChat(agentId, text, origin)
   }
   async chatReset(agentId: string) {
     this.agents.resetChat(agentId)
@@ -773,7 +773,10 @@ export class Controller implements Api {
     this.agents.cancel(runId)
   }
   async saveAgent(def: AgentDef) {
-    this.agents.save(def)
+    await this.agents.save(def)
+  }
+  agentModels(profileId: string) {
+    return this.agents.models(profileId)
   }
   async deleteAgent(id: string) {
     this.agents.remove(id)

@@ -21,6 +21,13 @@ interface Store {
   /** Conversation open in Chat: `central` or an agent id. */
   chatTarget: string
   toasts: Toast[]
+  /** Unsent text per conversation (`_central` or an agent id), so switching chats loses nothing. */
+  drafts: Record<string, string>
+  /** Per target conversation: where the text in its draft was handed over from. */
+  origins: Record<string, string>
+  setDraft: (key: string, text: string) => void
+  /** Opens `agentId`'s chat with `text` quoted in its draft, remembering `origin`. */
+  handOff: (target: string, text: string, origin: string) => void
   setState: (s: AppState) => void
   go: (v: View) => void
   setDay: (d: string) => void
@@ -44,6 +51,16 @@ export const useStore = create<Store>((set, get) => ({
   docPath: null,
   chatTarget: 'central',
   toasts: [],
+  drafts: {},
+  origins: {},
+  setDraft: (key, text) => set({ drafts: { ...get().drafts, [key]: text } }),
+  handOff: (target, text, origin) => {
+    const quoted = text.trim().split('\n').map((l) => `> ${l}`).join('\n')
+    const { drafts, origins } = get()
+    // The central conversation is `central` as a target and `_central` as a key.
+    const key = target === 'central' ? '_central' : target
+    set({ drafts: { ...drafts, [key]: `${drafts[key] ? `${drafts[key]}\n\n` : ''}${quoted}\n\n` }, origins: { ...origins, [key]: origin }, chatTarget: key === '_central' ? 'central' : key, view: 'chat' })
+  },
   setState: (state) => set({ state }),
   go: (view) => set({ view }),
   setDay: (day) => set({ day, selectedBlockId: null }),

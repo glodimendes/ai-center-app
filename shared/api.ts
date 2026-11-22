@@ -184,7 +184,8 @@ export interface Api {
   /** Continues a goal that stopped on a limit or a suspected loop. */
   resumeGoal(id: string): Promise<void>
   /** One chat turn with a custom agent: continues its conversation (Claude `--resume`, Codex `exec resume`); returns the run id. */
-  chatSend(agentId: string, text: string): Promise<string>
+  /** `origin`: the conversation the text was handed over from (`_central` or an agent id); it gets a "Sent to" note. */
+  chatSend(agentId: string, text: string, origin?: string): Promise<string>
   /** Forgets the agent's conversation and transcript. */
   chatReset(agentId: string): Promise<void>
   /** Gmail sign-in (read mail, create drafts; never send) with the Google client set for the calendar. */
@@ -197,6 +198,8 @@ export interface Api {
   previewSource(id: string): Promise<string>
   testProfile(id: string): Promise<{ ok: boolean; message: string }>
   saveAgent(def: AgentDef): Promise<void>
+  /** Models an account can run, for the agent editor's dropdown. Empty = the engine picks its own. */
+  agentModels(profileId: string): Promise<string[]>
   deleteAgent(id: string): Promise<void>
   approveAction(id: string): Promise<Action>
   rejectAction(id: string): Promise<void>
@@ -211,7 +214,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

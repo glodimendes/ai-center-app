@@ -22,7 +22,7 @@ budget: 60               # optional: pause when the account's window is at 60%
 Summarise what changed in my notes this week, in five bullets.
 ```
 
-You can also create and edit agents in the **Agents** view.
+You can also create and edit agents in the **Agents** view. There the model is a dropdown of the models the account can run (Claude's list, Codex's own list, whatever your Ollama server has); a model the account can't run is refused when saving.
 
 ## Permissions
 
@@ -58,6 +58,18 @@ The **Chat** page has a conversation list on the left: **Central** and one entry
 
 - **One agent:** a direct conversation that remembers earlier messages until you start a new one (Claude, Codex and Antigravity keep a real session; other engines are sent the recent transcript).
 - **Central:** coordinate several agents. Tag agents with `@` (autocomplete as you type) to give them work directly; each answers in the thread under its name. A message with no tag goes to a coordinator agent (the Coordinator example, or any read-only agent named like one), which splits it between your other agents and writes the final answer.
+
+Answers render tables, nested and checkbox lists, code (with a copy button) and links: `[[note]]` or a relative `.md` path opens in Docs.
+
+**Handing work on.** Hover an answer: **Hand over** (under it) offers every other agent, best fit first (marked *Suggested*, by plain word overlap with the agents' names and descriptions; no model call), plus **Add as task…** and **Copy**. Each section or top-level list item has its own arrow, and selected text offers **Hand over selection**, so one answer can be split between agents. Choosing an agent opens its chat with the part quoted in the message box for you to edit and send; the original conversation gets a "Sent to …" line that links to it. **Ask again** re-sends the question and the info button shows what the run did.
+
+In a conversation an agent may also propose a handoff or a task itself; it appears as one line under its answer (→ Agent, Dismiss / Send) and nothing happens until you click. Approved handoffs continue in the target agent's own chat. (An agent with permission `act` adds a task it proposes in chat without a click, as everywhere else; a handoff always needs one.)
+
+**Waiting turns.** An agent works on one thing at a time. A message or handoff sent while it is busy waits in the queue instead of failing: it shows in the chat as a dashed bubble ("Waiting · 2 ahead", with a stop button), runs when its turn comes, and is kept if you quit the app (up to 5 waiting messages per agent). Runs started by a schedule are not kept.
+
+**What a handoff carries.** An agent-proposed handoff is a small packet: the *objective*, the *material*, the *form of the answer* and, for long material, a vault file in `05_Tasks/agent-output/handoffs/` that the receiver reads first. The receiver sees nothing of the sender's conversation. A chain stops after 3 handoffs in a row, and the same ask is never sent twice in one chain. When the receiver is done, the thread it came from gets "<Agent> answered ↗", and its answer offers **Send back to <Agent>**, which quotes it into your chat with the sender for you to edit and send. Agents → Activity groups a chain with its total tokens and cost.
+
+**How this relates to other agent protocols.** The open standard for agents talking across systems is A2A (Agent2Agent, Linux Foundation; IBM's ACP merged into it). It is a network protocol between separately hosted agents, which this local app doesn't need, so the app borrows its vocabulary instead: a run is a task (queued = submitted, running = working, paused = input-required, done = completed, error = failed, cancelled = canceled), a chain id plays the part of its context id, a handoff packet is its message, and an output file is its artifact. MCP is the sibling protocol for tools.
 
 Each message is a normal run: it queues, respects the usage ceiling and your review. Things an agent wants to do (add a task, save a draft, hand work on…) appear as cards in the conversation for you to approve or reject, and a paused run or a file edit waiting for review shows up the same way.
 

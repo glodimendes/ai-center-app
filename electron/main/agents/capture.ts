@@ -41,8 +41,8 @@ export function parseMentions(text: string, agents: AgentDef[]): Mentions {
 }
 
 /** A transcript as plain text, for engines that can't keep a conversation themselves. */
-export function withHistory(history: { role: 'user' | 'agent'; text: string }[], message: string, limit = 10): string {
-  const recent = history.slice(-limit)
+export function withHistory(history: { role: string; text: string }[], message: string, limit = 10): string {
+  const recent = history.filter((m) => m.role !== 'note').slice(-limit)
   if (!recent.length) return message
   return `Conversation so far:\n${recent.map((m) => `${m.role === 'user' ? 'User' : 'You'}: ${m.text}`).join('\n')}\n\nNew message from the user: ${message}`
 }

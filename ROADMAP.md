@@ -138,6 +138,13 @@ The scheduler stays deterministic. AI is useful where judgment is needed:
   - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish (with focus on a heading, after the user's "make tomorrow's first half of the day focus on Tamanduá" failed: the prompt didn't name today/tomorrow and a wish could only set area hours), "New in your todo list".
 - **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.
 
+## Chat and agents: done 2026-11-22, next steps
+
+- **Done (uncommitted at the time of writing):** richer answer formatting; model dropdown (available models only); Hand over / Add as task / Copy / Ask again / run details on each message, per section and on selected text; agent-suggested handoffs as one-click lines under the answer; handoffs continue in the target agent's own chat; routing suggestion by word overlap.
+- **Also done:** waiting queue (chat turns and handoffs to a busy agent wait, show as pending bubbles, survive a restart; `Supervisor.queueFile`); handoff packet (objective, material, expected answer, long text as a file); chain limit of 3 and a duplicate guard; "answered ↗" note and **Send back**; chain view with tokens and cost in Activity. An `act` agent's `add-task` in chat needs no click (owner's decision, same as the existing `act` rule).
+- **Not done, offered:** live streaming of the answer while the agent works (engines already emit `text` events); "Ask an agent" from task rows, Home cards, Docs and ⌘K with the item as context.
+- **Protocols, later (researched 2026-11-22):** the app uses A2A's vocabulary, not its wire protocol. Two possible additions: a small MCP server exposing `list_agents` and `propose_handoff` (it only creates an approval, never runs anything) so a CLI agent proposes a handoff through a tool instead of a parsed fenced block; and an A2A server/client adapter (agent card per agent on localhost, or a new engine type that calls a remote A2A agent). Both need a network listener or outbound auth, so only when something outside the app needs to talk to these agents.
+
 ## Idea (user, 2026-11-22): a modular, editable Home
 
 Home (formerly Brief) should become editable and modular: people arrange the cards that show their main agent interactions and outputs, scheduled or not (e.g. a daily-brief agent's answer, an agent's latest output file, a chat shortcut, today's plan, due tasks). Not designed yet; build it from generic primitives (widgets backed by agents, sources and views), not around one use case. The fixed "Active task notes" card was removed for this reason (it depended on one personal note convention).

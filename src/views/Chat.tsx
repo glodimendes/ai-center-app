@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Loader2, MessageSquarePlus, Sparkles, Square } from 'lucide-react'
-import type { AgentDef, ChatMessage } from '@shared/agents'
+import type { Action, AgentDef, ChatMessage, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
+import { MessageFooter, PartButton, PartMenu } from '@/components/MessageActions'
 import { Markdown } from '@/lib/markdown'
 
 const CENTRAL = '_central'
@@ -27,7 +28,11 @@ export function Chat() {
   const key = isCentral ? CENTRAL : (agent?.id ?? CENTRAL)
   const messages = a.chats[key] ?? []
 
-  const [text, setText] = useState('')
+  const drafts = useStore((st) => st.drafts)
+  const origins = useStore((st) => st.origins)
+  const setDraft = useStore((st) => st.setDraft)
+  const text = drafts[key] ?? ''
+  const setText = (t: string) => setDraft(key, t)
   const [sending, setSending] = useState(false)
   const [pick, setPick] = useState(0)
   const end = useRef<HTMLDivElement>(null)
@@ -71,12 +76,13 @@ export function Chat() {
 
   const send = async () => {
     const t = text.trim()
-    if (!t || sending || (!isCentral && busy)) return
+    if (!t || sending) return
     setSending(true)
     try {
       if (isCentral) await api.centralSend(t)
-      else await api.chatSend(agent!.id, t)
+      else await api.chatSend(agent!.id, t, origins[agent!.id])
       setText('')
+      if (!isCentral && origins[agent!.id]) useStore.setState((st) => ({ origins: { ...st.origins, [agent!.id]: '' } }))
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -90,7 +96,7 @@ export function Chat() {
   const workingLabel = goal
     ? ((d) => (d ? `Asking ${nameOf(d.agent)}…` : 'Coordinating…'))(goal.steps.at(-1)?.delegations.find((x) => x.status === 'queued'))
     : active[0]
-      ? `${isCentral && active.length === 1 ? nameOf(active[0].agentId) : active.length > 1 ? `${active.length} agents` : agent?.name} ${active[0].status === 'queued' ? 'is waiting…' : 'is working…'}`
+      ? ((n) => (n === 1 ? `${nameOf(active[0].agentId)} ${active[0].status === 'queued' ? 'is waiting…' : 'is working…'}` : `${n} agents are working…`))(new Set(active.map((r) => r.agentId)).size)
       : ''
 
   return (
@@ -127,13 +133,34 @@ export function Chat() {
           <div className="max-w-[44rem] mx-auto px-6 pt-4 pb-8 space-y-6">
             {!messages.length && !busy && <Welcome central={isCentral} agent={agent} hasAgents={agents.length > 0} />}
             {messages.map((m, i) => (
-              <Message key={i} m={m} central={isCentral} name={nameOf(m.agentId)} />
+              <Message
+                key={i}
+                m={m}
+                name={m.agentId ? nameOf(m.agentId) : (agent?.name ?? 'Agent')}
+                origin={key}
+                run={m.runId ? a.runs.find((r) => r.id === m.runId) : undefined}
+                onRetry={() => {
+                  const q = messages.slice(0, i).reverse().find((x) => x.role === 'user')?.text
+                  if (!q) return Promise.resolve()
+                  return isCentral ? api.centralSend(q) : api.chatSend(agent!.id, q)
+                }}
+                canRetry={!busy}
+                proposals={m.runId ? pending.filter((x) => x.runId === m.runId) : []}
+                backTo={(() => {
+                  const o = (m.runId ? a.runs.find((r) => r.id === m.runId) : undefined)?.input.packet?.origin
+                  return o ? { key: o, name: o === '_central' ? 'Central' : nameOf(o) } : undefined
+                })()}
+              />
             ))}
+            {!isCentral &&
+              active.map((r) => (
+                <PendingTurn key={r.id} run={r} ahead={a.runs.filter((x) => x.agentId === r.agentId && x.status === 'queued' && x.queuedAt < r.queuedAt).length} />
+              ))}
             {paused.map((r) => (
               <PausedCard key={r.id} run={r} />
             ))}
             {a.review && <ReviewCard />}
-            {pending.map((x) => (
+            {pending.filter((x) => !messages.some((m) => m.runId === x.runId)).map((x) => (
               <ApprovalCard key={x.id} action={x} />
             ))}
             {busy && paused.length === 0 && (
@@ -187,7 +214,7 @@ export function Chat() {
               />
               <button
                 onClick={send}
-                disabled={!text.trim() || sending || (!isCentral && busy)}
+                disabled={!text.trim() || sending}
                 title="Send"
                 className="shrink-0 w-8 h-8 rounded-full bg-accent text-white grid place-items-center disabled:opacity-30 hover:opacity-90"
               >
@@ -197,6 +224,26 @@ export function Chat() {
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+/** A message that hasn't been answered yet: working on it, or waiting behind other work. */
+function PendingTurn({ run, ahead }: { run: Run; ahead: number }) {
+  const handed = run.input.packet
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[85%] rounded-3xl bg-sunken/60 border border-dashed border-line px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
+        {run.input.text}
+        <div className="mt-1 flex items-center gap-2 text-[11.5px] text-faint whitespace-normal">
+          {run.status === 'running' ? <Loader2 size={11} className="animate-spin text-accent" /> : null}
+          <span>{run.status === 'running' ? 'Working on it' : ahead > 0 ? `Waiting · ${ahead} ahead` : 'Waiting for its turn'}</span>
+          {handed && <span>· handed over</span>}
+          <button onClick={() => act(api.cancelRun(run.id))} className="hover:text-danger" title="Cancel this message">
+            <Square size={11} />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -211,19 +258,65 @@ function ListItem({ active, onClick, icon, label, dot }: { active: boolean; onCl
   )
 }
 
-function Message({ m, central, name }: { m: ChatMessage; central: boolean; name: string }) {
+function Message({ m, name, origin, run, onRetry, canRetry, proposals, backTo }: { m: ChatMessage; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; backTo?: { key: string; name: string } }) {
+  const openDoc = useStore((st) => st.openDoc)
+  const openChat = useStore((st) => st.openChat)
+  const [sel, setSel] = useState<{ text: string; x: number; y: number } | null>(null)
+  if (m.role === 'note')
+    return (
+      <div className="text-center text-[12.5px] text-faint">
+        <button onClick={() => m.link && openChat(m.link)} className="hover:text-accent">
+          {m.text} ↗
+        </button>
+      </div>
+    )
   if (m.role === 'user')
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-3xl bg-sunken px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">{withTags(m.text)}</div>
       </div>
     )
+  const time = new Date(m.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  // A selection inside the answer offers to hand just that part on.
+  const onMouseUp = () => {
+    const s = window.getSelection()
+    const t = s?.toString().trim()
+    if (!s || !t || s.rangeCount === 0) return void setSel(null)
+    const r = s.getRangeAt(0).getBoundingClientRect()
+    setSel({ text: t, x: r.left + r.width / 2, y: r.top })
+  }
   return (
-    <div>
-      {central && <div className="text-[12px] text-faint mb-1">{name}</div>}
-      <div className="text-[15px] leading-7">
-        <Markdown text={m.text} />
+    <div className="group/msg flex gap-3">
+      <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-accent/10 text-accent grid place-items-center text-[12px] font-semibold">{name[0]?.toUpperCase()}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] text-faint mb-1 flex gap-2">
+          <span className="font-medium text-muted">{name}</span>
+          <span className="opacity-0 group-hover/msg:opacity-100">{time}</span>
+        </div>
+        <div className="text-[15px] leading-7 pr-9" onMouseUp={onMouseUp}>
+          <Markdown text={m.text} onOpenDoc={openDoc} segmentActions={(source) => <PartButton text={source} origin={origin} />} />
+        </div>
+        {proposals.map((x) => (
+          <ApprovalCard key={x.id} action={x} compact />
+        ))}
+        <MessageFooter text={m.text} origin={origin} run={run} onRetry={canRetry ? onRetry : undefined} backTo={backTo} />
+        {sel && <SelectionToolbar sel={sel} origin={origin} onClose={() => setSel(null)} />}
       </div>
+    </div>
+  )
+}
+
+/** Floats above the selected text; its button opens the same menu as the per-section arrow. */
+function SelectionToolbar({ sel, origin, onClose }: { sel: { text: string; x: number; y: number }; origin: string; onClose: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div onMouseDown={(e) => e.preventDefault()} className="fixed z-40 -translate-x-1/2 -translate-y-full pb-2" style={{ left: sel.x, top: sel.y }}>
+      <span className="relative inline-block">
+        <button onClick={() => setOpen((o) => !o)} className="px-2.5 h-7 rounded-lg bg-ink text-bg text-[12px] shadow-lg flex items-center gap-1">
+          Hand over selection
+        </button>
+        {open && <PartMenu text={sel.text} origin={origin} onClose={() => (setOpen(false), onClose())} />}
+      </span>
     </div>
   )
 }

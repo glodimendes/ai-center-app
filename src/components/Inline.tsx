@@ -16,10 +16,25 @@ const KIND: Record<Action['kind'], string> = {
 }
 
 /** Something an agent wants to do that needs your OK. Shown in the conversation that produced it and in Activity. */
-export function ApprovalCard({ action }: { action: Action }) {
+export function ApprovalCard({ action, compact }: { action: Action; compact?: boolean }) {
   const toast = useStore((st) => st.toast)
   const agent = useStore((st) => st.state)!.agents.agents.find((g) => g.id === action.agentId)
   const detail = Object.entries(action.payload).filter(([, v]) => typeof v === 'string' || Array.isArray(v))
+  const target = action.kind === 'run-agent' ? useStore.getState().state?.agents.agents.find((g) => g.id === action.payload.agent)?.name ?? String(action.payload.agent ?? '') : ''
+  // Under the message that proposed it: one line with the two choices.
+  if (compact)
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-panel pl-3 pr-1.5 py-1.5 text-[13px]">
+        <span className="text-faint shrink-0">{action.kind === 'run-agent' ? `→ ${target}` : KIND[action.kind]}</span>
+        <span className="flex-1 min-w-0 truncate" title={action.title}>{action.title}</span>
+        <Button kind="ghost" onClick={() => act(api.rejectAction(action.id))}>
+          Dismiss
+        </Button>
+        <Button kind="primary" onClick={() => act(api.approveAction(action.id).then((r) => r.status === 'failed' && toast(r.error ?? 'Failed', 'error')))}>
+          {action.kind === 'run-agent' ? 'Send' : 'Add'}
+        </Button>
+      </div>
+    )
   return (
     <div className="rounded-2xl border border-line bg-panel px-4 py-3">
       <div className="text-[11.5px] text-faint">

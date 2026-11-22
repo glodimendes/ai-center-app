@@ -4,13 +4,14 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
-import type { AccountProfile, Action, ChatMessage, Goal, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
+import type { AccountProfile, Action, ChatMessage, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
 import { ENGINES, failureMessage, ollamaModels, profileEnv, resolveBinary, runEngine } from './agents/engines'
 import { DEFAULT_PROFILES } from './agents/profiles'
+import { availableModels } from './agents/engines/models'
 import type { GmailLike } from './agents/gmail'
 import { buildRawDraft } from './agents/gmail'
 import { GoalRunner } from './agents/goals'
@@ -20,7 +21,8 @@ import { parseMentions, routeCapture, withHistory } from './agents/capture'
 import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
 import { budgetPause, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
-import { runAgentDef } from './agents/runner'
+import { MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef } from './agents/runner'
+import { repeatKey } from './agents/goals'
 import { Supervisor, type Execute } from './agents/supervisor'
 import type { ContextSession } from './context/session'
 
@@ -28,6 +30,8 @@ const exec = promisify(execFile)
 /** Key of the central chat's transcript. */
 const CENTRAL = '_central'
 const DEFAULT_CEILING = 70
+/** Most conversation turns that may wait behind one agent. */
+const MAX_PENDING = 5
 
 /** The planner's built-in AI paths, listed beside custom agents. Their behaviour stays in code (fixed safety); they are not files. */
 const BUILTINS: AgentDef[] = [
@@ -74,6 +78,8 @@ export class AgentHub {
   private goals: GoalRunner
   /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
   private chats = new Map<string, { sessionId?: string; messages: ChatMessage[] }>()
+  /** Per handoff chain: what was already asked of whom, so a chain can't repeat itself. */
+  private chainSeen = new Map<string, Set<string>>()
   /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
   private lastFired: Record<string, number> = {}
 
@@ -102,10 +108,27 @@ export class AgentHub {
         },
         // Handing work to another agent: still one click, and that run is bound by its own permission and review.
         'run-agent': async (a) => {
-          const { agent, input } = a.payload as { agent?: unknown; input?: unknown }
+          const { agent, input, objective, expect } = a.payload as { agent?: unknown; input?: unknown; objective?: unknown; expect?: unknown }
           const def = typeof agent === 'string' ? this.registry.get(agent) : undefined
           if (!def) throw new Error(`There is no agent "${String(agent)}". Add it first.`)
-          this.supervisor.enqueue(def, typeof input === 'string' ? input : '', { from: a.agentId, parentRunId: a.runId })
+          const text = typeof input === 'string' ? input : ''
+          const from = this.supervisor.get(a.runId)
+          const by = this.registry.get(a.agentId)?.name ?? a.agentId
+          const hops = (from?.hops ?? 0) + 1
+          const chainId = from?.chainId ?? a.runId
+          if (hops > MAX_HOPS) throw new Error(`Handoff chain limit reached (${MAX_HOPS}). Continue by hand if this is still needed.`)
+          const key = repeatKey({ agent: def.id, message: text || a.title })
+          const seen = this.chainSeen.get(chainId) ?? new Set<string>()
+          if (seen.has(key)) throw new Error(`${def.name} was already asked the same thing in this chain.`)
+          seen.add(key)
+          this.chainSeen.set(chainId, seen)
+          const packet = this.makePacket(def, by, a, { objective, input: text, expect }, chainId)
+          const conversation = from && (from.chat || from.input.from === 'central')
+          if (conversation) packet.origin = from.chat ? from.agentId : CENTRAL
+          const msg = renderPacket(packet, by)
+          // Proposed from a conversation: the work continues in the target's own chat, and the origin thread gets a pointer.
+          if (conversation) this.sendChat(def.id, msg, packet.origin, { packet, parentRunId: a.runId, chainId, hops })
+          else this.supervisor.enqueue(def, msg, { from: a.agentId, parentRunId: a.runId, packet, chainId, hops })
         },
         // A new definition file is the app's own output; its permission can't exceed `propose` this way.
         'new-agent': async (a) => {
@@ -131,7 +154,7 @@ export class AgentHub {
       },
       deps.push
     )
-    this.supervisor = new Supervisor(this.execute, join(deps.userData, 'runs'), deps.push, this.gate)
+    this.supervisor = new Supervisor(this.execute, join(deps.userData, 'runs'), deps.push, this.gate, join(deps.userData, 'queue.json'))
     this.goalDir = join(deps.userData, 'goals')
     let restored: Goal[] = []
     try {
@@ -160,6 +183,8 @@ export class AgentHub {
       },
       restored
     )
+    // What was waiting when the app last closed goes back in the queue.
+    this.supervisor.restore((id) => this.registry.get(id))
     void this.detectCli()
   }
 
@@ -321,15 +346,23 @@ export class AgentHub {
   }
 
   /** One chat turn: a run that continues the agent's conversation. It queues, passes the budget gate and, for propose/act agents, is reviewed like any run. */
-  sendChat(agentId: string, text: string): string {
+  sendChat(agentId: string, text: string, origin?: string, extra: { packet?: HandoffPacket; parentRunId?: string; chainId?: string; hops?: number } = {}): string {
     const def = this.registry.get(agentId)
     if (!def) throw new AgentError('That agent no longer exists.')
     if (!text.trim()) throw new AgentError('Write a message first.')
     const engine = this.profiles().find((p) => p.id === def.profile)?.engine
     if (!engine) throw new AgentError('This agent uses an account that no longer exists. Edit the agent and pick another.')
-    if (this.busy(agentId)) throw new AgentError('This agent is still working on something. Wait for it to finish.')
+    // Busy is fine: the turn waits its turn in the queue (and survives a restart). Only a pile-up is refused.
+    if (this.supervisor.pendingFor(agentId) >= MAX_PENDING) throw new AgentError(`${def.name} already has ${MAX_PENDING} messages waiting. Let it catch up first.`)
     this.chat(agentId)
-    return this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true }).id
+    const id = this.supervisor.enqueue(def, text.trim(), { from: 'chat', chat: true, ...extra }).id
+    // Handed over from another conversation: leave a pointer there, so the thread shows where the work went.
+    if (origin && origin !== agentId && (origin === CENTRAL || this.registry.get(origin))) {
+      this.chat(origin).messages.push({ role: 'note', text: `Sent to ${def.name}`, link: agentId, t: new Date().toISOString() })
+      this.saveChat(origin)
+      this.deps.push()
+    }
+    return id
   }
 
   startGoal(coordinatorId: string, text: string): string {
@@ -356,12 +389,12 @@ export class AgentHub {
     if (!body) throw new AgentError('Write a message first.')
     const central = this.chat(CENTRAL)
     const t = new Date().toISOString()
-    const history = central.messages.slice(-8)
+    const history = central.messages.filter((m) => m.role !== 'note').slice(-8)
     central.messages.push({ role: 'user', text: text.trim(), t })
     this.saveChat(CENTRAL)
     if (m.agents.length) {
       for (const a of m.agents) {
-        if (this.busy(a.id)) throw new AgentError(`${a.name} is still working on something.`)
+        if (this.supervisor.pendingFor(a.id, false) >= MAX_PENDING) throw new AgentError(`${a.name} already has ${MAX_PENDING} things waiting. Let it catch up first.`)
         this.markFired(a.id)
         this.supervisor.enqueue(a, body, { from: 'central' })
       }
@@ -504,8 +537,38 @@ export class AgentHub {
     return this.supervisor.enqueue(def, input).id
   }
 
-  save(def: AgentDef) {
+  /** The packet for a handoff. A long input is kept in an app-owned vault file and handed over as a path plus a short head. */
+  private makePacket(def: AgentDef, fromName: string, a: Action, p: { objective: unknown; input: string; expect: unknown }, chainId: string): HandoffPacket {
+    const packet: HandoffPacket = { from: a.agentId, objective: typeof p.objective === 'string' && p.objective.trim() ? p.objective.trim() : a.title, input: p.input, expect: typeof p.expect === 'string' && p.expect.trim() ? p.expect.trim() : undefined }
+    if (p.input.length > SPILL_CHARS) {
+      const dir = join('05_Tasks/agent-output/handoffs', chainId)
+      const abs = join(this.deps.vaultRoot(), dir)
+      const reachable = !def.workdir || join(dir).startsWith(def.workdir.replace(/\/$/, '') + '/')
+      if (reachable) {
+        mkdirSync(abs, { recursive: true })
+        const n = readdirSync(abs).length + 1
+        const rel = join(dir, `${String(n).padStart(2, '0')}-${a.agentId}-to-${def.id}.md`)
+        writeFileSync(join(this.deps.vaultRoot(), rel), `# Handed over by ${fromName} to ${def.name}\n\n${p.input}\n`)
+        packet.context = [rel]
+        packet.input = `${p.input.slice(0, 400)}… (the full text is in ${rel})`
+      }
+    }
+    return packet
+  }
+
+  /** Models the account can run (empty: the engine picks its own, so no choice is offered). */
+  models(profileId: string): Promise<string[]> {
+    const profile = this.profiles().find((p) => p.id === profileId)
+    return profile ? availableModels(profile).catch(() => []) : Promise.resolve([])
+  }
+
+  async save(def: AgentDef) {
     if (def.builtin || BUILTINS.some((b) => b.id === def.id)) throw new AgentError('Built-in agents can\'t be changed here.')
+    if (def.model) {
+      const models = await this.models(def.profile)
+      // An engine with no list of its own (or an unreachable Ollama) can't be checked, so only a known list refuses.
+      if (models.length && !models.includes(def.model)) throw new AgentError(`"${def.model}" is not available on this account. Pick one from the list.`)
+    }
     this.registry.save({ ...def, builtin: undefined })
     this.deps.push()
   }
@@ -532,7 +595,7 @@ export class AgentHub {
   }
   async dispose() {
     for (const g of this.goals.list()) this.goals.stop(g.id, 'The app was closed.')
-    this.supervisor.cancelAll()
+    this.supervisor.shutdown()
   }
 
   private execute: Execute = async (run, def, onProgress, sig) => {
@@ -547,7 +610,11 @@ export class AgentHub {
     const input = chat && sessionless ? withHistory(chat.messages, run.input.text) : run.input.text
     const session = chat && !sessionless ? (chat.sessionId ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
     let sessionId: string | undefined
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input, { session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
+    // Conversation runs may propose handing work on (run-agent, add-task) when there is anyone to hand it to.
+    const conversation = Boolean(run.chat || run.input.from === 'central')
+    const peers = this.registry.list().agents.filter((x) => x.id !== def.id)
+    const handoff = conversation && peers.length && (run.hops ?? 0) < MAX_HOPS ? handoffFormat(peers) : undefined
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input, { handoff, session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {
@@ -566,10 +633,12 @@ export class AgentHub {
       usage = r.usage
       sessionId = r.sessionId
     }
-    if (def.output === 'actions' || def.output === 'suggestions') {
+    if (def.output === 'actions' || def.output === 'suggestions' || handoff) {
       const parsed = parseActions(text)
       text = parsed.text
-      for (const a of parsed.actions) await this.approvals.propose(run.id, def.id, def.permission, a)
+      // Agents that didn't ask for actions may only propose handing work on or adding a task.
+      const wide = def.output === 'actions' || def.output === 'suggestions'
+      for (const a of parsed.actions) if (wide || a.kind === 'run-agent' || a.kind === 'add-task') await this.approvals.propose(run.id, def.id, def.permission, a)
     }
     if (def.output === 'file' && text) {
       // The app writes the answer itself: an agent never needs write access for its own output.
@@ -591,6 +660,12 @@ export class AgentHub {
       const central = this.chat(CENTRAL)
       central.messages.push({ role: 'agent', agentId: def.id, text: text || '(no text)', t: new Date().toISOString(), runId: run.id })
       this.saveChat(CENTRAL)
+    }
+    // Handed over from a conversation: tell that thread the answer is ready (it lives in this agent's own chat).
+    const origin = run.input.packet?.origin
+    if (origin && origin !== def.id && (origin === CENTRAL || this.registry.get(origin))) {
+      this.chat(origin).messages.push({ role: 'note', text: `${def.name} answered`, link: def.id, t: new Date().toISOString() })
+      this.saveChat(origin)
     }
     this.cache = null
     return { text, usage }
