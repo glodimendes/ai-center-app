@@ -1,6 +1,6 @@
 # AGENTS.md: context for AI assistants working on this repo
 
-Read this first, then `README.md` (what the app does, planning rules) and `ROADMAP.md` (open decisions, next steps, known limits). Codex reads this file directly; Claude Code reads it via `CLAUDE.md`.
+Read this first, then `README.md` (what the app is, install, safety), `docs/planner.md` (screens, task syntax, planning rules) and `ROADMAP.md` (open decisions, next steps, known limits). Codex reads this file directly; Claude Code reads it via `CLAUDE.md`.
 
 ## What this is
 
@@ -30,7 +30,7 @@ The planner and the agent hub are one app on `main` (the branch `ai-center-core`
 - **Protocols:** the app uses A2A's vocabulary (task states, context id, message, artifact), not its wire protocol; MCP `propose_handoff` and an A2A adapter are ROADMAP items. See `docs/agents.md`.
 - **Verified:** 243 tests; in the dev app (`.dev-vault`): greeting, brief cards, chat rendering, the Hand over menu and its Suggested tag, the quoted draft, the compact proposal line, and three queued turns answered in order with a fake `command` engine. **Not verified:** an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex/Ollama on screen.
 
-**Before the first public push:** the commit history was rewritten on 2026-11-22 so the author email is the GitHub noreply address; the remote still has the old hashes, so pushing needs `git push --force-with-lease` (the owner's call). A restore tag `pre-agent-hub-merge` marks `main` before the merge. Still open for going public: a license, the README for a public audience (ROADMAP "Open-source readiness").
+**Pushed (2026-11-22):** the history was rewritten so the author email is the GitHub noreply address, and `main` was force-pushed with the owner's OK (`--force-with-lease`, the remote's old 28 commits replaced). The repo `glodimendes/ai-center-app` is **public**. The restore tag `pre-agent-hub-merge` (local only) marks `main` before the merge. The README is now written for a public audience (what it is, install, safety); the planner's screen-by-screen reference and planning rules moved to `docs/planner.md`. Still open for going public: a license (the README says none is chosen) and trimming owner-specific text from `AGENTS.md` / `ROADMAP.md` (ROADMAP "Open-source readiness"). Any further force push needs the owner's explicit OK again.
 
 **Open items, in rough priority:**
 1. Install and watch the new chat/agents work on the real vault (only when the owner asks), then more chat/agents improvements: live streaming of answers (engines already emit `text` events), "Ask an agent" from task rows, Home cards, Docs and ⌘K, an "AI preparation" agent to replace the removed Home card. Ask the owner what they want next.
@@ -101,7 +101,7 @@ electron/main/
                         edits.ts (line patches, takeDone for the archive), service.ts (read/write/watch, brief, overrides,
                         archive, week picks/grid/notes/wishes), git.ts (batched, serialized commits with retry),
                         preferences.ts (defaults + frontmatter, migrations, dayRules), weekly.ts (log/pins/overrides/holds/notes)
-  scheduler/plan.ts     pure planner (README "Planning rules"); variants.ts: Re-plan strategies + metrics;
+  scheduler/plan.ts     pure planner (docs/planner.md "Planning rules"); variants.ts: Re-plan strategies + metrics;
                         cadence.ts: planning day (04:00 rollover) and full-vs-incremental decision; habits.ts: `3x/week`
                         → per-week sessions (ids `<task>@<week>#n`, mapped back before plan() returns); wish.ts: "Plan with
                         a wish" prompt, validation, and writing it into week overrides; day rules live inside plan.ts
@@ -147,7 +147,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 - TypeScript strict, matching the existing style: no semicolons, single quotes, 2 spaces, long lines, terse comments that explain *why*. There is no Prettier config: **don't run Prettier with defaults** (it rewrites whole files with semicolons and double quotes). Edit by hand.
 - Times are local. Planner timestamps are `YYYY-MM-DDTHH:mm:00` without an offset (`localISO`); calendars return offsets, so compare via `Date`.
 - Our own UI primitives (`components/ui.tsx`); no component libraries. The docs editor is Milkdown Crepe.
-- New planner rules: add the field to `Preferences` (types + `DEFAULT_PREFERENCES` + `parsePreferences` merge), a Settings control, a test, and a line in README "Planning rules".
+- New planner rules: add the field to `Preferences` (types + `DEFAULT_PREFERENCES` + `parsePreferences` merge), a Settings control, a test, and a line in docs/planner.md "Planning rules".
 
 ## Verify your changes
 

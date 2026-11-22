@@ -11,14 +11,14 @@ This branch (`ai-center-core`) grows the planner into a general agent hub: plan 
 - **License:** none chosen yet. The owner decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
 - **Git history:** done locally (2026-11-22): all commits now use the GitHub noreply address. The remote still has the old history, so the first push must be a force push, the owner's call.
 - **Planner defaults:** done (2026-11-22): `DEFAULT_PREFERENCES` is neutral (Work / Personal / Training, placeholder calendar "Planner"); the owner's set moved to `tests/sample/preferences.ts` for tests and lives in their vault.
-- **Docs:** `AGENTS.md`, `ROADMAP.md` and `README.md` still describe the owner's routine. Rewrite README for a public audience and keep owner-specific notes out of the public repo.
+- **Docs:** done for the README (2026-11-22: public overview and install; the planner reference moved to `docs/planner.md`). The repo is public, but `AGENTS.md` and `ROADMAP.md` still describe the owner's routine (university, personal paths, calendars): trim them or move them out, and drop the owner-specific examples in `docs/planner.md`.
 - **Done:** no hard-coded vault path (first run creates a starter vault; the setup dialog lets users pick their own folder), generic sample agents, `docs/agents.md`, `CONTRIBUTING.md`.
 - **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.
 
 ## Open decisions (waiting for the user)
 
 1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.
-2. **Plan options.** Done: four strategies + Shuffle (2026-11-09), and **Plan with a wish** (2026-11-11; README "When the plan changes").
+2. **Plan options.** Done: four strategies + Shuffle (2026-11-09), and **Plan with a wish** (2026-11-11; docs/planner.md "When the plan changes").
 3. **Braindump feature.** The user will explain it. **Don't design or build it before the spec.** It's related to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
 
 ## Later (agreed with the user, not now)

@@ -1,129 +1,98 @@
 # AI Center
 
-Motion-style routine organizer on top of the AI Center vault (`~/Documents/Personal Vault/AI Center`) and your calendars (macOS Calendar, or Google directly). It's a macOS desktop app (Electron): open it from `/Applications`; quitting it leaves nothing running.
+A macOS desktop app that plans your week from a folder of plain Markdown notes and your calendar, and lets you define your own AI agents that work on the same notes. Nothing leaves your machine except what you connect yourself (a calendar, Gmail, the AI tools you already use), and nothing acts without your click.
 
-For AI assistants and handoff: read `AGENTS.md` (rules, architecture, how to verify), then `ROADMAP.md`.
+- **A planner you can read.** Your tasks are lines in a Markdown file (`- [ ] Read the paper ~2h due:2026-12-01 !high`). The app turns them into a day-by-day plan with blocks on a timeline, around your calendar events, working hours, daily limits and deadlines. The planning is ordinary code, not AI, so it is predictable and explainable.
+- **Your calendar stays yours.** It reads macOS Calendar (which can include your Google calendars) or Google directly, and writes only the events it created itself, after you confirm a preview of every change.
+- **Agents you define.** An agent is a Markdown file: instructions, a permission level, the data it may read and how it runs. Chat with them one at a time or all together, hand part of an answer to another agent, queue work for a busy one, and approve everything that has an effect outside the agent's own answer.
+- **Local and inspectable.** Your notes are files (an Obsidian vault works as is), every change the app makes is a small git commit you can undo, and AI edits are shown as a diff you keep or undo.
 
-> **Agents:** besides the planner, AI Center lets you define your own AI agents (permissions, approvals, triggers, chat, several accounts). See [docs/agents.md](docs/agents.md).
+> Status: version 0.1, a personal project that runs daily for its author on macOS; expect rough edges. No license has been chosen yet; see [Contributing](#contributing).
 
-## Features
+## What it looks like in use
 
-| Screen | What it does |
+| | |
 |---|---|
-| **Home** (formerly Brief) | Morning overview: day ribbon, planned hours per area, training, deadlines, task notes, warnings. On the first open of each day the app prepares an AI brief (Claude Haiku, read-only: vault, Gmail, and today's events from the calendars shown in the app only) with emails/attention, priorities and TEMPORARY INBOX suggestions you add with one click. **Run daily brief** re-runs it anytime; the prompt is editable in Settings (stored in `06_Prompts/daily-brief.md`). Saved to `05_Tasks/briefs/YYYY-MM-DD.md`. |
-| **Today** | Task list with search, sort (planned time, deadline, priority, area, shortest first, file order), a Show filter (planned, not planned, overdue, with deadline, no estimate, high or urgent priority, repeating, postponed, with alerts) and area chips, remembered on this Mac. Timeline of today's plan (00:00–24:00). **Add a block** by dragging on empty time or with **+ Block** (area, title, day, from–to; it stays where you put it and, unless you untick it, the planner fills it with that area's tasks; with **No area** it just holds the time, e.g. an appointment: never filled, not counted as work, synced to the Other area's calendar). Drag tasks onto empty time (new block) or onto a block (adds it there); drag blocks to move them, or their bottom edge to change the duration (also hh:mm in the block panel); click a block to log time (checking a task there saves at once: the task is marked done and, once the block has started, the log is written), add/remove tasks, or remove the block (Delete key, with Undo; its time stays free until Re-plan). **Your calendar events** can be edited by hand: click one to change its title, day or time, or delete it (asks first), or drag it / its bottom edge on the grid (with Undo). Only that occurrence changes; protected and read-only calendars stay locked, and nothing automatic ever edits them. **Calendars** menu: show/hide calendars and set each to Busy (planner works around it) or Free (may plan over it); single events can be overridden too. **Wrap up** (end of the day, Sunsama-style): log today's unlogged blocks in one click each (done / partial / skipped, minutes prefilled), mark leftovers done or push them 2 days / a week, and preview tomorrow. **Sync day** pushes only the day you are looking at, through the same approval dialog as the week's Sync; blocks on every other day are left untouched. **Repeating tasks** are scoped to the day here too: the trash on a repeating task skips *this* occurrence (its `due:` moves to the next one, with Undo) and leaves the series alone — delete the whole thing from the Tasks view. |
-| **Week** | Week grid with the same drag/drop, block drawing (+ Block) and block editing as Today, budget bars (actual vs planned vs target/cap), day-rule labels under each date (e.g. "Lighter half-day"), a link to Alerts, **Re-plan** (options below), **Calendars** menu, **Sync to calendar** (the whole sync window, `syncDays` ahead; shows every change for approval — use Today's **Sync day** for a single day). |
-| **Alerts** | Every planner warning as a worklist: one row per task with all its problems, grouped by the most serious (overdue, won't make the deadline, stale, doesn't fit, budgets, calendar conflicts, training), with fixes inline (move or remove the deadline, estimate, priority, mark done, show in plan). Filter by area. |
-| **Tasks** | `05_Tasks/daily-todos.md` as a structured list: inline edit, estimate / deadline / priority chips, quick add. Subtasks: hover a task to add a subtask, nest it under the task above, or move it out (Tab / ⇧Tab while editing a title); its own subtasks move with it. **Drag a task onto another** (same parent, same section) to reorder it there — also changes planning order for same-score ties (see "What gets planned first"). This is where a task is deleted outright, repeating ones included — Today only skips one occurrence. **Suggest estimates** (when tasks lack a `~` estimate): Claude Haiku (or Codex, chosen in Settings), with no way to change anything, proposes a length for each from its title, area and your own estimates; you untick or edit, then apply (one-line edits). Each heading shows its **projected finish** from the current plan (→ Fri) and how many tasks would finish after their deadline or aren't planned; a task's row shows its first block and, if later, the day it finishes. |
-| **Inbox** | **New in your todo list**: tasks that appeared in `daily-todos.md` from outside the app (the meeting-review automation, Codex, an Obsidian edit; a renamed task too) wait here until you keep or delete each; the sidebar count includes them. Raw ideas in `05_Tasks/braindump-inbox.md`; turn them into tasks. ⌘⇧Space captures from anywhere while the app is open. |
-| **Docs** | WYSIWYG editor for context, profile, projects and priorities. Markdown stays the storage. |
-| **Review** | Planned vs actual per category, logged blocks, slipped tasks, priorities editor. **Review & plan the week** walks through the weekly review: how last week went, archive checked tasks (to `05_Tasks/archive/done-YYYY.md`, under their heading), the week's focus, this week's own hours per area (Settings' grid otherwise) and day-rule picks, then Re-plan and Sync. |
-| **Update context** (⌘U) | Type what changed; Codex/Claude edits the vault; review the diff; Keep or Undo. (AI is used only here and in the Brief.) |
-| **Settings** | Vault and auto-commit, AI engine for Update context, Calendar (macOS or Google), Daily brief (auto-run, email, prompt editor), Todo headings → areas, Areas (add/remove; colour, calendar, container events, allowed and preferred windows; "keep tasks whole"; Training is an area like the others, plus a gap around it), Scheduling strategy (weights, timing, weekly hours grid), Planning rules (caps, gaps, breaks, as hh:mm), Working hours. |
+| **Home** | A greeting, today's timeline, planned hours per area, deadlines, and an optional AI-written daily brief. |
+| **Today / Week** | The plan as blocks on a timeline. Drag tasks onto time, resize blocks, log what you actually did, re-plan with a sentence ("keep Friday afternoon free"). |
+| **Tasks / Inbox** | Your task file as an editable list; a quick-capture shortcut (⌘⇧Space) for raw thoughts. |
+| **Chat** | A central conversation (tag agents with `@`) and one conversation per agent. Answers render tables and lists; **Hand over** sends a whole answer, one section or a selection to another agent, with a suggested best fit. |
+| **Agents** | Create and edit agents, add examples (a coordinator, an email triager, a routine coach), see what is running, waiting and what it cost. |
+| **Docs / Review** | A Markdown editor for your notes; planned versus actual time and a weekly review. |
 
-Task lines can carry optional metadata: `~2h` / `~45m` estimate, `due:2026-11-12` or `by 12/11` deadline, `!urgent` / `!high` / `!low` priority (the flag chip cycles low → medium → high → urgent), `@spread` / `@asap` timing, `repeat:weekly` repetition (also `daily`, `weekdays`, `biweekly`, `monthly`, `yearly`, custom `3d` / `2w` / `6m` / `1y`, weekdays like `mon,thu`, or every N weeks on weekdays like `3w:sun`; set it with the 🔁 chip), `postpone:2026-11-20` (the 🌙 chip: not planned before that date), `3x/week` habit (set it in the 🔁 chip: that many sessions a week on different days, spread over the days left; checking it off logs one session and keeps the line open; the chip shows e.g. 1/3 for this week).
+The planner is documented screen by screen in [docs/planner.md](docs/planner.md), and agents in [docs/agents.md](docs/agents.md).
 
-**Checking off a task** (the circle in any task list):
-- A **repeating** task stays checked, and its next occurrence is added right below it with the next due date (counted from the old due date, always after today). The checked line keeps its id, so a block shows it done; the new occurrence is planned on its own day. Unchecking it right away takes that new copy back out.
-- If it wasn't in a block running right now, a **15-min block ending now** ("✓ title") is logged and pinned, and synced to the calendar like any planner block. The length is in Settings → Planning rules; 0 turns it off. Reopening the task removes that block.
+## Requirements
 
-## Planning rules (deterministic, no AI)
+- A Mac with Apple Silicon. The install script builds an arm64 app.
+- [Node.js](https://nodejs.org) and npm, a recent version (developed on Node 24).
+- Xcode Command Line Tools (`xcode-select --install`), used to compile the small Swift helper that talks to macOS Calendar.
+- Optional, for AI features: the command-line tools of the services you already use. Agents can run on [Claude Code](https://claude.com/claude-code) (`claude`), Codex (`codex`), Antigravity (`agy`), a local [Ollama](https://ollama.com) model, or any command that reads a prompt and prints text. Sign in to each CLI yourself; the app never asks for your password. The planner works without any of them.
 
-Code: `electron/main/scheduler/plan.ts` (pure function, unit-tested). Every number below is editable in **Settings → Planning rules / Categories**, stored in `05_Tasks/planner/preferences.md`.
+## Install
 
-### When the plan changes
-- **The plan stays put during the day.** Adding, editing or finishing tasks, logging time and calendar refreshes only change *what sits inside* existing blocks. New work goes into gaps. Blocks never move.
-- **Full re-plan** happens (a) each morning (the planning day rolls over at 04:00), (b) when you change preferences, (c) when you click **Re-plan**.
-- **Plan with a wish** (top of the Re-plan dialog): type a sentence ("keep Friday afternoon free, thesis 6 h on Monday"); Claude Haiku (or Codex, chosen in Settings), given only that sentence, the next 14 dates (today and tomorrow named, with working hours), your areas, todo headings and hours, turns it into date limits, hours for specific days (that week's grid), **focus time for a heading** ("tomorrow morning on Tamanduá" → a block pinned in the free part of that span, holding only that heading's open tasks, most urgent first) and optionally a strategy. You see the changes and the resulting plan before anything is saved; applied wishes are listed there and can be removed.
-- **Re-plan options**: Re-plan shows four strategies side by side, each with a mini week and metrics for the next 7 days (work, deep work, after 19:00, free working time, task switches, deadline warnings, doesn't fit). **Balanced** = your settings; **Deadlines first** = deadline weight ×3, guard +2 days, all ASAP; **Deep work first** = deep-work areas +25% grid hours, ×1.5 weight, +1 h deep-work cap, other areas −25% hours, ×0.8 weight; **Light week** = daily caps, deep-work cap, grid hours and weekly targets −25%, no reserved blocks. **Shuffle** = a different arrangement under the same strategy (score ±15%, seeded tie-breaks). The applied strategy stays for later re-plans until you pick another.
-- A block **already started** never moves, even on a full re-plan. **Pinned** blocks (dragged or logged) never move.
-- If a new calendar event collides with a block, only that block is re-placed, with a "conflict" warning.
-- A **removed block's time stays free** (shown as "Kept free") until you click **Re-plan** or "Let the planner use it", so you can put something else there first. Its tasks are planned elsewhere. The same applies to a planner event you delete in your calendar.
-- **Resizing** a block (drag its bottom edge, or the hh:mm field in its panel) pins it at the new length.
-- A new block that ends up empty disappears (its gap opens up). Unused tails of a block are trimmed.
+There is no prebuilt download yet, so build it from source:
 
-### What gets planned first (Settings → Scheduling strategy)
-1. **Guarded deadlines**: tasks due within 2 days (or recently overdue), earliest first. They may go past the grid hours.
-2. Everything else by **weighted score** = (deadline weight 2 × urgency + priority weight 1 × priority) × area weight (Thesis 1.5, Courses 1.2, Outside 1, Personal 0.8). Urgency = 1 / (1 + days until due); priority urgent 2, high 1, medium 0.5, low 0.
-3. Last: **stale** tasks (overdue > 14 days), flagged "reschedule or drop it?".
-Ties are broken by order in the file. Only leaf tasks are planned (parents wait for their subtasks). A subtask without its own `due:` or `@spread` / `@asap` takes its parent's (nearest ancestor's; shown muted, never written to the line; repeating tasks and habits keep their own dates).
+```bash
+git clone https://github.com/glodimendes/ai-center-app.git
+cd ai-center-app
+npm ci
+npm run install-app
+```
 
-### Timing
-- **As soon as possible** (default): earliest free day first.
-- **Spread**: evenly over the working days until deadline − slack (or over 5 days if undated); leftovers fall back to ASAP. Set per area, or per task with the ⇄ button (writes `@spread` / `@asap` on the line). The spread subtasks of one task share a single even daily amount and are filled in file order, so the parts follow each other across the days instead of all starting on the first day.
+`install-app` compiles the Calendar helper, builds and packages the app, signs it, and copies it to `/Applications/AI Center.app`. Open it from there; quitting it leaves nothing running.
 
-### Weekly hours grid
-Hours per area per weekday (default: Thesis 4/2/4/2/4/2/–, Courses 2/3/1/3/1/–/–, Outside 1/1/2/1/2/1/–, Personal 0.5 weekdays, 1 at weekends). An area never gets more than its hours that day, except for guarded deadlines. **A 0 sets nothing aside rather than forbidding the area:** once every area with hours that day is planned, tasks still left over (any area, plus Other, which has no row) may use the remaining time on days where their area has 0 hours, ranked by the usual score. Areas marked **reserve** (Thesis) keep their hours as blocks even without concrete tasks. Reserved hours are placed right after training, breaks and deadlines due within the guard window, before other areas' tasks, so they get their preferred windows; the area's own tasks then fill them. **Weights only decide which tasks go first; the grid decides how many hours an area gets.** Training is outside the grid.
+**First launch**
 
-### Areas and headings
-Settings → **Todo headings → areas** lists every heading of `daily-todos.md`: click a colour to assign it, and sub-headings inherit from their parent. Container events are picked from the titles actually in the area's calendar.
-Duration = `~` estimate or the category default (Thesis 90m, Courses 60m, Outside 30m, Personal 15m).
+1. macOS may say the app is from an unidentified developer, because it is not notarized. Right-click the app and choose **Open** once.
+2. A setup dialog asks where your notes live. Pick an existing folder (an Obsidian vault works) or accept the starter vault it creates for you, with a few example tasks.
+3. Allow Calendar access when asked, or skip it; the planner then shows planned blocks without calendar events. Choose which calendars the app reads and which one it writes planner blocks to in **Settings → Calendar** (the default is a placeholder calendar called "Planner", so pick yours before the first sync).
+4. In **Settings → Engines & accounts**, check that the AI tools you use are found. **Test** on an account runs one tiny request.
 
-### Day rules (Settings → Day rules)
-Rules for some days, so a routine change is a setting: **Every** chosen weekday, or **One day a week, the lightest of** some weekdays (the one with the least calendar time; pick another per week in the weekly review). Each rule either keeps areas out of part of the day (**No** work / chosen areas, from–to; e.g. no work after 13:00) or caps them (**At most** 2 h of Outside work). They apply to time the planner adds; your calendar events, pins and already-placed blocks stay. A sample "Lighter half-day" rule ships switched off.
+**About signing.** `install-app` signs the app with a local self-signed certificate named "AI Center Dev" if you have one in your login keychain, so that macOS keeps the Calendar permission across rebuilds. Without that certificate it still builds, with a warning, but macOS will ask for Calendar access again after every rebuild. `scripts/sign-app.sh` explains how to create the certificate.
 
-### Shape of a day
-| Rule | Default |
-|---|---|
-| Working hours | Mon–Fri 08–21, Sat–Sun 09–19 |
-| Max planned work per day (training and breaks don't count) | 8 h weekdays, 4 h weekends |
-| Max deep work (Thesis + Courses) per day | 6 h |
-| Max time on one task per day (big tasks spread over days) | 3 h |
-| Longest block | 3 h |
-| Gaps | 30 min after deep work and around training, 15 min otherwise |
-| Protected floating breaks | Lunch 60 min within 12–14, Dinner 45 min within 19–21 |
-| Finish deadline tasks early (spread tasks aim for it) | 1 day |
+**Updating.** Pull, run `npm ci` if dependencies changed, then `npm run install-app` again and restart the app. Your notes and settings are untouched.
 
-### Where each category goes
-Each area can have several preferred windows, tried in order, then its allowed window. Defaults:
+**Just trying it.** `npm run dev` runs a hot-reloading copy against a scratch vault in `.dev-vault/` with its own data folder. It never opens your real notes, so it is safe to experiment with.
 
-| Category | Tried first (preferred) | Allowed (hard window) | Shortest new block |
-|---|---|---|---|
-| Thesis | 08:00–12:30 | 08:00–19:00 | 60 min |
-| Courses | 13:30–17:30 | 08:00–20:00 | 45 min |
-| Outside work | 14:00–19:00 | 08:00–21:00 | 30 min |
-| Personal | 17:00–20:00 | 09:00–20:00 | 30 min (small tasks batch into one block) |
-| Training | 18:00–21:00, then 07:00–09:00 | 07:00–21:30 | 30 min |
+## Your notes folder (the vault)
 
-### Placement order for each day, per task
-1. Your existing calendar blocks with matching titles ("Thesis Deep Work", "Outside Work", "Course Consolidation").
-2. Free room in blocks already planned for that category.
-3. Growing a planned block (end only, up to 3 h).
-4. A new block in each preferred window in turn, then anywhere in the hard window.
-The next day is tried only after all of that fails, subject to the daily, deep-work, per-task and weekly caps (Outside work ≤ 12 h/week).
+Everything the app uses is a plain file in one folder:
 
-### Training and budgets
-- Training is an ordinary area: its tasks (under the headings mapped to Training, typically with a `repeat:` rule) get the same scoring, windows, grid hours, warnings and Re-plan options as everything else. It fills your Sports events ("Sport", "Running") like any container, and a new single-session block is named after the session. Differences: it's placed before breaks (dinner floats around it), a session is never split ("Keep tasks whole" in Settings → Areas, on for Training), a gap around it, and it doesn't count toward (or use up) the daily work cap.
-- Repeating tasks are planned by their rule: weekday rules (`repeat:mon`, `repeat:3w:sun`) **on** their due day; interval rules (`repeat:weekly`, `repeat:3d`) anywhere in the period ending on the due date.
-- **Postponed** tasks (`postpone:2026-11-20`, the 🌙 chip) aren't planned before that date; from then on they're ranked as usual.
-- **Habits** (`3x/week`) become that many sessions per week, minus sessions already logged this week: each due at the end of its week, not before its slot (spread over the days left), one per day, each kept whole. Weeks cut off by the 14-day horizon only get the sessions inside it.
-- Weekly minimums: Thesis gets reserved blocks until 18 h/week (logged + planned) is reached.
-- Warnings: overdue, deadline at risk, stale, doesn't fit in 14 days, budget behind/over, calendar conflict.
+```
+05_Tasks/daily-todos.md        your tasks (headings are areas, "- [ ]" lines are tasks)
+05_Tasks/braindump-inbox.md    quick captures
+05_Tasks/briefs/               the daily briefs
+05_Tasks/agent-output/         answers of agents that write to files, handoff files
+06_Prompts/agents/             one Markdown file per agent
+04_Context_Docs/               notes, priorities (read by the daily brief and agents)
+```
 
-**Calendar connection:** macOS Calendar by default (EventKit via the bundled `native/calendar-helper`; your Google calendars come through System Settings → Internet Accounts; no Cloud project). Google Calendar API directly is the alternative (Settings → Calendar). Planner events are tagged (macOS: `[planner:<id>]` in the notes; Google: a hidden property); untagged events are never changed. Protected calendars (Birthdays, ETH Classes…, ETH Tests, Family) are never written.
+The app edits single lines, found again by task id, so you can keep editing the same files in Obsidian or any editor at the same time. By default each change is committed to the folder's own git history ("auto-commit" can be turned off in Settings).
 
-**Your calendar edits win:** move or resize a planner event in your calendar and it becomes a pin at the new time; delete it and it isn't recreated (its time stays free until Re-plan; its work is planned elsewhere).
+A task line can carry optional details: `~2h` estimate, `due:2026-12-01` or `by 1/12`, `!urgent` `!high` `!low`, `@spread` or `@asap`, `repeat:weekly`, `postpone:2026-12-05`, `3x/week`. The full syntax and every planning rule are in [docs/planner.md](docs/planner.md).
 
-**Sync** (button, Week view): covers today + 7 days. It writes blocks to the calendar named on each area (Settings → Areas; the defaults use a placeholder calendar called "Planner", so pick yours before the first sync), only touches events the planner created (hidden tag), and shows every add, move and remove for confirmation first. Container events and breaks are never written.
+## AI and safety
 
-## Safety
-
-- Vault edits change only the affected lines, re-located by task id on the current file, so concurrent edits elsewhere survive.
-- Every save is committed to the vault's git history under your identity (`planner: …`), batched every few seconds; this can be turned off.
-- Docs refuse to save over a file changed on disk since opening and show a diff before reformatting untouched Markdown.
-- Update context never keeps anything without **Keep**. Undo takes back only the AI's own edits, so changes you (or the app) made to the same files since are kept; if a file can't be separated cleanly it's left alone and named.
-- A calendar account that's offline or missing doesn't count as "you deleted those events": synced blocks are only dismissed when their calendar actually loaded.
+- **The planner is not AI.** AI is used in three places only: the optional daily brief, "Suggest estimates" and "Plan with a wish", and "Update context" (⌘U), plus the agents you create. The built-in ones use the cheapest models of the service you pick.
+- **Agents never act on their own.** Each agent has a permission: `read` (answers only), `propose` (edits files, which you review as a diff and keep or undo) or `act` (may also add tasks). Completing a task, creating a calendar event, saving an email draft, calling an API and handing work to another agent always wait for your click. Code enforces this, not the prompt.
+- **Gmail is draft-only.** If you connect it, agents can read mail and save drafts; there is no code path that sends.
+- **Calendar safety.** Only events the app created (tagged) are changed or deleted. Calendars you mark as protected are never written. Sync shows every add, move and removal first.
+- **Usage limits.** Agents pause and ask before they would use more than a set share of an account's 5-hour or weekly window.
 
 ## Develop
 
 ```bash
-npm install
-npm run dev          # hot-reload, against .dev-vault (scratch copy), never the real vault
-npm test             # parser, edits, scheduler (rules, habits, wishes), sync/adoption, brief, context-undo tests
+npm ci
+npm run dev          # hot reload against .dev-vault (never your real vault)
+npm test             # unit tests
 npm run typecheck
-npm run build:helper # compile the macOS Calendar helper (Swift; also part of package)
-npm run build:icon   # redraw the app icon (scripts/make-icon.swift → build/icon.icns)
-npm run install-app  # build, package, copy to /Applications (runtime uses the real vault; restart the app)
+npm run build:helper # compile the macOS Calendar helper
+npm run install-app  # build, package, sign, copy to /Applications
 ```
 
-Stack: Electron 45, electron-vite, React 19, Tailwind 4, zustand, Milkdown Crepe, googleapis, chokidar, vitest.
+Stack: Electron, electron-vite, React 19, Tailwind 4, zustand, Milkdown, vitest. The app's main process lives in `electron/main/` (the agent core in `electron/main/agents/` has no Electron imports), the interface in `src/`, shared types in `shared/`, the Swift calendar helper in `native/`.
+
+## Contributing
+
+Issues and ideas are welcome. Before changing anything, read [CONTRIBUTING.md](CONTRIBUTING.md) and the hard rules in [AGENTS.md](AGENTS.md); it is also the starting point if you work on the code with an AI assistant. Open decisions and next steps are in [ROADMAP.md](ROADMAP.md). A license will be added before the project accepts outside code.
