@@ -1,7 +1,7 @@
 import { join, relative } from 'node:path'
 import type { AgentDef } from './definition'
 import type { Limits } from '@shared/agents'
-import { ENGINES, EngineTimeout, runEngine, type Usage } from './engines'
+import { ENGINES, EngineTimeout, failureMessage, runEngine, type Usage } from './engines'
 import { engineMode } from './permissions'
 import { findProfile } from './profiles'
 import type { AccountProfile } from './engines/types'
@@ -64,7 +64,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
   try {
     const r = await run.done
     if (r.isError) throw new Error(r.text || 'The model returned an error.')
-    if (r.code !== 0 && !r.text) throw new Error(r.stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${r.code}.`)
+    if (r.code !== 0 && !r.text) throw new Error(failureMessage(r.stderr, r.code, profile.engine))
     return { text: r.text, usage: r.usage, sessionId: r.sessionId }
   } catch (e) {
     throw e instanceof EngineTimeout ? new Error(`Stopped after ${Math.round(timeoutMs / 60_000)} minutes without finishing.`) : e

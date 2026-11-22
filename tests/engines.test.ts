@@ -190,3 +190,10 @@ describe('ollama engine', () => {
     expect(await ollamaModels(undefined, fake)).toEqual(['a:1', 'b:2'])
   })
 })
+
+describe('codex failures', () => {
+  it('turns a failed turn into an error with its message', async () => {
+    const { codexCli } = await import('../electron/main/agents/engines/codex-cli')
+    expect(codexCli.parse({ type: 'turn.failed', error: { message: "The '6.0 Luna' model is not supported." } })).toEqual([{ type: 'done', text: "The '6.0 Luna' model is not supported.", isError: true }])
+  })
+})

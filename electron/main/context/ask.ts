@@ -1,5 +1,5 @@
 import type { ContextEngine } from '@shared/types'
-import { ENGINES, EngineTimeout, runEngine } from '../agents/engines'
+import { ENGINES, EngineTimeout, failureMessage, runEngine } from '../agents/engines'
 import { findProfile } from '../agents/profiles'
 
 /**
@@ -12,11 +12,11 @@ export async function askJson<T>(engine: ContextEngine, prompt: string, timeoutM
   try {
     const run = await runEngine(ENGINES[profile.engine], { profile, mode: 'ask', prompt, cwd: process.cwd(), timeoutMs })
     const r = await run.done
-    const tail = r.stderr.trim().split('\n').slice(-2).join(' ')
+    const tail = r.code !== 0 || !r.text ? failureMessage(r.stderr, r.code, profile.engine) : ''
     if (profile.engine === 'claude') {
       if (r.isError) throw new Error(r.text || 'The model returned an error.')
-      if (!r.text && r.code !== 0) throw new Error(tail || `claude exited with code ${r.code}.`)
-    } else if (r.code !== 0 || !r.text) throw new Error(tail || `codex exited with code ${r.code}.`)
+      if (!r.text && r.code !== 0) throw new Error(tail)
+    } else if (r.code !== 0 || !r.text) throw new Error(tail)
     return parseJsonAnswer<T>(r.text)
   } catch (e) {
     throw e instanceof EngineTimeout ? new Error(`No answer within ${Math.round(timeoutMs / 1000)} s. Try again.`) : e

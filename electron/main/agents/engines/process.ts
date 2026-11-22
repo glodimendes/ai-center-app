@@ -25,6 +25,17 @@ export function stop(child: ChildProcess) {
 /** Only the tail of stderr matters for an error message. */
 export const keepTail = (s: string) => (s.length > 16_000 ? s.slice(-8_000) : s)
 
+/** CLI chatter that says nothing about why a run failed (Codex prints its banner and "Reading additional input from stdin..." on every run). */
+const NOISE = /^(reading (additional input|prompt) from stdin|openai codex v|-{3,}|(workdir|model|provider|approval|sandbox|reasoning effort|reasoning summaries|session id):|tokens used|user$|codex$)/i
+
+/** A readable reason from a failed run's stderr: the real error line if there is one, never just the banner. */
+export function failureMessage(stderr: string, code: number | null, cli = 'The CLI'): string {
+  const lines = stderr.split('\n').map((l) => l.trim()).filter((l) => l && !NOISE.test(l))
+  const errors = lines.filter((l) => /error|fail|denied|limit|quota|unauthori|log ?in|not found|invalid/i.test(l))
+  const pick = (errors.length ? errors : lines).slice(-2).join(' ')
+  return pick || `${cli} stopped (exit code ${code ?? '?'}) without an answer. Check that its account is logged in, or run it once in a terminal.`
+}
+
 /** Env that points a CLI at the profile's own login; nothing set means the CLI's default account. */
 export function profileEnv(profile: AccountProfile): NodeJS.ProcessEnv {
   const env = { ...process.env }

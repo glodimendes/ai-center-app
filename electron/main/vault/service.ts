@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
-import type { BriefData, TaskNote, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides, Weekday } from '@shared/types'
+import type { BriefData, DocContent, DocInfo, LogEntry, Pin, Preferences, TaskPatch, VaultState, WeekData, WeekOverrides, Weekday } from '@shared/types'
 import { isoDate, isoWeek } from '@shared/time'
 import { parseInbox, parseTasks } from './parser'
 import { addInboxItem, addSubtask, deleteTask, indentTask, insertTask, patchTask, removeInboxItem, reorderTask, stampLastUpdated, takeDone } from './edits'
@@ -354,7 +354,7 @@ export class VaultService {
   }
 
   // --- brief ---------------------------------------------------------------
-  /** The Codex brief for a date (if written) plus active task notes in 05_Tasks/. */
+  /** The brief for a date, if written. */
   brief(date: string): BriefData {
     const path = `05_Tasks/briefs/${date}.md`
     const text = this.read(path)
@@ -367,31 +367,7 @@ export class VaultService {
         sections.push({ title, body: nl < 0 ? '' : part.slice(nl + 1).trim() })
       }
     }
-    const skip = new Set(['daily-todos.md', 'braindump-inbox.md', 'README.md', 'recordings-checked.md'])
-    const notes: TaskNote[] = []
-    const dir = this.abs('05_Tasks')
-    if (existsSync(dir)) {
-      for (const f of readdirSync(dir).sort()) {
-        if (!f.endsWith('.md') || skip.has(f)) continue
-        const t = readFileSync(join(dir, f), 'utf8')
-        const status = t.match(/^Status:\s*(.+)$/im)?.[1]?.trim()
-        if (status && /^(done|archived|completed|inactive)/i.test(status)) continue
-        const nextBlock = t.match(/^##\s*Next actions?\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1] ?? ''
-        notes.push({
-          path: `05_Tasks/${f}`,
-          title: t.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? basename(f, '.md'),
-          status,
-          updated: t.match(/^Last updated:\s*(\S+)/im)?.[1],
-          next: nextBlock
-            .split('\n')
-            .filter((l) => !/^\s*[-*]\s+\[[xX]\]/.test(l))
-            .map((l) => l.match(/^\s*[-*]\s+(?:\[ \]\s*)?(.+)$/)?.[1]?.trim())
-            .filter((x): x is string => Boolean(x))
-            .slice(0, 3)
-        })
-      }
-    }
-    return { date, codex: text ? { path, sections } : null, notes }
+    return { date, codex: text ? { path, sections } : null }
   }
 
   writeBrief(date: string, markdown: string) {

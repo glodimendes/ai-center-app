@@ -43,6 +43,8 @@ export const codexCli: Engine = {
   parse(ev): EngineEvent[] {
     const out: EngineEvent[] = []
     if (ev.type === 'thread.started' && ev.thread_id) out.push({ type: 'session', id: String(ev.thread_id) })
+    // With --json Codex reports failures (bad model, usage limit, login) on stdout, not stderr.
+    if (ev.type === 'turn.failed' && ev.error?.message) out.push({ type: 'done', text: String(ev.error.message), isError: true })
     const item = ev.item ?? ev.msg
     if (item?.type === 'file_change') for (const ch of item.changes ?? []) out.push({ type: 'file_change', path: String(ch.path) })
     if (item?.type === 'agent_message' && item.text) out.push({ type: 'text', text: String(item.text) })

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { ContextEngine } from '@shared/types'
 import { isoDate } from '@shared/time'
-import { ENGINES, EngineTimeout, runEngine } from '../agents/engines'
+import { ENGINES, EngineTimeout, failureMessage, runEngine } from '../agents/engines'
 import { findProfile } from '../agents/profiles'
 
 const TEXT_EXT = /\.(md|txt|ya?ml|json)$/i
@@ -35,6 +35,7 @@ Today is ${isoDate(new Date())}.
 
 Read 00_START_HERE.md, 03_Workflows/context-maintenance.md and 03_Workflows/assistant-file-update-rules.md first and follow them.
 - Make the smallest targeted edits to the narrowest relevant files, and update "Last updated:" lines on files you change.
+- Keep 04_Context_Docs/current-priorities.md current when the instruction or your edits change what matters: its "## Active Priority Areas" section is one numbered list, most important first, one short line each (the app shows exactly this list). Do not keep a snapshot of tasks in it: tasks live in 05_Tasks/daily-todos.md. If that file still has an "Active Tasks Snapshot" section, you may remove it.
 - Do not delete, move or rename files. Do not edit anything in 05_Tasks/weekly/ or 05_Tasks/planner/.
 - If the instruction needs something those rules say requires confirmation, don't do it; say so in your summary instead.
 - The user reviews a diff of your edits before they are kept.
@@ -71,7 +72,7 @@ export async function runContextAgent(engine: ContextEngine, vault: string, inst
   })
   const done = run.done.then(
     (r) => {
-      if (r.code !== 0 && !r.text) throw new Error(r.stderr.trim().split('\n').slice(-3).join(' ') || `Exited with code ${r.code}.`)
+      if (r.code !== 0 && !r.text) throw new Error(failureMessage(r.stderr, r.code, profile.engine))
       return r.text
     },
     (e) => {

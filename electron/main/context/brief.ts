@@ -1,5 +1,5 @@
 import type { CalEvent } from '@shared/types'
-import { ENGINES, EngineTimeout, runEngine } from '../agents/engines'
+import { ENGINES, EngineTimeout, failureMessage, runEngine } from '../agents/engines'
 import { findProfile } from '../agents/profiles'
 
 // In-app daily brief. Runs Claude Code headlessly (cheapest model) inside the vault with read-only
@@ -92,7 +92,7 @@ export async function runBrief(vault: string, template: string, date: string, ev
   try {
     const r = await run.done
     const md = r.text
-    if (!md.includes('## ')) throw new Error(r.stderr.trim().split('\n').slice(-2).join(' ') || `The brief run ended without a brief (code ${r.code}).`)
+    if (!md.includes('## ')) throw new Error(failureMessage(r.stderr, r.code, 'The brief'))
     return md
   } catch (e) {
     throw e instanceof EngineTimeout ? new Error('The brief took more than 5 minutes and was stopped. Try again later.') : e

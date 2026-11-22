@@ -9,7 +9,7 @@ import { isoDate } from '@shared/time'
 import { ApprovalStore, parseActions } from './agents/actions'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
-import { ENGINES, ollamaModels, profileEnv, resolveBinary, runEngine } from './agents/engines'
+import { ENGINES, failureMessage, ollamaModels, profileEnv, resolveBinary, runEngine } from './agents/engines'
 import { DEFAULT_PROFILES } from './agents/profiles'
 import type { GmailLike } from './agents/gmail'
 import { buildRawDraft } from './agents/gmail'
@@ -479,7 +479,7 @@ export class AgentHub {
         }
       })
       const r = await run.done
-      if (r.isError || (r.code !== 0 && !r.text)) return { ok: false, message: r.text || r.stderr.trim().split('\n').slice(-2).join(' ') || 'The CLI failed. Is this account logged in?' }
+      if (r.isError || (r.code !== 0 && !r.text)) return { ok: false, message: r.text || failureMessage(r.stderr, r.code, profile.engine) }
       if (profile.engine !== 'claude') return { ok: true, message: `Works. It answered: ${r.text.slice(0, 60)}` }
       return { ok: true, message: seen ? 'Logged in. Window usage updated.' : 'Logged in, but the CLI reported no window usage for this plan.' }
     } catch (e) {

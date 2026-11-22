@@ -9,4 +9,4 @@ export const ENGINES: Record<EngineId, Engine> = { claude: claudeCli, codex: cod
 export * from './types'
 export { ollamaModels } from './ollama'
 export { CONTEXT_MODELS } from './models'
-export { EngineTimeout, keepTail, profileEnv, resolveBinary, runEngine, stop } from './process'
+export { EngineTimeout, failureMessage, keepTail, profileEnv, resolveBinary, runEngine, stop } from './process'
