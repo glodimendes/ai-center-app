@@ -13,7 +13,7 @@ const CENTRAL = '_central'
 
 /** `@tags` in a user message, highlighted. */
 function withTags(text: string): ReactNode[] {
-  return text.split(/(^|\s)(@[^\s@]+)/g).map((part, i) => (part.startsWith('@') ? <span key={i} className="rounded-full bg-accent px-2 py-0.5 text-white">{part}</span> : part))
+  return text.split(/(^|\s)(@[^\s@]+)/g).map((part, i) => (part.startsWith('@') ? <span key={i} className="rounded-full bg-accent px-2 pt-px pb-[3px] text-white">{part}</span> : part))
 }
 
 /** Chat: a central conversation where you coordinate (tag agents with @), and one conversation per agent. */
@@ -139,7 +139,7 @@ export function Chat() {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[44rem] mx-auto px-6 pt-4 pb-8 space-y-6">
+          <div className="max-w-[44rem] mx-auto px-6 pt-4 pb-8 space-y-6 select-text">
             {!messages.length && !busy && <Welcome central={isCentral} agent={agent} hasAgents={agents.length > 0} />}
             {messages.map((m, i) => (
               <Message
