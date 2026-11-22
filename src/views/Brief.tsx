@@ -6,6 +6,7 @@ import { addDays, fmtDuration, fmtHM, isoDate, minutesOfDay } from '@shared/time
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { blockMinutes, blockTitle, logFor } from '@/lib/plan'
+import { greetingFor } from '@/lib/greeting'
 import { calendarColor, categoryOf, cx, inlineMd, relDay } from '@/lib/util'
 import { Button, Dot, Header } from '@/components/ui'
 
@@ -75,8 +76,7 @@ export function Brief() {
     .filter((t): t is Task => Boolean(t) && !t!.done)
     .slice(0, 5)
 
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const greeting = greetingFor(new Date(), today)
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
