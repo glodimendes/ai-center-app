@@ -7,6 +7,7 @@ import type { Engine } from './types'
 export const commandEngine: Engine = {
   id: 'command',
   chat: false,
+  readsFiles: false,
   prepare(spec) {
     if (spec.mode === 'edit' || spec.mode === 'tools') throw new Error('A custom command can\'t be limited to a set of tools or to edits, so agents with propose/act permission need another engine.')
     const cmd = spec.profile.command

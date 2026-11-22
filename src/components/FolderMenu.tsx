@@ -3,12 +3,8 @@ import { FileText, Folder, FolderPlus, Lock, X } from 'lucide-react'
 import type { AgentDef } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act } from '@/store/app'
-import { cx } from '@/lib/util'
+import { baseName, cx, tidy } from '@/lib/util'
 import { Popover } from './ui'
-
-const tail = (p: string) => p.split('/').filter(Boolean).pop() ?? p
-/** A path as the user would say it: `~` for the home folder. */
-const tidy = (p: string) => p.replace(/^\/Users\/[^/]+/, '~')
 
 /**
  * The folders of one conversation: where the agent works and saves, the other folders it may use, and the vault.
@@ -16,13 +12,9 @@ const tidy = (p: string) => p.replace(/^\/Users\/[^/]+/, '~')
  */
 export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: AgentDef; convo: string; folder?: string; extra: string[]; vault: string }) {
   const [open, setOpen] = useState(false)
-  const own = agent.workdir ? (agent.workdir.startsWith('/') ? agent.workdir : `${vault}/${agent.workdir}`) : undefined
-  const main = folder ?? own
+  const agentFolders = agent.folders ?? []
+  const main = folder ?? (agent.workdir ? (agent.workdir.startsWith('/') ? agent.workdir : `${vault}/${agent.workdir}`) : undefined)
   const changed = Boolean(folder) || extra.length > 0
-  const choose = async () => {
-    const f = await api.chooseFolder()
-    return f ?? undefined
-  }
   const row = 'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px]'
   return (
     <span className="no-drag relative inline-block max-w-[16rem]">
@@ -32,8 +24,8 @@ export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: Agen
         className={cx('flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-[12px] hover:text-ink max-w-full', changed ? 'text-accent' : 'text-muted')}
       >
         <Folder size={13} className="shrink-0" />
-        <span className="truncate">{main ? tail(main) : 'Own workspace'}</span>
-        {(agent.folders?.length ?? 0) + extra.length > 0 && <span className="shrink-0 text-faint">+{(agent.folders?.length ?? 0) + extra.length}</span>}
+        <span className="truncate">{main ? baseName(main) : 'Own workspace'}</span>
+        {agentFolders.length + extra.length > 0 && <span className="shrink-0 text-faint">+{agentFolders.length + extra.length}</span>}
       </button>
       {open && (
         <Popover onClose={() => setOpen(false)} align="right" className="w-80">
@@ -41,10 +33,10 @@ export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: Agen
           <div className={row}>
             <Folder size={14} className="shrink-0 text-accent" />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{main ? tail(main) : 'Own workspace'}</div>
+              <div className="truncate font-medium">{main ? baseName(main) : 'Own workspace'}</div>
               <div className="truncate text-[11.5px] text-faint">{main ? tidy(main) : "A private folder just for this agent"}</div>
             </div>
-            <button onClick={async () => { const f = await choose(); if (f) act(api.chatSetFolder(convo, f)) }} className="shrink-0 text-[12px] text-accent hover:underline">
+            <button onClick={async () => { const f = await api.chooseFolder(); if (f) act(api.chatSetFolder(convo, f)) }} className="shrink-0 text-[12px] text-accent hover:underline">
               Change…
             </button>
             {folder && (
@@ -55,14 +47,14 @@ export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: Agen
           </div>
 
           <div className="mt-1 border-t border-line/70 px-2.5 pt-1.5 pb-0.5 text-[11.5px] text-faint">Also available</div>
-          {(agent.folders ?? []).map((f) => (
+          {agentFolders.map((f) => (
             <div key={f} className={row} title="Set in the agent's settings">
               <FileText size={14} className="shrink-0 text-faint" />
               <span className="min-w-0 flex-1 truncate">{tidy(f.startsWith('/') ? f : `${vault}/${f}`)}</span>
               <span className="text-[11px] text-faint">agent</span>
             </div>
           ))}
-          {extra.filter((f) => !(agent.folders ?? []).includes(f)).map((f) => (
+          {extra.filter((f) => !agentFolders.includes(f)).map((f) => (
             <div key={f} className={row}>
               <Folder size={14} className="shrink-0 text-faint" />
               <span className="min-w-0 flex-1 truncate" title={f}>{tidy(f)}</span>
@@ -77,7 +69,7 @@ export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: Agen
             <span className="text-[11px] text-faint">always</span>
           </div>
           <button
-            onClick={async () => { const f = await choose(); if (f && !extra.includes(f) && !(agent.folders ?? []).includes(f)) act(api.chatSetExtraFolders(convo, [...extra, f])) }}
+            onClick={async () => { const f = await api.chooseFolder(); if (f && !extra.includes(f) && !agentFolders.includes(f)) act(api.chatSetExtraFolders(convo, [...extra, f])) }}
             className={cx(row, 'w-full text-accent hover:bg-sunken')}
           >
             <FolderPlus size={14} /> Add a folder…
@@ -95,7 +87,7 @@ export function FolderMenu({ agent, convo, folder, extra, vault }: { agent: Agen
                 onClick={() =>
                   act(
                     api
-                      .saveAgent({ ...agent, workdir: folder ?? agent.workdir, folders: [...new Set([...(agent.folders ?? []), ...extra])] })
+                      .saveAgent({ ...agent, workdir: folder ?? agent.workdir, folders: [...new Set([...agentFolders, ...extra])] })
                       .then(() => Promise.all([api.chatSetFolder(convo, null), api.chatSetExtraFolders(convo, [])])),
                     `Saved as ${agent.name}'s default folders`
                   )

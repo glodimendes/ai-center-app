@@ -35,6 +35,7 @@ export function Chat() {
   const messages = a.chats[key] ?? []
   const folder = a.chatFolders[key]
 
+  const agentIds = useMemo(() => new Set(agents.map((g) => g.id)), [agents.map((g) => g.id).join()])
   const drafts = useStore((st) => st.drafts)
   const origins = useStore((st) => st.origins)
   const setDraft = useStore((st) => st.setDraft)
@@ -84,7 +85,7 @@ export function Chat() {
       live = false
       clearTimeout(t)
     }
-  }, [query, key])
+  }, [query, slashQuery, key])
   type Option = { kind: 'agent'; g: AgentDef } | { kind: 'file'; f: FileHit }
   const options = useMemo<Option[]>(() => {
     if (slashQuery !== undefined) {
@@ -95,7 +96,10 @@ export function Chat() {
   }, [query, slashQuery, agents.length, fileOpts, agent?.id])
   const choose = (o: Option) => {
     if (o.kind === 'agent') setText(text.replace(/\/[^\s/]*$/, `/${o.g.id} `))
-    else (setText(text.replace(/(^|\s)@[^\s@]*$/, '$1')), addFiles([o.f.path]))
+    else {
+      setText(text.replace(/(^|\s)@[^\s@]*$/, '$1'))
+      addFiles([o.f.path])
+    }
     setPick(0)
     box.current?.focus()
   }
@@ -181,7 +185,7 @@ export function Chat() {
               <Message
                 key={i}
                 m={m}
-                agentIds={new Set(agents.map((g) => g.id))}
+                agentIds={agentIds}
                 name={m.agentId ? nameOf(m.agentId) : (agent?.name ?? 'Agent')}
                 origin={key}
                 run={m.runId ? a.runs.find((r) => r.id === m.runId) : undefined}

@@ -30,6 +30,11 @@ import { Supervisor, type Execute } from './agents/supervisor'
 import type { ContextSession } from './context/session'
 
 const exec = promisify(execFile)
+/** The message text when only files were sent. */
+const ATTACHED_ONLY = 'See the attached files.'
+/** Largest pasted image kept (base64 characters). */
+const MAX_PASTE = 30_000_000
+
 /** Key of the central chat's transcript. */
 const CENTRAL = '_central'
 const DEFAULT_CEILING = 70
@@ -214,9 +219,7 @@ export class AgentHub {
       goals: this.goals.list().slice(-20),
       // Transcripts are loaded from disk on first use, so a conversation survives a restart.
       chats: Object.fromEntries([CENTRAL, ...agents.filter((a) => !a.builtin).map((a) => a.id)].map((id) => [id, this.chat(id).messages.slice(-100)])),
-      chatModels: Object.fromEntries(agents.filter((a) => !a.builtin && this.chat(a.id).override).map((a) => [a.id, this.chat(a.id).override!])),
-      chatExtraFolders: Object.fromEntries(agents.filter((a) => !a.builtin && this.chat(a.id).extra?.length).map((a) => [a.id, this.chat(a.id).extra!])),
-      chatFolders: Object.fromEntries(agents.filter((a) => !a.builtin && this.chat(a.id).folder).map((a) => [a.id, this.chat(a.id).folder!])),
+      ...this.chatSettings(agents),
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
@@ -334,6 +337,21 @@ export class AgentHub {
     this.supervisor.allow(runId)
   }
 
+  /** What each conversation changed from its agent: folder, extra folders, model (only the agents that have any). */
+  private chatSettings(agents: AgentDef[]) {
+    const chatModels: Record<string, ChatOverride> = {}
+    const chatExtraFolders: Record<string, string[]> = {}
+    const chatFolders: Record<string, string> = {}
+    for (const a of agents) {
+      if (a.builtin) continue
+      const c = this.chat(a.id)
+      if (c.override) chatModels[a.id] = c.override
+      if (c.extra?.length) chatExtraFolders[a.id] = c.extra
+      if (c.folder) chatFolders[a.id] = c.folder
+    }
+    return { chatModels, chatExtraFolders, chatFolders }
+  }
+
   private chat(agentId: string) {
     let c = this.chats.get(agentId)
     if (!c) {
@@ -369,7 +387,7 @@ export class AgentHub {
     // Busy is fine: the turn waits its turn in the queue (and survives a restart). Only a pile-up is refused.
     if (this.supervisor.pendingFor(agentId) >= MAX_PENDING) throw new AgentError(`${def.name} already has ${MAX_PENDING} messages waiting. Let it catch up first.`)
     this.chat(agentId)
-    const id = this.supervisor.enqueue(def, text.trim() || 'See the attached files.', { from: 'chat', chat: true, ...extra }).id
+    const id = this.supervisor.enqueue(def, text.trim() || ATTACHED_ONLY, { from: 'chat', chat: true, ...extra }).id
     // Handed over from another conversation: leave a pointer there, so the thread shows where the work went.
     if (origin && origin !== agentId && (origin === CENTRAL || this.registry.get(origin))) {
       this.chat(origin).messages.push({ role: 'note', text: `Sent to ${def.name}`, link: agentId, t: new Date().toISOString() })
@@ -409,7 +427,7 @@ export class AgentHub {
       for (const a of m.agents) {
         if (this.supervisor.pendingFor(a.id, false) >= MAX_PENDING) throw new AgentError(`${a.name} already has ${MAX_PENDING} things waiting. Let it catch up first.`)
         this.markFired(a.id)
-        this.supervisor.enqueue(a, body || 'See the attached files.', { from: 'central', attachments: files })
+        this.supervisor.enqueue(a, body || ATTACHED_ONLY, { from: 'central', attachments: files })
       }
       return this.deps.push()
     }
@@ -455,11 +473,7 @@ export class AgentHub {
   async setChatModel(agentId: string, o: ChatOverride | null) {
     const c = this.chat(agentId)
     if (o) {
-      const p = this.profiles().find((x) => x.id === o.profile)
-      if (!p) throw new AgentError('That account no longer exists.')
-      const models = await availableModels(p).catch(() => [] as string[])
-      if (o.model && models.length && !models.includes(o.model)) throw new AgentError(`"${o.model}" is not available on this account.`)
-      if (o.effort && !(EFFORTS[p.engine] ?? ([] as string[])).includes(o.effort)) throw new AgentError(`"${o.effort}" is not an effort level of this account.`)
+      await this.checkModel(o.profile, o.model, o.effort)
     }
     c.override = o ?? undefined
     this.saveChat(agentId)
@@ -470,13 +484,15 @@ export class AgentHub {
   chatFiles(agentId: string, query: string) {
     const def = agentId === CENTRAL ? undefined : this.registry.get(agentId)
     const root = this.deps.vaultRoot()
-    const roots = def ? ((d) => [d.cwd, ...d.extra])(resolveDirs(def, { vaultRoot: root, workspaces: join(this.deps.userData, 'workspaces'), chatFolder: this.chat(agentId).folder, chatExtra: this.chat(agentId).extra })) : [root]
-    return findFiles(roots.filter((r) => existsSync(r)), query)
+    const c = this.chat(agentId)
+    const dirs = def ? resolveDirs(def, { vaultRoot: root, workspaces: join(this.deps.userData, 'workspaces'), chatFolder: c.folder, chatExtra: c.extra }) : { cwd: root, extra: [] }
+    return findFiles([dirs.cwd, ...dirs.extra].filter((r) => existsSync(r)), query)
   }
 
   /** A pasted image has no file: keep it in app data so it can be attached like any other. */
   saveAttachment(agentId: string, name: string, base64: string): string {
     if (!ID_RE.test(agentId) && agentId !== CENTRAL) throw new AgentError('Invalid conversation.')
+    if (base64.length > MAX_PASTE) throw new AgentError('That image is too large to attach.')
     const dir = join(this.deps.userData, 'attachments', agentId)
     mkdirSync(dir, { recursive: true })
     const file = join(dir, `${Date.now()}-${name.replace(/[^\w.-]+/g, '_').slice(-60) || 'file'}`)
@@ -642,13 +658,18 @@ export class AgentHub {
     return profile ? availableModels(profile).catch(() => []) : Promise.resolve([])
   }
 
+  /** Refuses a model or effort the account can't run. An engine with no list of its own (or an unreachable Ollama) can't be checked, so only a known list refuses. */
+  private async checkModel(profileId: string, model?: string, effort?: string) {
+    const p = this.profiles().find((x) => x.id === profileId)
+    if (!p) throw new AgentError('That account no longer exists.')
+    const models = model ? await availableModels(p).catch(() => [] as string[]) : []
+    if (model && models.length && !models.includes(model)) throw new AgentError(`"${model}" is not available on this account. Pick another.`)
+    if (effort && !(EFFORTS[p.engine] ?? ([] as string[])).includes(effort)) throw new AgentError(`"${effort}" is not an effort level of this account.`)
+  }
+
   async save(def: AgentDef) {
     if (def.builtin || BUILTINS.some((b) => b.id === def.id)) throw new AgentError('Built-in agents can\'t be changed here.')
-    if (def.model) {
-      const models = await this.models(def.profile)
-      // An engine with no list of its own (or an unreachable Ollama) can't be checked, so only a known list refuses.
-      if (models.length && !models.includes(def.model)) throw new AgentError(`"${def.model}" is not available on this account. Pick one from the list.`)
-    }
+    await this.checkModel(def.profile, def.model, def.effort)
     this.registry.save({ ...def, builtin: undefined })
     this.deps.push()
   }
@@ -707,7 +728,7 @@ export class AgentHub {
     const folderChanged = Boolean(chat?.sessionId) && ((chat?.cwd ?? root) !== cwd || (chat?.sessionProfile ?? def.profile) !== def.profile)
     const sessionless = Boolean(chat && ((engine && !ENGINES[engine].chat) || folderChanged))
     const files = run.input.attachments ?? []
-    const block = attachmentBlock(files, engine === 'claude' || engine === 'codex' || engine === 'agy')
+    const block = attachmentBlock(files, Boolean(engine && ENGINES[engine].readsFiles))
     const typed = chat && sessionless ? withHistory(chat.messages, run.input.text) : run.input.text
     const input = typed + (block ? `\n\n${block}` : '')
     const session = chat && !(engine && !ENGINES[engine].chat) ? (chat.sessionId && !folderChanged ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined

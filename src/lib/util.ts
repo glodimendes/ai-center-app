@@ -2,6 +2,11 @@ import { NO_AREA, noAreaCategory } from '@shared/categories'
 import type { AppState } from '@shared/api'
 import type { CategoryPref, ContextEngine, Task } from '@shared/types'
 
+/** The last part of a path. */
+export const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
+/** A path as the user would say it: `~` for the home folder. */
+export const tidy = (p: string) => p.replace(/^\/Users\/[^/]+/, '~')
+
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 
 export function categoryOf(state: AppState, key: string): CategoryPref {

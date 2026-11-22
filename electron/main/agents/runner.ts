@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative } from 'node:path'
 import type { AgentDef } from './definition'
 import type { HandoffPacket, Limits } from '@shared/agents'
+import { inside } from './attachments'
 import { ENGINES, EngineTimeout, failureMessage, runEngine, type Usage } from './engines'
 import { engineMode } from './permissions'
 import { findProfile } from './profiles'
@@ -78,15 +79,15 @@ export interface RunContext {
   session?: { id: string; resume: boolean }
   /** Where the agent works (see resolveCwd). Unset = the vault. */
   cwd?: string
-  /** Other folders it may use (see resolveDirs); unset = just the vault. */
-  extraDirs?: string[]
+  /** Other folders it may use, the vault among them (see resolveDirs). */
+  extraDirs: string[]
   /** Folders of attached files that lie outside every other folder (see attachDirs). */
   attachDirs?: string[]
 }
 
 /**
  * The folder an agent works in: the conversation's own folder, else the agent's `workdir` (vault-relative or absolute),
- * else its own empty workspace under the app's data folder. The vault is always added next to it (see vaultDirs).
+ * else its own empty workspace under the app's data folder. The vault is always added next to it (see resolveDirs).
  */
 export function resolveCwd(def: Pick<AgentDef, 'id' | 'workdir'>, o: { vaultRoot: string; workspaces: string; chatFolder?: string }): string {
   const pick = o.chatFolder || def.workdir
@@ -106,18 +107,6 @@ export function resolveDirs(def: Pick<AgentDef, 'id' | 'workdir' | 'folders'>, o
   return { cwd, extra: extra.filter((d) => !extra.some((o) => o !== d && inside(o, d))) }
 }
 
-/** Whether `dir` is `root` or somewhere under it. */
-function inside(root: string, dir: string): boolean {
-  const rel = relative(root, dir)
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-}
-
-/** The vault as an extra folder, unless the agent already works inside it. */
-export function vaultDirs(cwd: string, vaultRoot: string): string[] {
-  const rel = relative(vaultRoot, cwd)
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? [] : [vaultRoot]
-}
-
 /** Runs one agent definition through its engine, with the permission mapped to flags. Returns the final text. */
 export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext): Promise<{ text: string; usage?: Usage; sessionId?: string }> {
   const profile = findProfile(def.profile, ctx.profiles)
@@ -132,7 +121,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
     model: def.model,
     effort: def.effort,
     cwd,
-    addDirs: [...(ctx.extraDirs ?? vaultDirs(cwd, ctx.vaultRoot)), ...(ctx.attachDirs ?? [])],
+    addDirs: [...ctx.extraDirs, ...(ctx.attachDirs ?? [])],
     purpose: `agent:${def.id}`,
     timeoutMs,
     onEvent: (ev) => {

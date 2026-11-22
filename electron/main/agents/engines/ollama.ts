@@ -13,6 +13,7 @@ export const keepAliveValue = (v?: string): number | string => (v === undefined 
 export const ollamaEngine: Engine = {
   id: 'ollama',
   chat: false,
+  readsFiles: false,
   prepare() {
     throw new Error('Ollama runs over HTTP.')
   },

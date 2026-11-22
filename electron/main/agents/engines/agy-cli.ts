@@ -8,6 +8,7 @@ import type { Engine, EngineEvent } from './types'
 export const agyCli: Engine = {
   id: 'agy',
   chat: true,
+  readsFiles: true,
   prepare(spec) {
     if (spec.mode === 'tools') throw new Error('Antigravity has no per-tool restrictions, so it can\'t run read-only tool agents like the daily brief.')
     const args = ['-p', spec.prompt, '--output-format', 'stream-json']

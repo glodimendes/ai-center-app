@@ -7,7 +7,7 @@ import { AgentRegistry } from '../electron/main/agents/registry'
 import { ApprovalStore, parseActions } from '../electron/main/agents/actions'
 import { canAutoRun, engineMode, needsReview } from '../electron/main/agents/permissions'
 import { MAX_PARALLEL, Supervisor, type Execute } from '../electron/main/agents/supervisor'
-import { buildPrompt, handoffFormat, renderPacket, resolveCwd, vaultDirs } from '../electron/main/agents/runner'
+import { buildPrompt, handoffFormat, renderPacket, resolveCwd } from '../electron/main/agents/runner'
 import { claudeCli } from '../electron/main/agents/engines/claude-cli'
 import { codexCli } from '../electron/main/agents/engines/codex-cli'
 import { findProfile } from '../electron/main/agents/profiles'
@@ -702,12 +702,6 @@ describe('workspaces: own folder, vault alongside', () => {
     expect(resolveCwd(def('projects'), o)).toBe('/v/projects')
     expect(resolveCwd(def('/Users/me/code'), o)).toBe('/Users/me/code')
     expect(resolveCwd(def('projects'), { ...o, chatFolder: '/tmp/x' })).toBe('/tmp/x')
-  })
-  it('adds the vault unless the agent already works inside it', () => {
-    expect(vaultDirs('/data/workspaces/scout', '/v')).toEqual(['/v'])
-    expect(vaultDirs('/Users/me/code', '/v')).toEqual(['/v'])
-    expect(vaultDirs('/v', '/v')).toEqual([])
-    expect(vaultDirs('/v/projects', '/v')).toEqual([])
   })
   it('allows an absolute workdir but not ..; the prompt names the vault only when it is elsewhere', () => {
     expect(parseAgent('a', '---\nname: a\nworkdir: /Users/me/code\n---\nx').workdir).toBe('/Users/me/code')

@@ -23,6 +23,7 @@ export function codexLimits(rl: any): { fiveHour?: { usedPct: number; resetsAt: 
 export const codexCli: Engine = {
   id: 'codex',
   chat: true,
+  readsFiles: true,
   prepare(spec) {
     if (spec.mode === 'tools') throw new Error('Codex has no per-tool restrictions, so it can\'t run read-only tool agents like the daily brief.')
     const model = spec.model ?? spec.profile.model ?? CONTEXT_MODELS.codex.model

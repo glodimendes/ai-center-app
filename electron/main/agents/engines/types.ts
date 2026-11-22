@@ -76,6 +76,8 @@ export interface Engine {
   id: EngineId
   /** Whether a conversation can continue across runs (chat). */
   chat: boolean
+  /** Whether the engine can open files itself (attachments are sent as paths); otherwise their text is inlined. */
+  readsFiles: boolean
   /** Process engines describe a command line; the shared runner spawns it. */
   prepare(spec: RunSpec): Prepared
   /** Engines that aren't a process (HTTP) run themselves instead. */

@@ -10,6 +10,7 @@ const NO_WRITE = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearc
 export const claudeCli: Engine = {
   id: 'claude',
   chat: true,
+  readsFiles: true,
   prepare(spec) {
     const model = spec.model ?? spec.profile.model ?? CONTEXT_MODELS.claude.model
     const effort = spec.effort ?? CONTEXT_MODELS.claude.effort
