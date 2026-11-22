@@ -11,7 +11,8 @@ const TONE: Record<Goal['status'], string> = { running: 'text-accent', done: 'te
 /** Goals: a coordinator agent splits a goal between your other agents. Every step stays visible and every action still needs your OK. */
 export function Goals() {
   const a = useStore((st) => st.state)!.agents
-  const [starting, setStarting] = useState(false)
+  // The New goal dialog: empty, or prefilled from an earlier goal (Edit and run).
+  const [starting, setStarting] = useState<{ coord?: string; text: string } | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const goals = [...a.goals].reverse()
   const coordinators = a.agents.filter((g) => !g.builtin && g.permission === 'read')
@@ -21,7 +22,7 @@ export function Goals() {
     <section>
       <div className="flex items-center mb-2">
         <h2 className="flex-1 text-[13px] font-medium text-muted">Goals</h2>
-        <Button onClick={() => setStarting(true)} disabled={!coordinators.length} title={coordinators.length ? 'Give a coordinator agent a goal' : 'Add a read-only agent first (the Coordinator sample works)'}>
+        <Button onClick={() => setStarting({ text: '' })} disabled={!coordinators.length} title={coordinators.length ? 'Give a coordinator agent a goal' : 'Add a read-only agent first (the Coordinator sample works)'}>
           <Target size={13} /> New goal
         </Button>
       </div>
@@ -45,11 +46,21 @@ export function Goals() {
               {g.reason && (
                 <div className={cx('flex items-center gap-2', TONE[g.status])}>
                   <span className="flex-1">{g.reason}</span>
-                  {g.status === 'needs-input' && (
-                    <Button onClick={() => act(api.resumeGoal(g.id))}>
-                      <Play size={12} /> Continue anyway
+                  {g.status !== 'running' && g.status !== 'done' && (
+                    <Button onClick={() => act(api.resumeGoal(g.id))} title="Carries on with a fresh budget of turns and delegations">
+                      <Play size={12} /> Continue
                     </Button>
                   )}
+                </div>
+              )}
+              {g.status !== 'running' && (
+                <div className="flex gap-2">
+                  <Button onClick={() => act(api.startGoal(g.coordinator, g.text))} title="Start this goal again from scratch">
+                    Run again
+                  </Button>
+                  <Button onClick={() => setStarting({ coord: g.coordinator, text: g.text })} title="Change the wording first">
+                    Edit and run
+                  </Button>
                 </div>
               )}
               {g.steps.map((s) => (
@@ -74,22 +85,25 @@ export function Goals() {
                 </div>
               )}
               <div className="text-[11px] text-faint">
-                {g.turns} coordinator turn{g.turns === 1 ? '' : 's'} · {g.delegations} delegation{g.delegations === 1 ? '' : 's'} · files in {g.folder}
+                {g.turns} coordinator turn{g.turns === 1 ? '' : 's'} · {g.delegations} delegation{g.delegations === 1 ? '' : 's'} ·{' '}
+                <button onClick={() => api.revealVault(g.folder)} title="Show the goal's plan, each agent's output and the result in the vault" className="underline hover:text-ink">
+                  files in {g.folder}
+                </button>
               </div>
             </div>
           )}
         </div>
       ))}
-      {starting && <StartGoal onClose={() => setStarting(false)} />}
+      {starting && <StartGoal initial={starting} onClose={() => setStarting(null)} />}
     </section>
   )
 }
 
-function StartGoal({ onClose }: { onClose: () => void }) {
+function StartGoal({ initial, onClose }: { initial: { coord?: string; text: string }; onClose: () => void }) {
   const agents = useStore((st) => st.state)!.agents.agents.filter((g) => !g.builtin)
   const coordinators = agents.filter((g) => g.permission === 'read')
-  const [coord, setCoord] = useState(coordinators.find((g) => g.id === 'coordinator')?.id ?? coordinators[0]?.id ?? '')
-  const [text, setText] = useState('')
+  const [coord, setCoord] = useState(coordinators.find((g) => g.id === initial.coord)?.id ?? coordinators.find((g) => g.id === 'coordinator')?.id ?? coordinators[0]?.id ?? '')
+  const [text, setText] = useState(initial.text)
   const input = 'h-8 px-2 rounded-md border border-line bg-bg text-[12.5px] outline-none focus:border-accent'
   const go = async () => {
     await act(api.startGoal(coord, text.trim()))

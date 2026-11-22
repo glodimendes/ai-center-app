@@ -39,7 +39,8 @@ export const claudeCli: Engine = {
     const out: EngineEvent[] = []
     if (ev.type === 'assistant')
       for (const c of ev.message?.content ?? [])
-        if (c.type === 'tool_use') out.push({ type: 'tool', name: String(c.name), target: String(c.input?.file_path ?? c.input?.pattern ?? '') })
+        if (c.type === 'text' && c.text) out.push({ type: 'text', text: String(c.text) })
+        else if (c.type === 'tool_use') out.push({ type: 'tool', name: String(c.name), target: String(c.input?.file_path ?? c.input?.pattern ?? '') })
     if (ev.type === 'rate_limit_event') {
       // utilization is a 0..1 fraction (checked against a heavily used account: 0.17 five-hour, 0.32 weekly).
       const w = ev.rate_limit_info?.unifiedWindows ?? {}

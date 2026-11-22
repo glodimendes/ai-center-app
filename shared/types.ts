@@ -359,6 +359,8 @@ export interface Settings {
   /** Generate the daily brief the first time the app opens each day. */
   briefAuto: boolean
   briefEmail: boolean
+  /** System notifications when an agent run fails, waits, or needs your OK while the app is in the background (default on). */
+  agentNotifications?: boolean
   /** Where agent definitions live; default the vault's AGENTS_DIR (shared/paths.ts). */
   agentsDir?: string
   /** Account profiles; unset = one default profile per CLI (claude, codex). */

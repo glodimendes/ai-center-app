@@ -6,6 +6,8 @@ import { ChangesList } from './ChangesList'
 import { Button } from './ui'
 
 const KIND: Record<Action['kind'], string> = {
+  remember: 'Remember',
+  'update-instructions': 'Change its instructions',
   'add-task': 'Add a task',
   'complete-task': 'Complete a task',
   'create-event': 'Create a calendar event',
@@ -19,10 +21,11 @@ const KIND: Record<Action['kind'], string> = {
 export function ApprovalCard({ action, compact }: { action: Action; compact?: boolean }) {
   const toast = useStore((st) => st.toast)
   const agent = useStore((st) => st.state)!.agents.agents.find((g) => g.id === action.agentId)
-  const detail = Object.entries(action.payload).filter(([, v]) => typeof v === 'string' || Array.isArray(v))
+  const isChange = action.kind === 'update-instructions'
+  const detail = Object.entries(action.payload).filter(([k, v]) => (typeof v === 'string' || Array.isArray(v)) && !(isChange && k === 'instructions'))
   const target = action.kind === 'run-agent' ? useStore.getState().state?.agents.agents.find((g) => g.id === action.payload.agent)?.name ?? String(action.payload.agent ?? '') : ''
-  // Under the message that proposed it: one line with the two choices.
-  if (compact)
+  // Under the message that proposed it: one line with the two choices (a change of instructions needs the whole card, to read before applying).
+  if (compact && !isChange)
     return (
       <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-panel pl-3 pr-1.5 py-1.5 text-[13px]">
         <span className="text-faint shrink-0">{action.kind === 'run-agent' ? `→ ${target}` : KIND[action.kind]}</span>
@@ -31,7 +34,7 @@ export function ApprovalCard({ action, compact }: { action: Action; compact?: bo
           Dismiss
         </Button>
         <Button kind="primary" onClick={() => act(api.approveAction(action.id).then((r) => r.status === 'failed' && toast(r.error ?? 'Failed', 'error')))}>
-          {action.kind === 'run-agent' ? 'Send' : 'Add'}
+          {action.kind === 'run-agent' ? 'Send' : action.kind === 'remember' ? 'Keep' : 'Add'}
         </Button>
       </div>
     )
@@ -51,14 +54,39 @@ export function ApprovalCard({ action, compact }: { action: Action; compact?: bo
           ))}
         </div>
       )}
+      {isChange && (
+        <div className="mt-2 grid grid-cols-2 gap-2 @max-3xl:grid-cols-1 text-[12px]">
+          <div>
+            <div className="text-faint mb-0.5">Now</div>
+            <div className="whitespace-pre-wrap max-h-44 overflow-y-auto rounded-lg bg-sunken p-2 text-muted">{agent?.instructions ?? ''}</div>
+          </div>
+          <div>
+            <div className="text-faint mb-0.5">Proposed</div>
+            <div className="whitespace-pre-wrap max-h-44 overflow-y-auto rounded-lg bg-accent-soft p-2">{String(action.payload.instructions ?? '')}</div>
+          </div>
+        </div>
+      )}
       <div className="flex justify-end gap-1 mt-2">
         <Button kind="ghost" onClick={() => act(api.rejectAction(action.id))}>
-          <X size={13} /> Reject
+          <X size={13} /> {isChange ? 'Keep as it is' : 'Reject'}
         </Button>
         <Button kind="primary" onClick={() => act(api.approveAction(action.id).then((r) => r.status === 'failed' && toast(r.error ?? 'Failed', 'error')))}>
-          <Check size={13} /> Approve
+          <Check size={13} /> {isChange ? 'Apply' : 'Approve'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** A note an agent kept on its own, shown under the message that led to it. Undo takes it back out of its memory. */
+export function RememberedNote({ action }: { action: Action }) {
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-xl border border-line/70 bg-sunken/50 pl-3 pr-1.5 py-1 text-[12.5px] text-muted">
+      <span className="shrink-0 text-faint">Remembered</span>
+      <span className="flex-1 min-w-0 truncate" title={String(action.payload.note ?? action.title)}>{String(action.payload.note ?? action.title)}</span>
+      <Button kind="ghost" onClick={() => act(api.undoRemember(action.id))}>
+        <Undo2 size={12} /> Undo
+      </Button>
     </div>
   )
 }

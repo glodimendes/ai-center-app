@@ -124,6 +124,12 @@ export function Settings() {
                 )}
               </div>
             </Card>
+            <Card title="Agent notifications" desc="A system notification and a dock badge when an agent run fails, waits for your OK, changed files to review, or a goal needs you. Only while the app is in the background; they never show an answer.">
+              <label className="flex items-center gap-2 text-[12.5px]">
+                <input type="checkbox" checked={s.settings.agentNotifications !== false} onChange={(e) => act(api.saveSettings({ agentNotifications: e.target.checked }))} />
+                Notify me about agents
+              </label>
+            </Card>
             </>
           )}
           {page === 'calendar' && (

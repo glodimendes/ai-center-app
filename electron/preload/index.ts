@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('state', listener)
     return () => ipcRenderer.removeListener('state', listener)
   },
+  onNavigate: (cb: (view: string) => void) => {
+    const listener = (_e: unknown, v: string) => cb(v)
+    ipcRenderer.on('navigate', listener)
+    return () => ipcRenderer.removeListener('navigate', listener)
+  },
   onBriefProgress: (cb: (line: string) => void) => {
     const listener = (_e: unknown, line: string) => cb(line)
     ipcRenderer.on('brief-progress', listener)

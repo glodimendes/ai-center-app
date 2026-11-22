@@ -10,9 +10,14 @@ export function engineMode(p: Permission): RunMode {
   return p === 'read' ? 'read' : 'edit'
 }
 
-/** Actions with an outside effect never run on their own, whatever the permission. Only adding a task does, and only for `act`. */
+/**
+ * Actions with an outside effect never run on their own, whatever the permission. Two things do:
+ * adding a task (only for `act`), and keeping a note in the agent's own memory file (any permission, user-approved
+ * 2026-11-22: it never touches the vault, tasks or calendar, shows under the message with Undo, and only agents
+ * with memory switched on may propose it). Changing an agent's own instructions always needs the click.
+ */
 export function canAutoRun(kind: ActionKind, permission: Permission): boolean {
-  return permission === 'act' && kind === 'add-task'
+  return kind === 'remember' || (permission === 'act' && kind === 'add-task')
 }
 
 /** Any run that may write files is reviewed: even `act` never edits vault files unreviewed (its own output file is written by the app). */

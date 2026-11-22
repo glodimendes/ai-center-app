@@ -101,4 +101,5 @@ export async function bootstrap() {
   const s = await api.getState()
   useStore.getState().setState(s)
   window.api.onState((next) => useStore.getState().setState(next))
+  window.api.onNavigate((view) => useStore.getState().go(view as View))
 }

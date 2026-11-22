@@ -32,6 +32,7 @@ describe('claude engine', () => {
   it('parses tool use, usage and the result from recorded stream-json lines', () => {
     const tool = claudeCli.parse({ type: 'assistant', message: { content: [{ type: 'text', text: 'x' }, { type: 'tool_use', name: 'Edit', input: { file_path: '/vault/a.md' } }, { type: 'tool_use', name: 'Grep', input: { pattern: 'foo' } }] } })
     expect(tool).toEqual([
+      { type: 'text', text: 'x' },
       { type: 'tool', name: 'Edit', target: '/vault/a.md' },
       { type: 'tool', name: 'Grep', target: 'foo' }
     ])

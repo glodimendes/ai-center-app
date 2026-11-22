@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FileInput, Loader2, MessageSquare, Pencil, Pin, PinOff, Plus, Square, Trash2 } from 'lucide-react'
-import type { AgentDef, AgentOutput, FoundAgent, Permission, Run } from '@shared/agents'
+import type { AgentDef, AgentOutput, FoundAgent, Permission, Run, UsageTotal } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
@@ -291,8 +291,107 @@ function Activity() {
         </section>
       )}
       <Goals />
+      <Cost />
       <History runs={a.runs} />
     </>
+  )
+}
+
+type Period = 'today' | 'week' | 'month'
+const PERIODS: { id: Period; label: string }[] = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: '7 days' },
+  { id: 'month', label: '30 days' }
+]
+const fmtTokens = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+/** A price, or a dash when the CLI reports none (Codex reports tokens only). */
+const fmtCost = (c: number) => (c > 0 ? `$${c.toFixed(c < 1 ? 3 : 2)}` : '–')
+
+/** One row per agent for a period (an agent on two accounts is one row), biggest spender first. */
+function perAgent(list: UsageTotal[]) {
+  const rows = new Map<string, { id: string; runs: number; tokens: number; cost: number }>()
+  for (const t of list) {
+    const r = rows.get(t.agentId) ?? { id: t.agentId, runs: 0, tokens: 0, cost: 0 }
+    r.runs += t.runs
+    r.tokens += t.inputTokens + t.outputTokens
+    r.cost += t.costUsd
+    rows.set(t.agentId, r)
+  }
+  return [...rows.values()].sort((a, b) => b.cost - a.cost || b.tokens - a.tokens)
+}
+
+/** What agents used, one period at a time: a total, a table per agent and, once there are several days to compare, a bar per day. Figures are what the CLIs report, not a subscription bill. */
+function Cost() {
+  const a = useStore((st) => st.state)!.agents
+  const [period, setPeriod] = useState<Period>('week')
+  const rows = perAgent(a.totals[period])
+  const sum = rows.reduce((n, r) => ({ runs: n.runs + r.runs, tokens: n.tokens + r.tokens, cost: n.cost + r.cost }), { runs: 0, tokens: 0, cost: 0 })
+  const name = (id: string) => a.agents.find((g) => g.id === id)?.name ?? id
+  // A chart of one busy day among empty ones says nothing, so it waits for a second day with runs.
+  const showDays = a.costDays.filter((d) => d.runs > 0).length > 1
+  const byCost = a.costDays.some((d) => d.costUsd > 0)
+  const value = (d: { tokens: number; costUsd: number }) => (byCost ? d.costUsd : d.tokens)
+  const top = Math.max(...a.costDays.map(value), 0)
+  const cols = 'grid grid-cols-[minmax(0,1fr)_3.5rem_4.5rem_5rem] gap-x-3 px-4'
+  return (
+    <section>
+      <div className="flex items-center mb-2">
+        <h2 className="flex-1 text-[13px] font-medium text-muted">Cost</h2>
+        <div className="flex items-center rounded-full bg-sunken p-0.5 text-[12px]">
+          {PERIODS.map((p) => (
+            <button key={p.id} onClick={() => setPeriod(p.id)} className={cx('px-3 h-6 rounded-full', period === p.id ? 'bg-panel shadow-sm font-medium' : 'text-muted')}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-2xl border border-line/70 overflow-hidden">
+        {!rows.length ? (
+          <div className="px-4 py-3 text-[13px] text-faint">Nothing used {period === 'today' ? 'today' : `in the last ${period === 'week' ? '7' : '30'} days`}.</div>
+        ) : (
+          <>
+            <div className="px-4 pt-3 pb-2 flex items-baseline gap-3">
+              <span className="text-[20px] font-semibold tabular-nums">{fmtCost(sum.cost)}</span>
+              <span className="text-[12.5px] text-muted tabular-nums">
+                {fmtTokens(sum.tokens)} tokens · {sum.runs} run{sum.runs === 1 ? '' : 's'}
+              </span>
+            </div>
+            {showDays && (
+              <div className="px-4 pb-3">
+                <div className="flex items-end gap-[3px] h-10 border-b border-line/70" title={byCost ? 'Cost per day, last 14 days' : 'Tokens per day, last 14 days'}>
+                  {a.costDays.map((d) => (
+                    <div key={d.day} title={`${d.day}: ${d.runs} runs, ${fmtTokens(d.tokens)} tokens${d.costUsd ? `, $${d.costUsd.toFixed(3)}` : ''}`} className="flex-1 flex items-end h-full">
+                      <div className="w-full rounded-t-sm bg-accent/60" style={{ height: `${value(d) > 0 && top ? Math.max(8, (value(d) / top) * 100) : 0}%` }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between mt-1 text-[10.5px] text-faint">
+                  <span>{a.costDays[0].day.slice(5)}</span>
+                  <span>today</span>
+                </div>
+              </div>
+            )}
+            <div className={cx(cols, 'py-1.5 border-t border-line/60 text-[11.5px] text-faint')}>
+              <span>Agent</span>
+              <span className="text-right">Runs</span>
+              <span className="text-right">Tokens</span>
+              <span className="text-right">Cost</span>
+            </div>
+            <div className="divide-y divide-line/50">
+              {rows.map((r) => (
+                <div key={r.id} className={cx(cols, 'py-1.5 text-[12.5px] tabular-nums')}>
+                  <span className="truncate font-medium">{name(r.id)}</span>
+                  <span className="text-right text-muted">{r.runs}</span>
+                  <span className="text-right text-muted">{fmtTokens(r.tokens)}</span>
+                  <span className="text-right text-muted">{fmtCost(r.cost)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 border-t border-line/60 text-[11.5px] text-faint">What the CLIs report (the API price of the usage, not your subscription bill). Only finished runs count.</div>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -335,6 +434,7 @@ function History({ runs }: { runs: Run[] }) {
             {open === r.id && (
               <div className="px-4 pb-3 text-[13px] space-y-2">
                 {r.error && <div className="text-danger">{r.error}</div>}
+                {r.status === 'running' && r.partial && <div className="whitespace-pre-wrap leading-relaxed text-muted">{r.partial}</div>}
                 {r.output?.text && <div className="whitespace-pre-wrap leading-relaxed">{r.output.text}</div>}
                 {r.outputFile && <div className="text-muted">Saved to {r.outputFile}</div>}
                 {r.progress.length > 0 && (
@@ -407,6 +507,13 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
   useEffect(() => {
     api.chatModels().then((l) => setEfforts(Object.fromEntries(l.map((o) => [o.profile, o.efforts]))), () => {})
   }, [])
+  // The agent's notes between runs (only for saved agents with memory on); `null` until loaded.
+  const [memory, setMemory] = useState<string | null>(null)
+  const [memoryEdited, setMemoryEdited] = useState(false)
+  useEffect(() => {
+    if (!d.memory || isNew || memory !== null) return
+    api.agentMemory(d.id).then(setMemory, () => setMemory(''))
+  }, [d.memory])
   const unavailable = Boolean(d.model && models && models.length > 0 && !models.includes(d.model))
   const set = (p: Partial<AgentDef>) => setD({ ...d, ...p })
   const field = 'h-9 px-3 rounded-xl border border-line bg-bg text-[13.5px] outline-none focus:border-accent'
@@ -415,6 +522,7 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
     try {
       const folders = (d.folders ?? []).map((f) => f.trim()).filter(Boolean)
       await api.saveAgent({ ...d, folders: folders.length ? folders : undefined, id: isNew ? slug(d.name) : d.id, name: d.name.trim() || d.id })
+      if (memoryEdited && memory !== null && d.memory) await api.saveAgentMemory(d.id, memory)
       onClose()
     } catch (e) {
       setError((e as Error).message)
@@ -516,6 +624,28 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
               </div>
               <div className="h-9 px-3 rounded-xl border border-dashed border-line text-[13px] text-faint flex items-center">AI Center vault · always available for context</div>
               <span className="text-[11.5px] text-faint">Folders in the vault (projects) or anywhere on your Mac. Edits outside the vault aren't reviewed.</span>
+            </div>
+            <div className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={Boolean(d.memory)} onChange={(e) => set({ memory: e.target.checked || undefined })} />
+                <span className="text-muted">Remember things between runs</span>
+              </label>
+              {d.memory &&
+                (isNew ? (
+                  <span className="text-[11.5px] text-faint">Its notes appear here once it has run. It proposes notes at the end of an answer; for read and propose agents each one waits for your OK.</span>
+                ) : (
+                  <>
+                    <textarea
+                      className="px-3 py-2 rounded-xl border border-line bg-bg text-[13px] font-mono outline-none focus:border-accent resize-none"
+                      rows={5}
+                      disabled={memory === null}
+                      value={memory ?? ''}
+                      placeholder="Nothing remembered yet."
+                      onChange={(e) => (setMemory(e.target.value), setMemoryEdited(true))}
+                    />
+                    <span className="text-[11.5px] text-faint">Its notes, one per line. Edit or clear them here; the newest are shown to it at the start of each run. Read and propose agents need your OK for each new note.</span>
+                  </>
+                ))}
             </div>
             <label className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
               <span className="text-muted">Runs on its own (one per line: schedule: 07:00, on-open, file-watch: {TASKS_DIR}/*.md)</span>

@@ -20,6 +20,7 @@ import { PLAN_VARIANTS, applyVariant, planMetrics } from './scheduler/variants'
 import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
+import { notify, setBadge } from './notify'
 import { createStarterVault } from './vault/starter'
 import { initRepo } from './vault/git'
 import { checkFramework, ensureFrameworkDirs, missingFiles } from './vault/framework'
@@ -61,7 +62,9 @@ export class Controller implements Api {
     addTask: (section, body) => this.addTask(section, body),
     completeTask: (id) => this.completeTask(id),
     runBuiltin: () => this.generateBrief(),
-    push: () => this.push()
+    push: () => this.push(),
+    notify: (title, body) => notify(title, body, this.settings.agentNotifications, () => this.emit('navigate', 'agents')),
+    badge: (count) => setBadge(count)
   })
   // Plan stability: full re-plans only on demand, once per day, or when preferences change.
   // Everything else is incremental (existing blocks stay put; only their contents refresh).
@@ -850,6 +853,15 @@ export class Controller implements Api {
   }
   agentModels(profileId: string) {
     return this.agents.models(profileId)
+  }
+  async agentMemory(id: string) {
+    return this.agents.agentMemory(id)
+  }
+  async saveAgentMemory(id: string, text: string) {
+    this.agents.saveAgentMemory(id, text)
+  }
+  async undoRemember(actionId: string) {
+    await this.agents.undoRemember(actionId)
   }
   async deleteAgent(id: string) {
     this.agents.remove(id)

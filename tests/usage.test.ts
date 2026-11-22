@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { claudeCli } from '../electron/main/agents/engines/claude-cli'
 import { codexCli, codexLimits } from '../electron/main/agents/engines/codex-cli'
-import { budgetPause, currentWindows, readCodexLimits, readRunRows, usageTotals } from '../electron/main/agents/usage'
+import { budgetPause, currentWindows, dailyTotals, readCodexLimits, readRunRows, usageTotals } from '../electron/main/agents/usage'
 import { Supervisor } from '../electron/main/agents/supervisor'
 import { parseAgent } from '../electron/main/agents/definition'
 
@@ -102,5 +102,23 @@ describe('run totals', () => {
     expect(t.week).toHaveLength(1)
     expect(readRunRows(join(dir, 'nope'), 0)).toEqual([])
     rmSync(dir, { recursive: true })
+  })
+
+  it('totals the last 30 days and gives one entry per day, with empty days kept', () => {
+    const now = new Date(2026, 10, 22, 15, 0)
+    const day = (back: number, h = 9) => new Date(2026, 10, 22 - back, h).getTime()
+    const row = (t: number, cost: number) => ({ t, agentId: 'x', profile: 'claude', inputTokens: 10, outputTokens: 5, costUsd: cost })
+    const rows = [row(day(0), 0.01), row(day(0, 10), 0.02), row(day(3), 0.05), row(day(20), 0.1), row(day(40), 1)]
+    const t = usageTotals(rows.filter((r) => r.t >= day(30)), now)
+    expect(t.today[0].runs).toBe(2)
+    expect(t.week[0].runs).toBe(3)
+    expect(t.month[0].runs).toBe(4)
+    const days = dailyTotals(rows, 14, now)
+    expect(days).toHaveLength(14)
+    expect(days.at(-1)).toMatchObject({ day: '2026-11-22', runs: 2, tokens: 30 })
+    expect(days.at(-1)!.costUsd).toBeCloseTo(0.03)
+    expect(days[0].day).toBe('2026-11-09')
+    expect(days.find((d) => d.day === '2026-11-20')).toMatchObject({ runs: 0, tokens: 0, costUsd: 0 })
+    expect(days.reduce((n, d) => n + d.runs, 0)).toBe(3)
   })
 })

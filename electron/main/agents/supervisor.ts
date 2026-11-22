@@ -14,7 +14,10 @@ export interface Outcome {
 /** Called before a run starts. A string pauses the run with that reason until the user allows or skips it. */
 export type Gate = (run: Run, def: AgentDef) => Promise<string | null> | string | null
 
-export type Execute = (run: Run, def: AgentDef, onProgress: (line: string) => void, signal: { cancel: (fn: () => void) => void }) => Promise<Outcome>
+export type Execute = (run: Run, def: AgentDef, onProgress: (line: string) => void, signal: { cancel: (fn: () => void) => void; text: (answerSoFar: string) => void }) => Promise<Outcome>
+
+/** Runs kept in the list (older ones stay in the logs). */
+export const HISTORY_CAP = 200
 
 /** Runs that may be active at once. The CLIs' own rate limits are the real ceiling; this only keeps the machine calm. */
 export const MAX_PARALLEL = 3
@@ -37,7 +40,9 @@ export class Supervisor {
     private onChange: () => void = () => {},
     private gate?: Gate,
     /** Where waiting conversation turns and handoffs are kept, so they survive a restart. */
-    private queueFile: string | null = null
+    private queueFile: string | null = null,
+    /** A run failed or paused: something worth telling the user about when the app is in the background. */
+    private onEvent: (kind: 'failed' | 'paused', run: Run) => void = () => {}
   ) {}
 
   enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string; chat?: boolean; packet?: HandoffPacket; chainId?: string; hops?: number; attachments?: string[] } = {}): Run {
@@ -58,11 +63,17 @@ export class Supervisor {
     run.chainId ??= run.id
     this.runs.push(run)
     this.queue.push({ run, def })
-    this.log(run, { type: 'queued', input: run.input, permission: def.permission, model: def.model, chainId: run.chainId, hops: run.hops, parentRunId: run.parentRunId })
+    this.log(run, { type: 'queued', agentName: def.name, profile: def.profile, chat: run.chat, queuedAt: run.queuedAt, input: run.input, permission: def.permission, model: def.model, chainId: run.chainId, hops: run.hops, parentRunId: run.parentRunId })
     this.saveQueue()
     this.onChange()
     this.pump()
     return run
+  }
+
+  /** Puts finished runs of earlier sessions (rebuilt from the logs) at the front of the history. */
+  seed(past: Run[]) {
+    const ids = new Set(this.runs.map((r) => r.id))
+    this.runs = [...past.filter((r) => !ids.has(r.id)), ...this.runs]
   }
 
   /** Only conversation turns and handoffs are worth keeping across a restart; a stale schedule or capture isn't. */
@@ -177,6 +188,7 @@ export class Supervisor {
         run.status = 'paused'
         run.pauseReason = reason
         this.log(run, { type: 'paused', reason })
+        this.onEvent('paused', run)
         this.onChange()
         await new Promise<void>((resolve, reject) => {
           slot.resume = resolve
@@ -198,7 +210,7 @@ export class Supervisor {
           this.log(run, { type: 'progress', line })
           this.onChange()
         },
-        { cancel: (fn) => (stop = fn) }
+        { cancel: (fn) => (stop = fn), text: (t) => this.setPartial(run, t) }
       )
       run.usage = out.usage
       run.output = { from: def.id, to: run.input.from, text: out.text }
@@ -212,11 +224,23 @@ export class Supervisor {
     }
   }
 
+  private partialTimers = new Map<string, NodeJS.Timeout>()
+
+  /** The answer so far, pushed to the UI at most every 150 ms (engines write many small chunks). */
+  private setPartial(run: Run, text: string) {
+    run.partial = text
+    if (this.partialTimers.has(run.id)) return
+    this.partialTimers.set(run.id, setTimeout(() => (this.partialTimers.delete(run.id), this.onChange()), 150))
+  }
+
   private finish(run: Run, status: RunStatus, error?: string) {
+    clearTimeout(this.partialTimers.get(run.id))
+    this.partialTimers.delete(run.id)
+    run.partial = undefined
     run.status = status
     run.error = status === 'done' ? undefined : error
     run.endedAt = new Date().toISOString()
-    this.log(run, { type: 'end', status, profile: run.profile, error: run.error, output: run.output, usage: run.usage })
+    this.log(run, { type: 'end', status, profile: run.profile, error: run.error, output: run.output, usage: run.usage, outputFile: run.outputFile })
     // Speed side of the usage log: waiting in the queue vs running, and how many ran together (sizes and times only).
     const t = (iso?: string) => (iso ? Date.parse(iso) : undefined)
     const started = t(run.startedAt)
@@ -231,9 +255,10 @@ export class Supervisor {
       outChars: run.output?.text.length,
       tools: run.progress.length
     })
+    if (status === 'error') this.onEvent('failed', run)
     for (const w of this.waiters.get(run.id) ?? []) w(run)
     this.waiters.delete(run.id)
-    if (this.runs.length > 100) this.runs = this.runs.filter((r) => r.status === 'queued' || r.status === 'running' || this.runs.indexOf(r) >= this.runs.length - 100)
+    if (this.runs.length > HISTORY_CAP) this.runs = this.runs.filter((r) => r.status === 'queued' || r.status === 'running' || this.runs.indexOf(r) >= this.runs.length - HISTORY_CAP)
     this.onChange()
   }
 

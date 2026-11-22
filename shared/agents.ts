@@ -59,6 +59,8 @@ export interface AgentDef {
   workdir?: string
   /** More folders the agent may use besides the main one (vault-relative or absolute). The vault itself is always added. */
   folders?: string[]
+  /** Keeps notes between runs and chats (app data `memory/<id>.md`), shown and editable in the editor. */
+  memory?: boolean
   /** Data source ids from Settings (Phase 3). */
   sources: string[]
   /** Triggers as written, e.g. `manual`, `schedule: 07:00` (Phase 3 interprets them). */
@@ -119,6 +121,8 @@ export interface Run {
   startedAt?: string
   endedAt?: string
   progress: string[]
+  /** The answer so far while the run is working (not saved to the log). */
+  partial?: string
   output?: AgentMessage
   error?: string
   usage?: Usage
@@ -129,7 +133,7 @@ export interface Run {
 }
 
 /** Everything with an effect outside the agent's own output: only ever proposed, then run when the user approves. */
-export type ActionKind = 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call' | 'run-agent' | 'new-agent'
+export type ActionKind = 'remember' | 'update-instructions' | 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call' | 'run-agent' | 'new-agent'
 
 export interface Action {
   id: string
@@ -163,6 +167,15 @@ export interface UsageTotal {
   runs: number
   inputTokens: number
   outputTokens: number
+  costUsd: number
+}
+
+/** What agents used on one day (the cost view's bars). */
+export interface DayCost {
+  /** Local date, yyyy-mm-dd. */
+  day: string
+  runs: number
+  tokens: number
   costUsd: number
 }
 
@@ -242,6 +255,9 @@ export interface Goal {
   createdAt: string
   turns: number
   delegations: number
+  /** Counts at the last "Continue": the limits apply to what was used since, so a resumed goal gets a fresh budget. */
+  turnsBase?: number
+  delegationsBase?: number
   steps: { turn: number; coordinatorRunId: string; delegations: GoalDelegation[] }[]
   finalText?: string
   /** Earlier conversation the coordinator should know about (central chat); not shown as the goal's title. */
@@ -301,7 +317,9 @@ export interface AgentsState {
   /** Latest 5-hour and weekly window per profile id; null = not seen yet. */
   limits: Record<string, Limits | null>
   /** Agent runs per agent and profile, today and over the last 7 days. */
-  totals: { today: UsageTotal[]; week: UsageTotal[] }
+  totals: { today: UsageTotal[]; week: UsageTotal[]; month: UsageTotal[] }
+  /** The last 14 days, oldest first. */
+  costDays: DayCost[]
   cli: CliInfo[]
   sources: SourceDef[]
   gmail: { configured: boolean; connected: boolean }

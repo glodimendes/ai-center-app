@@ -82,6 +82,7 @@ export function parseAgent(id: string, text: string): AgentDef {
     permission,
     workdir,
     folders: folders.length ? folders : undefined,
+    memory: fm.memory === true || fm.memory === 'true' ? true : undefined,
     sources: list(fm.sources, 'sources'),
     triggers: list(fm.triggers, 'triggers').length ? list(fm.triggers, 'triggers') : ['manual'],
     output,
@@ -179,6 +180,7 @@ export function serializeAgent(a: AgentDef): string {
   if (a.effort) fm.effort = a.effort
   if (a.workdir) fm.workdir = a.workdir
   if (a.folders?.length) fm.folders = a.folders
+  if (a.memory) fm.memory = true
   if (a.sources.length) fm.sources = a.sources
   if (a.budget) fm.budget = a.budget
   return `---\n${dump(fm, { lineWidth: 120 })}---\n\n${a.instructions.trim()}\n`

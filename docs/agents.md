@@ -17,6 +17,8 @@ sources: [project-notes] # ids from Settings → Data sources
 model: claude-sonnet-5-5 # optional; empty = the profile's or the cheap default
 workdir: projects     # optional: a folder in the vault or any folder on your Mac; default: the agent's own workspace
 budget: 60               # optional: pause when the account's window is at 60%
+folders: [references]    # optional: more folders it may use (vault-relative or absolute); the vault is always added
+memory: true             # optional: keeps notes between runs (see "Memory" below)
 ---
 
 Summarise what changed in my notes this week, in five bullets.
@@ -60,6 +62,7 @@ The **Chat** page has a conversation list on the left: **Central** and one entry
 - **Central:** coordinate several agents. Refer to agents with `/` (autocomplete as you type, e.g. `/writer draft this`) to give them work directly; each answers in the thread under its name. A message with no tag goes to a coordinator agent (the Coordinator example, or any read-only agent named like one), which splits it between your other agents and writes the final answer.
 
 - **Model and effort:** the pill left of Send picks the account, model and effort for this conversation, from every account you have. The agent's own settings (Agents → edit → Model, Effort) are the default; **New chat** returns to them. Changing the model keeps the session; changing the account starts a new one and carries the transcript as text.
+- **Live answers:** the answer appears as the agent writes it (Claude by message, Codex by message, Ollama as it types) and is replaced by the final message when the run ends. Stop cancels it.
 - **Files:** the paperclip, dragging files onto the box, pasting an image, or typing `@` and choosing a file from the conversation's folders and the vault.
 - **Referring to agents:** `/` lists your agents. In Central it sends the message to that agent. In an agent's chat it tells the agent you mean the other one, and it may propose handing the work over (your click decides).
 - **Folders:** the folder chip in the header shows where the agent works and saves, the other folders it may use and the vault. Change the main folder, add folders for this conversation, or save them as the agent's default. Files stay where they are (a pasted image is kept in the app's data folder); the agent is told their paths, and engines that can't open files (Ollama, a custom command) get text files inline.
@@ -80,7 +83,17 @@ Each message is a normal run: it queues, respects the usage ceiling and your rev
 
 ## Agents page
 
-**Agents** lists your agents (edit, or jump to a chat) and the built-in ones. **Activity** shows what is waiting for you, your goals and the recent runs with their usage.
+**Agents** lists your agents (edit, or jump to a chat) and the built-in ones. **Activity** shows what is waiting for you, your goals, what agents cost and the recent runs with their usage.
+
+**History survives a restart.** Recent runs are rebuilt from the run logs when the app starts, so a scheduled agent's answer is still there the next day. A run that was cut off by quitting shows as interrupted.
+
+**Notifications.** While the app is in the background you get a system notification (and a dock badge for what waits for you) when a run fails, pauses on the usage ceiling, wants your OK, changed files to review, or a goal needs you. They name the agent and say what happened, never the answer. Settings → General switches them off.
+
+**Cost.** Activity → Cost shows, per agent, what it used today, in 7 and in 30 days, with a bar per day for the last two weeks. Figures are what the CLIs report (the API-equivalent price for Claude; Codex reports tokens only), not your subscription bill; only finished runs count.
+
+**Memory.** Switch on "Remember things between runs" in an agent's settings and it can keep notes (preferences, decisions, facts you told it). While it works (in a chat or a run) it decides what is worth keeping and ends its answer with a note. The note is kept at once, whatever the agent's permission (it only writes the agent's own memory file, never your vault, tasks or calendar), and shows under the answer as "Remembered · … Undo". In an agent's chat the **Memory** button in the header switches memory on, shows the notes and lets you edit or clear them (the same field is in the agent's settings). The notes live in the app's data folder (`memory/<agent>.md`) and are shown to the agent at the start of each run (the newest ~4000 characters). Deleting the agent deletes its notes.
+
+**Adapting an agent from its chat.** If you tell an agent how it should work from now on ("always answer in bullet points"), it may propose new instructions. They appear under its answer as a before/after card and change nothing until you click **Apply**; the chat then continues in a new session that has the new instructions. A small preference is better as a note, which the agent chooses on its own. Built-in agents can't be changed this way.
 
 **Only agents made or accepted in the app count.** Other tools (Codex, Claude Code, Claude Desktop, a script) may write files into the agents folder too. Such a file isn't an agent until you accept it: it doesn't run, chat, react to triggers or receive handoffs. It appears under **Found in your agents folder** with a preview of how it would be imported:
 - A file in the app's format, or a Claude Code subagent with a valid file name, is imported as it is; the file isn't changed.
@@ -103,6 +116,8 @@ Up to three agents run at the same time. An agent never runs twice at once, and 
 
 A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). A delegated agent may also question another agent of the goal (one round, answers come back once); this needs no click because you started the goal, and the goal shows who asked whom. The plan, each agent's output and the result are saved as files under `tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.
 
+
+A finished, stopped or failed goal can be run again as it was, or edited first (**Run again**, **Edit and run**). **Continue** picks a goal up after a limit, a suspected loop, a stop or an error, with a fresh budget of turns and delegations. The goal's plan, each agent's output and the result are files in the vault; the link under the goal shows them.
 
 ## Usage log
 

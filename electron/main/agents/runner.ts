@@ -13,6 +13,20 @@ const ACTIONS_FORMAT = `If you want something done outside your own output (add 
 \`\`\`
 Use payload {"section": ["Heading"], "body": "task text"} for add-task, {"taskId": "..."} for complete-task, {"agent": "agent-id", "input": "..."} for run-agent (hands work to another agent), and the agent's fields (id, name, permission, output, instructions, triggers) for new-agent. Nothing in that block happens without the user's click.`
 
+/** How a memory agent keeps a note for later runs. The app saves it at once and shows it under the answer with Undo. */
+const MEMORY_FORMAT = `You keep notes for your future runs. Whenever you notice something that will matter later (how the user likes things done, a decision, a fact they told you, what worked), end your answer with a fenced block (no sentence or label before it):
+\`\`\`actions
+[{"kind": "remember", "title": "short label", "payload": {"note": "one short line"}}]
+\`\`\`
+The app keeps the note at once and shows it to the user, who can undo it. Keep only what is worth carrying into later conversations. If you also propose other actions, put them in the same block.`
+
+/** Chat only: lets an agent propose a lasting change to its own instructions; it applies only when the user clicks Apply. */
+export const ADAPT_FORMAT = `If the user asks you to change how you work for good (tone, format, rules you should always follow), you may propose new instructions: end your answer with a fenced block (no sentence or label before it):
+\`\`\`actions
+[{"kind": "update-instructions", "title": "short label", "payload": {"instructions": "your complete new instructions", "reason": "what changes and why"}}]
+\`\`\`
+The text replaces your current instructions only if the user clicks Apply, so write them out in full and keep what should stay. A small preference is a note, not a change of instructions; propose this only when it is really asked for.`
+
 /** Most handoffs one after another before the app stops offering more (a chain can't run away). */
 export const MAX_HOPS = 3
 /** A handed-over text longer than this travels as a vault file; the receiver gets the path and a short head. */
@@ -42,7 +56,7 @@ export function renderPacket(p: HandoffPacket, fromName: string): string {
 }
 
 /** A resumed chat turn is just the user's message: the CLI already holds the instructions and earlier turns. */
-export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = '', where?: { cwd: string; vault: string; extra?: string[] }): string {
+export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = '', where?: { cwd: string; vault: string; extra?: string[] }, memory = ''): string {
   if (resumed) return input.trim()
   const parts = [def.instructions, `Today is ${date}.`]
   if (where && where.cwd !== where.vault) {
@@ -53,12 +67,14 @@ export function buildPrompt(def: AgentDef, input: string, date: string, sources 
         ` The user's vault (their notes, tasks and projects) is at ${where.vault}: read it there for context.`
     )
   }
+  if (def.memory && memory.trim()) parts.push(`Your notes from earlier runs (kept by the app):\n"""\n${memory.trim()}\n"""`)
   if (sources) parts.push(sources)
   if (input.trim()) parts.push(`The user's input for this run:\n"""\n${input.trim()}\n"""`)
   if (def.permission === 'read') parts.push('You can only read files; you cannot change anything. Answer in plain text.')
   if (def.permission === 'propose') parts.push('Your file edits are shown to the user as a diff and kept only if they approve. Finish with a short plain-text summary of what you changed.')
   if (def.output === 'actions' || def.output === 'suggestions') parts.push(ACTIONS_FORMAT)
   else if (handoff) parts.push(handoff)
+  if (def.memory) parts.push(MEMORY_FORMAT)
   return parts.join('\n\n')
 }
 
@@ -70,6 +86,10 @@ export interface RunContext {
   onCancel: (cancel: () => void) => void
   /** The account's window usage as the CLI reported it during the run. */
   onLimits?: (limits: Omit<Limits, 'asOf'>) => void
+  /** The agent's notes from earlier runs (memory agents), already trimmed for the prompt. */
+  memory?: string
+  /** The answer so far (streamed as the engine writes it). */
+  onText?: (text: string) => void
   timeoutMs?: number
   /** Text of the agent's data sources (see sources.ts), already fetched. */
   sources?: string
@@ -116,7 +136,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: engineMode(def.permission),
-    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff, { cwd, vault: ctx.vaultRoot, extra: ctx.extraDirs }),
+    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff, { cwd, vault: ctx.vaultRoot, extra: ctx.extraDirs }, ctx.memory),
     session: ctx.session,
     model: def.model,
     effort: def.effort,
@@ -127,6 +147,7 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
     onEvent: (ev) => {
       if (ev.type === 'tool') ctx.onProgress(`${ev.name} ${['Read', 'Edit', 'Write'].includes(ev.name) ? rel(ev.target) : ev.target}`.trim())
       if (ev.type === 'limits') ctx.onLimits?.(ev.limits)
+      if (ev.type === 'text') ctx.onText?.(ev.text)
       if (ev.type === 'file_change') ctx.onProgress(`Editing ${rel(ev.path)}`)
     }
   })

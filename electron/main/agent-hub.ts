@@ -20,13 +20,16 @@ import { SAMPLES } from './agents/samples'
 import { buildSourceBundle } from './agents/sources'
 import { parseMentions, routeCapture, withHistory } from './agents/capture'
 import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
-import { budgetPause, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
+import { budgetPause, dailyTotals, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
-import { MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef, resolveDirs } from './agents/runner'
+import { ADAPT_FORMAT, MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef, resolveDirs } from './agents/runner'
 import { attachDirs, attachmentBlock } from './agents/attachments'
+import { loadHistory } from './agents/history'
+import { notice, type NoticeKind } from './agents/notice'
+import { appendMemory, notesForPrompt, readMemory, removeMemory, removeNote, writeMemory } from './agents/memory'
 import { findFiles } from './agents/files'
 import { repeatKey } from './agents/goals'
-import { Supervisor, type Execute } from './agents/supervisor'
+import { HISTORY_CAP, Supervisor, type Execute } from './agents/supervisor'
 import type { ContextSession } from './context/session'
 
 const exec = promisify(execFile)
@@ -66,6 +69,9 @@ export interface HubDeps {
   completeTask: (taskId: string) => Promise<void>
   runBuiltin: (id: string) => Promise<void>
   push: () => void
+  /** A system notification (the app decides whether to show it) and the dock badge count. */
+  notify: (title: string, body: string) => void
+  badge: (count: number) => void
 }
 
 /** Glue between the agent core and the app: runs agents, holds their results, executes approved actions. */
@@ -76,16 +82,17 @@ export class AgentHub {
   /** The run whose edits are waiting in ContextSession for Keep/Undo. */
   private reviewRunId: string | null = null
   private limits = new Map<string, Limits | null>()
-  private cache: { at: number; totals: AgentsState['totals'] } | null = null
+  private cache: { at: number; totals: AgentsState['totals']; costDays: AgentsState['costDays'] } | null = null
   private codexSeen = new Map<string, number>()
   private cli: CliInfo[] = []
   private limitsFile: string
   private triggersFile: string
   private chatDir: string
+  private memoryDir: string
   private goalDir: string
   private goals: GoalRunner
   /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
-  private chats = new Map<string, { sessionId?: string; messages: ChatMessage[]; folder?: string; extra?: string[]; cwd?: string; override?: ChatOverride; sessionProfile?: string }>()
+  private chats = new Map<string, { sessionId?: string; messages: ChatMessage[]; folder?: string; extra?: string[]; cwd?: string; override?: ChatOverride; sessionProfile?: string; freshSession?: boolean }>()
   /** Per handoff chain: what was already asked of whom, so a chain can't repeat itself. */
   private chainSeen = new Map<string, Set<string>>()
   /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
@@ -99,6 +106,7 @@ export class AgentHub {
       /* limits are re-read from the CLIs */
     }
     this.chatDir = join(deps.userData, 'chats')
+    this.memoryDir = join(deps.userData, 'memory')
     this.triggersFile = join(deps.userData, 'triggers.json')
     try {
       if (existsSync(this.triggersFile)) this.lastFired = JSON.parse(readFileSync(this.triggersFile, 'utf8'))
@@ -155,6 +163,19 @@ export class AgentHub {
           if (typeof to !== 'string' || !to.includes('@') || typeof body !== 'string' || !body.trim()) throw new Error('The draft needs a recipient and a body.')
           await (await deps.gmail.api()).createDraft(buildRawDraft({ to, subject: typeof subject === 'string' ? subject : '', body }))
         },
+        // The agent's own notes (app data): kept at once, shown under the message with Undo (see canAutoRun).
+        remember: async (a) => appendMemory(this.memoryDir, a.agentId, String(a.payload.note ?? ''), isoDate(new Date())),
+        // A lasting change to the agent's own definition: only ever on the user's click (Apply). Its chat starts a new session with the new text.
+        'update-instructions': async (a) => {
+          const def = this.registry.get(a.agentId)
+          const instructions = typeof a.payload.instructions === 'string' ? a.payload.instructions.trim() : ''
+          if (!def || def.builtin) throw new Error('That agent can\'t be changed here.')
+          if (!instructions) throw new Error('The proposal has no new instructions.')
+          if (instructions.length > 20_000) throw new Error('The proposed instructions are too long.')
+          this.registry.save({ ...def, instructions })
+          this.chat(def.id).freshSession = true
+          this.saveChat(def.id)
+        },
         'complete-task': async (a) => {
           if (typeof a.payload.taskId !== 'string') throw new Error('The proposal names no task.')
           await deps.completeTask(a.payload.taskId)
@@ -162,7 +183,9 @@ export class AgentHub {
       },
       deps.push
     )
-    this.supervisor = new Supervisor(this.execute, join(deps.userData, 'runs'), deps.push, this.gate, join(deps.userData, 'queue.json'))
+    this.supervisor = new Supervisor(this.execute, join(deps.userData, 'runs'), deps.push, this.gate, join(deps.userData, 'queue.json'), (kind, run) => this.alert(kind, run.agentName, kind === 'failed' ? run.error : run.pauseReason))
+    // Finished runs of earlier sessions come back from the logs (a run cut off by quitting shows as interrupted).
+    this.supervisor.seed(loadHistory(join(deps.userData, 'runs'), HISTORY_CAP))
     this.goalDir = join(deps.userData, 'goals')
     let restored: Goal[] = []
     try {
@@ -201,6 +224,7 @@ export class AgentHub {
 
   state(): AgentsState {
     const { agents, errors } = this.registry.list()
+    this.deps.badge(this.approvals.list().filter((x) => x.status === 'pending').length + this.supervisor.list().filter((r) => r.status === 'paused').length + (this.reviewRunId ? 1 : 0))
     const pending = this.deps.context.pendingResult
     return {
       agents: [...BUILTINS, ...agents],
@@ -212,11 +236,12 @@ export class AgentHub {
       approvals: this.approvals.list(),
       profiles: this.profiles(),
       limits: this.currentLimits(),
-      totals: this.totals(),
+      totals: this.usage().totals,
+      costDays: this.usage().costDays,
       cli: this.cli,
       sources: this.deps.sources() ?? [],
       gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
-      goals: this.goals.list().slice(-20),
+      goals: this.goals.list().slice(-50),
       // Transcripts are loaded from disk on first use, so a conversation survives a restart.
       chats: Object.fromEntries([CENTRAL, ...agents.filter((a) => !a.builtin).map((a) => a.id)].map((id) => [id, this.chat(id).messages.slice(-100)])),
       ...this.chatSettings(agents),
@@ -302,11 +327,11 @@ export class AgentHub {
     return out
   }
 
-  private totals(): AgentsState['totals'] {
-    if (this.cache && Date.now() - this.cache.at < 30_000) return this.cache.totals
-    const totals = usageTotals(readRunRows(join(this.deps.userData, 'runs'), Date.now() - 7 * 86_400_000))
-    this.cache = { at: Date.now(), totals }
-    return totals
+  /** Usage from the run logs (30 days), cached for 30 s. */
+  private usage() {
+    if (this.cache && Date.now() - this.cache.at < 30_000) return this.cache
+    const rows = readRunRows(join(this.deps.userData, 'runs'), Date.now() - 30 * 86_400_000)
+    return (this.cache = { at: Date.now(), totals: usageTotals(rows), costDays: dailyTotals(rows) })
   }
 
   private setLimits(profileId: string, l: Omit<Limits, 'asOf'>) {
@@ -441,7 +466,14 @@ export class AgentHub {
     this.deps.push()
   }
 
+  /** Tells the user (when the app is in the background) about something that needs them. */
+  private alert(kind: NoticeKind, name: string, detail?: string) {
+    const n = notice(kind, name, detail)
+    this.deps.notify(n.title, n.body)
+  }
+
   private goalFinished(g: Goal) {
+    this.alert('goal', this.registry.get(g.coordinator)?.name ?? g.coordinator, `${g.status}: ${g.text}`)
     if (g.origin !== 'central') return
     const text = g.status === 'done' ? (g.finalText ?? '') : `${g.status === 'needs-input' ? 'I paused: ' : 'I stopped: '}${g.reason ?? g.status}`
     this.chat(CENTRAL).messages.push({ role: 'agent', agentId: g.coordinator, text: text || '(no answer)', t: new Date().toISOString() })
@@ -670,8 +702,24 @@ export class AgentHub {
   async save(def: AgentDef) {
     if (def.builtin || BUILTINS.some((b) => b.id === def.id)) throw new AgentError('Built-in agents can\'t be changed here.')
     await this.checkModel(def.profile, def.model, def.effort)
+    const before = this.registry.get(def.id)
     this.registry.save({ ...def, builtin: undefined })
+    // An open chat's session holds the old first prompt: after a change to the instructions or the memory switch it starts fresh (the transcript carries over).
+    if (before && (before.instructions !== def.instructions || Boolean(before.memory) !== Boolean(def.memory))) this.restartChat(def.id)
     this.deps.push()
+  }
+
+  /** The next chat turn starts a new CLI session (carrying the transcript as text) so it sees the agent's current definition. */
+  private restartChat(agentId: string) {
+    const c = this.chat(agentId)
+    if (!c.sessionId) return
+    c.freshSession = true
+    this.saveChat(agentId)
+  }
+
+  /** Takes a kept note back out of the agent's memory (the Undo under a message). */
+  async undoRemember(actionId: string) {
+    await this.approvals.undo(actionId, (a) => removeNote(this.memoryDir, a.agentId, String(a.payload.note ?? '')))
   }
 
 /** In-app organization: import or ignore found files, groups, pins. Changes app data only, except an import that needs a new file. */
@@ -688,7 +736,17 @@ export class AgentHub {
     if (BUILTINS.some((b) => b.id === id)) throw new AgentError('Built-in agents can\'t be deleted.')
     if (!ID_RE.test(id)) throw new AgentError('Invalid agent id.')
     this.registry.remove(id)
+    removeMemory(this.memoryDir, id)
     this.deps.push()
+  }
+
+  /** An agent's notes, for the editor. */
+  agentMemory(id: string): string {
+    return ID_RE.test(id) ? readMemory(this.memoryDir, id) : ''
+  }
+  saveAgentMemory(id: string, text: string) {
+    if (!ID_RE.test(id)) throw new AgentError('Invalid agent id.')
+    writeMemory(this.memoryDir, id, text)
   }
 
   async approve(id: string): Promise<Action> {
@@ -725,7 +783,8 @@ export class AgentHub {
     const missing = extra.find((d) => !existsSync(d))
     if (missing) throw new AgentError(`The folder ${missing} doesn't exist. Change the agent's folders in its settings.`)
     // A CLI session belongs to the folder it started in: if the folder changed, start a new session and carry the transcript as text.
-    const folderChanged = Boolean(chat?.sessionId) && ((chat?.cwd ?? root) !== cwd || (chat?.sessionProfile ?? def.profile) !== def.profile)
+    // (Also when the agent's instructions or memory setting changed: the old session holds the old first prompt.)
+    const folderChanged = Boolean(chat?.sessionId) && ((chat?.cwd ?? root) !== cwd || (chat?.sessionProfile ?? def.profile) !== def.profile || Boolean(chat?.freshSession))
     const sessionless = Boolean(chat && ((engine && !ENGINES[engine].chat) || folderChanged))
     const files = run.input.attachments ?? []
     const block = attachmentBlock(files, Boolean(engine && ENGINES[engine].readsFiles))
@@ -736,11 +795,13 @@ export class AgentHub {
     // Conversation runs may propose handing work on (run-agent, add-task) when there is anyone to hand it to.
     const conversation = Boolean(run.chat || run.input.from === 'central')
     const peers = this.registry.list().agents.filter((x) => x.id !== def.id)
-    const handoff = conversation && peers.length && (run.hops ?? 0) < MAX_HOPS ? handoffFormat(peers) : undefined
+    const handoffText = conversation && peers.length && (run.hops ?? 0) < MAX_HOPS ? handoffFormat(peers) : undefined
+    // In a chat the agent may also propose changing its own instructions (the user's click applies it).
+    const handoff = [handoffText, run.chat && !def.builtin ? ADAPT_FORMAT : ''].filter(Boolean).join('\n\n') || undefined
     // `/agent` in a chat message: the user pointed at another agent, so say so; a handoff still needs their click.
-    const refs = run.chat && handoff ? parseMentions(run.input.text, peers).agents : []
+    const refs = run.chat && handoffText ? parseMentions(run.input.text, peers).agents : []
     const refNote = refs.length ? `\n\nThe user referred to ${refs.map((r) => `/${r.id}${r.description ? ` (${r.description})` : ''}`).join(', ')}. If they want that agent to do part of this, propose handing it over.` : ''
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input + refNote, { handoff, session, cwd, extraDirs: extra, attachDirs: attachDirs(files, [cwd, ...extra]), vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input + refNote, { handoff, session, cwd, extraDirs: extra, attachDirs: attachDirs(files, [cwd, ...extra]), vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, onText: sig.text, memory: def.memory ? notesForPrompt(readMemory(this.memoryDir, def.id)) : undefined, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {
@@ -752,19 +813,28 @@ export class AgentHub {
         return { done: p.then((r) => ((usage = r.usage), (sessionId = r.sessionId), r.text)), cancel: () => cancel() }
       })
       text = res.summary
-      if (res.changes.length) this.reviewRunId = run.id
+      if (res.changes.length) {
+        this.reviewRunId = run.id
+        this.alert('review', def.name, `${res.changes.length} file${res.changes.length === 1 ? '' : 's'}`)
+      }
     } else {
       const r = await go(sig.cancel)
       text = r.text
       usage = r.usage
       sessionId = r.sessionId
     }
-    if (def.output === 'actions' || def.output === 'suggestions' || handoff) {
+    if (def.output === 'actions' || def.output === 'suggestions' || handoff || def.memory) {
       const parsed = parseActions(text)
       text = parsed.text
-      // Agents that didn't ask for actions may only propose handing work on or adding a task.
+      // Agents that didn't ask for actions may only propose handing work on or adding a task. Notes need memory switched on;
+      // changing the agent's own instructions is a chat thing (the user is there to read it) and never for a built-in.
       const wide = def.output === 'actions' || def.output === 'suggestions'
-      for (const a of parsed.actions) if (wide || a.kind === 'run-agent' || a.kind === 'add-task') await this.approvals.propose(run.id, def.id, def.permission, a)
+      const mayPropose = (kind: string) => (kind === 'remember' ? Boolean(def.memory) : kind === 'update-instructions' ? Boolean(run.chat) && !def.builtin : wide || kind === 'run-agent' || kind === 'add-task')
+      for (const a of parsed.actions)
+        if (mayPropose(a.kind)) {
+          const proposed = await this.approvals.propose(run.id, def.id, def.permission, a)
+          if (proposed.status === 'pending') this.alert('approval', def.name, proposed.title)
+        }
     }
     if (def.output === 'file' && text) {
       // The app writes the answer itself: an agent never needs write access for its own output.
@@ -779,6 +849,7 @@ export class AgentHub {
       if (sessionId) chat.sessionId = sessionId
       chat.cwd = cwd
       chat.sessionProfile = def.profile
+      chat.freshSession = undefined
       const t = new Date().toISOString()
       chat.messages.push({ role: 'user', text: run.input.text, t, files: files.length ? files : undefined }, { role: 'agent', text, t, runId: run.id })
       this.saveChat(def.id)

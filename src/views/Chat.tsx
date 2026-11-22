@@ -5,12 +5,13 @@ import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { groupSections } from '@/lib/agentGroups'
-import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
+import { ApprovalCard, PausedCard, RememberedNote, ReviewCard } from '@/components/Inline'
 import { MessageFooter, PartButton, PartMenu } from '@/components/MessageActions'
 import { Markdown } from '@/lib/markdown'
 import { FileChips } from '@/components/FileChips'
 import { ModelPicker } from '@/components/ModelPicker'
 import { FolderMenu } from '@/components/FolderMenu'
+import { MemoryMenu } from '@/components/MemoryMenu'
 
 const CENTRAL = '_central'
 
@@ -24,6 +25,7 @@ export function Chat() {
   const s = useStore((st) => st.state)!
   const target = useStore((st) => st.chatTarget)
   const openChat = useStore((st) => st.openChat)
+  const openDoc = useStore((st) => st.openDoc)
   const toast = useStore((st) => st.toast)
   const a = s.agents
   const agents = a.agents.filter((g) => !g.builtin)
@@ -61,7 +63,7 @@ export function Chat() {
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
-  }, [messages.length, busy, pending.length, active[0]?.progress.length, Boolean(a.review)])
+  }, [messages.length, busy, pending.length, active[0]?.progress.length, active[0]?.partial?.length, Boolean(a.review)])
   useEffect(() => {
     box.current?.focus()
   }, [target])
@@ -165,6 +167,7 @@ export function Chat() {
             <h1 className="text-[15px] font-semibold truncate">{title}</h1>
             {subtitle && <div className="text-[12px] text-muted truncate">{subtitle}</div>}
           </div>
+          {agent && <MemoryMenu agent={agent} />}
           {agent && <FolderMenu agent={agent} convo={key} folder={folder} extra={a.chatExtraFolders[key] ?? []} vault={s.vault.vaultPath} />}
           {messages.length > 0 && (
             <button
@@ -196,6 +199,7 @@ export function Chat() {
                 }}
                 canRetry={!busy}
                 proposals={m.runId ? pending.filter((x) => x.runId === m.runId) : []}
+                kept={m.runId ? a.approvals.filter((x) => x.runId === m.runId && x.kind === 'remember' && x.status === 'done') : []}
                 backTo={(() => {
                   const o = (m.runId ? a.runs.find((r) => r.id === m.runId) : undefined)?.input.packet?.origin
                   return o ? { key: o, name: o === '_central' ? 'Central' : nameOf(o) } : undefined
@@ -206,6 +210,9 @@ export function Chat() {
               active.map((r) => (
                 <PendingTurn key={r.id} run={r} ahead={a.runs.filter((x) => x.agentId === r.agentId && x.status === 'queued' && x.queuedAt < r.queuedAt).length} />
               ))}
+            {active.filter((r) => r.partial).map((r) => (
+              <StreamingAnswer key={`s-${r.id}`} name={nameOf(r.agentId)} text={r.partial!} onOpenDoc={openDoc} />
+            ))}
             {paused.map((r) => (
               <PausedCard key={r.id} run={r} />
             ))}
@@ -304,6 +311,21 @@ export function Chat() {
   )
 }
 
+/** The answer as the agent writes it; replaced by the real message when the run ends. */
+function StreamingAnswer({ name, text, onOpenDoc }: { name: string; text: string; onOpenDoc: (path: string) => void }) {
+  return (
+    <div className="flex gap-3">
+      <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-accent/10 text-accent grid place-items-center text-[12px] font-semibold">{name[0]?.toUpperCase()}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] text-faint mb-1 font-medium text-muted">{name}</div>
+        <div className="text-[15px] leading-7 pr-9">
+          <Markdown text={text} onOpenDoc={onOpenDoc} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** A message that hasn't been answered yet: working on it, or waiting behind other work. */
 function PendingTurn({ run, ahead }: { run: Run; ahead: number }) {
   const handed = run.input.packet
@@ -335,7 +357,7 @@ function ListItem({ active, onClick, icon, label, dot }: { active: boolean; onCl
   )
 }
 
-function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals, backTo }: { m: ChatMessage; agentIds: Set<string>; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; backTo?: { key: string; name: string } }) {
+function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals, kept, backTo }: { m: ChatMessage; agentIds: Set<string>; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; kept: Action[]; backTo?: { key: string; name: string } }) {
   const openDoc = useStore((st) => st.openDoc)
   const openChat = useStore((st) => st.openChat)
   const [sel, setSel] = useState<{ text: string; x: number; y: number } | null>(null)
@@ -376,6 +398,9 @@ function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals,
         <div className="text-[15px] leading-7 pr-9" onMouseUp={onMouseUp}>
           <Markdown text={m.text} onOpenDoc={openDoc} segmentActions={(source) => <PartButton text={source} origin={origin} />} />
         </div>
+        {kept.map((x) => (
+          <RememberedNote key={x.id} action={x} />
+        ))}
         {proposals.map((x) => (
           <ApprovalCard key={x.id} action={x} compact />
         ))}

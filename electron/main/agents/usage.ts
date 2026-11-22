@@ -1,6 +1,6 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Limits, UsageTotal } from '@shared/agents'
+import type { DayCost, Limits, UsageTotal } from '@shared/agents'
 import { codexLimits } from './engines/codex-cli'
 
 /** Newest session files first, so the last rate-limit report is found without reading months of logs. */
@@ -113,8 +113,21 @@ export function totalsFor(rows: RunRow[]): UsageTotal[] {
   return [...map.values()].sort((a, b) => b.outputTokens + b.inputTokens - (a.outputTokens + a.inputTokens))
 }
 
-/** Today (local midnight) and the last 7 days. */
-export function usageTotals(rows: RunRow[], now = new Date()): { today: UsageTotal[]; week: UsageTotal[] } {
+/** Today (local midnight), the last 7 days and the last 30. */
+export function usageTotals(rows: RunRow[], now = new Date()): { today: UsageTotal[]; week: UsageTotal[]; month: UsageTotal[] } {
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  return { today: totalsFor(rows.filter((r) => r.t >= midnight)), week: totalsFor(rows.filter((r) => r.t >= now.getTime() - 7 * 86_400_000)) }
+  const since = (days: number) => rows.filter((r) => r.t >= now.getTime() - days * 86_400_000)
+  return { today: totalsFor(rows.filter((r) => r.t >= midnight)), week: totalsFor(since(7)), month: totalsFor(since(30)) }
+}
+
+/** Runs, tokens and cost per local day for the last `days` days, oldest first (days without runs included, so a chart has no gaps). */
+export function dailyTotals(rows: RunRow[], days = 14, now = new Date()): DayCost[] {
+  const out: DayCost[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1)
+    const day = rows.filter((r) => r.t >= start.getTime() && r.t < end.getTime())
+    out.push({ day: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`, runs: day.length, tokens: day.reduce((n, r) => n + r.inputTokens + r.outputTokens, 0), costUsd: day.reduce((n, r) => n + r.costUsd, 0) })
+  }
+  return out
 }

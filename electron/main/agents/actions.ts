@@ -3,7 +3,7 @@ import { canAutoRun } from './permissions'
 import type { Action, ActionKind, Permission } from '@shared/agents'
 
 export type { Action, ActionKind }
-export const ACTION_KINDS: ActionKind[] = ['add-task', 'complete-task', 'create-event', 'email-draft', 'api-call', 'run-agent', 'new-agent']
+export const ACTION_KINDS: ActionKind[] = ['remember', 'update-instructions', 'add-task', 'complete-task', 'create-event', 'email-draft', 'api-call', 'run-agent', 'new-agent']
 
 export type Executor = (action: Action) => Promise<void>
 
@@ -74,6 +74,17 @@ export class ApprovalStore {
   reject(id: string) {
     const action = this.items.find((a) => a.id === id)
     if (!action || action.status !== 'pending') return
+    action.status = 'rejected'
+    action.resolvedAt = new Date().toISOString()
+    this.save()
+    this.onChange()
+  }
+
+  /** Takes back an action that ran on its own (a kept note): `undo` reverses its effect, the action reads as rejected. */
+  async undo(id: string, undo: (a: Action) => void | Promise<void>) {
+    const action = this.items.find((a) => a.id === id)
+    if (!action || action.status !== 'done' || action.kind !== 'remember') return
+    await undo(action)
     action.status = 'rejected'
     action.resolvedAt = new Date().toISOString()
     this.save()
