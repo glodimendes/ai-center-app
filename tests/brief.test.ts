@@ -28,7 +28,7 @@ describe('buildBriefPrompt', () => {
   it('always appends the fixed output format, even to a custom template without headings', () => {
     const p = buildBriefPrompt('Brief for {{date}}. {{email}}\n{{calendar}}\nBe very short.', { date, events, includeEmail: false })
     expect(p.endsWith(BRIEF_FORMAT)).toBe(true)
-    for (const h of ['## Calendar', '## Emails / Attention', '## Suggested Priorities', '## AI Preparation Opportunities', '## Temporary Inbox Suggestions']) expect(p).toContain(h)
+    for (const h of ['## Calendar', '## Emails / Attention', '## Suggested Priorities', '## Temporary Inbox Suggestions']) expect(p).toContain(h)
     expect(p).toContain('You can only read.')
     expect(DEFAULT_BRIEF_TEMPLATE).not.toContain('## ')
   })

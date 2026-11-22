@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { blockMinutes, blockTitle, logFor } from '@/lib/plan'
 import { greetingFor } from '@/lib/greeting'
+import { inline } from '@/lib/markdown'
 import { calendarColor, categoryOf, cx, inlineMd, relDay } from '@/lib/util'
 import { Button, Dot, Header } from '@/components/ui'
 
@@ -63,7 +64,6 @@ export function Brief() {
   const codex = (name: RegExp) => brief?.codex?.sections.find((x) => name.test(x.title))
   const attention = codex(/email|attention/i)
   const priorities = codex(/priorit/i)
-  const ai = codex(/ai prep|opportunit/i)
   const inboxSugg = (codex(/temporary inbox/i)?.body ?? '')
     .split('\n')
     .map((l) => l.match(/^\s*[-*]\s+(?:\[ \]\s*)?(.+)$/)?.[1]?.trim())
@@ -178,11 +178,6 @@ export function Brief() {
             </Card>
           )}
 
-          {ai && (
-            <Card title="AI preparation opportunities" icon={<Sparkles size={14} />} source="Suggestions only: nothing runs without you">
-              <Md text={ai.body} />
-            </Card>
-          )}
         </div>
       </div>
     </div>
@@ -297,31 +292,43 @@ function TaskList({ title, tasks, tone }: { title: string; tasks: Task[]; tone?:
   )
 }
 
-/** Small Markdown renderer for the Codex brief: headings, bullets, checkboxes, paragraphs. */
-function Md({ text }: { text: string }) {
+/** Brief sections as tidy cards content: numbered items become ranked rows, "**Group**" lines become small headings, bullets and checkboxes keep their nesting. Built as React nodes, so nothing the model writes can inject markup. */
+function Md({ text, ranked }: { text: string; ranked?: boolean }) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim() && !/^\s*-{3,}\s*$/.test(l))
+  const none = lines.length === 1 && /^(?:[-*]\s*)?none\.?$/i.test(lines[0].trim())
+  if (none) return <p className="text-[12.5px] text-muted">Nothing here today.</p>
   return (
-    <div className="text-[12.5px] leading-relaxed space-y-1">
-      {text.split('\n').map((line, i) => {
-        const h = line.match(/^#{3,6}\s+(.+)/)
-        if (h) return <div key={i} className="font-semibold pt-1" dangerouslySetInnerHTML={{ __html: inlineMd(h[1]) }} />
-        const b = line.match(/^(\s*)[-*]\s+(\[( |x|X)\]\s+)?(.+)/)
-        if (b)
-          return (
-            <div key={i} className="flex gap-1.5" style={{ paddingLeft: b[1].length * 8 }}>
-              <span className="text-faint">{b[2] ? (b[3] === ' ' ? '☐' : '☑') : '•'}</span>
-              <span dangerouslySetInnerHTML={{ __html: inlineMd(b[4]) }} />
-            </div>
-          )
-        const n = line.match(/^\s*(\d+)\.\s+(.+)/)
+    <div className="text-[13px] leading-snug flex flex-col gap-1.5">
+      {lines.map((line, i) => {
+        const k = `l${i}`
+        const h = line.match(/^#{3,6}\s+(.+)/) ?? line.match(/^\s*\*\*([^*]+?):?\*\*:?\s*$/)
+        if (h) return <div key={k} className="text-[11px] uppercase tracking-wide font-semibold text-faint pt-2 first:pt-0">{inline(h[1], k)}</div>
+        const n = line.match(/^\s*(\d+)[.)]\s+(.+)/)
         if (n)
+          return ranked !== false ? (
+            <div key={k} className="flex items-start gap-3 rounded-xl border border-line/60 bg-bg px-3 py-2">
+              <span className="shrink-0 w-5 h-5 rounded-full grid place-items-center text-[11px] font-semibold bg-accent-soft text-accent">{n[1]}</span>
+              <span className="min-w-0 break-words pt-px">{inline(n[2], k)}</span>
+            </div>
+          ) : (
+            <div key={k} className="flex gap-2"><span className="text-faint tabular-nums">{n[1]}.</span><span className="min-w-0 break-words">{inline(n[2], k)}</span></div>
+          )
+        const b = line.match(/^(\s*)[-*]\s+(\[( |x|X)\]\s+)?(.+)/)
+        if (b) {
+          const done = b[3] && b[3] !== ' '
+          const depth = Math.min(Math.floor(b[1].replace(/\t/g, '  ').length / 2), 3)
           return (
-            <div key={i} className="flex gap-1.5">
-              <span className="text-faint">{n[1]}.</span>
-              <span dangerouslySetInnerHTML={{ __html: inlineMd(n[2]) }} />
+            <div key={k} className="flex items-start gap-2" style={{ paddingLeft: depth * 16 }}>
+              {b[2] ? (
+                <span className={cx('shrink-0 mt-[3px] w-3.5 h-3.5 rounded border grid place-items-center text-[9px]', done ? 'bg-accent border-accent text-white' : 'border-faint')}>{done ? '✓' : ''}</span>
+              ) : (
+                <span className="shrink-0 mt-[7px] w-1 h-1 rounded-full bg-faint" />
+              )}
+              <span className={cx('min-w-0 break-words', done && 'text-muted line-through')}>{inline(b[4], k)}</span>
             </div>
           )
-        if (!line.trim()) return null
-        return <p key={i} dangerouslySetInnerHTML={{ __html: inlineMd(line) }} />
+        }
+        return <p key={k} className="min-w-0 break-words">{inline(line.trim(), k)}</p>
       })}
     </div>
   )

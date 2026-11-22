@@ -42,12 +42,10 @@ Reply with ONLY the brief in Markdown, using exactly these level-2 headings, in 
 ## Todos by Topic
 ## Active Task Notes
 ## Suggested Priorities
-## AI Preparation Opportunities
 ## Temporary Inbox Suggestions
 
 Keep it concise, actionable and grouped by topic, as checklists.
-Under "Temporary Inbox Suggestions": only items an email or event clearly turns into a task, one per line as "- <task text>", or "- none". Don't turn every email or event into a task.
-Under "AI Preparation Opportunities": at most three safe, high-value preparation tasks (specific, bounded, reviewable, low-risk). For each state: proposed outcome, why now, minimum inputs, what the agent will and will not do, and the review or decision needed from me. Suggest none when my intention is unclear, the information is sensitive, the output could create a commitment, or the task needs my judgment, relationships or authority.`
+Under "Temporary Inbox Suggestions": only items an email or event clearly turns into a task, one per line as "- <task text>", or "- none". Don't turn every email or event into a task.`
 
 export function formatCalendar(events: CalEvent[]) {
   return events.length
