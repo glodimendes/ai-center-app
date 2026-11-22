@@ -1,47 +1,66 @@
 # Roadmap
 
-Approved original plan: `~/.claude/plans/cryptic-baking-prism.md` (with addendum). Everything here reflects 2026-11-11.
+Open decisions, next steps and known limits. Last revised 2026-11-22. For how the code is organised and the rules for working on it, see `AGENTS.md`.
 
-## Direction on this branch (2026-11-21)
+## Open-source readiness: what is left
 
-This branch (`ai-center-core`) grows the planner into a general agent hub: plan `~/.claude-eth/plans/sequential-questing-sundae.md` (Phase 0 engine layer first). Everything below is the planner's roadmap as of the branch point and is maintained on `main`; merge `main` in regularly. Uniting the branches into `main` is a later, user-triggered step: see "Uniting the two lines" in `AGENTS.md`.
-
-## Open-source readiness: what is left (Phase 6)
-
-- **License:** none chosen yet. The owner decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
-- **Git history:** done locally (2026-11-22): all commits now use the GitHub noreply address. The remote still has the old history, so the first push must be a force push, the owner's call.
-- **Planner defaults:** done (2026-11-22): `DEFAULT_PREFERENCES` is neutral (Work / Personal / Training, placeholder calendar "Planner"); the owner's set moved to `tests/sample/preferences.ts` for tests and lives in their vault.
-- **Docs:** done for the README (2026-11-22: public overview and install; the planner reference moved to `docs/planner.md`). The repo is public, but `AGENTS.md` and `ROADMAP.md` still describe the owner's routine (university, personal paths, calendars): trim them or move them out, and drop the owner-specific examples in `docs/planner.md`.
-- **Done:** no hard-coded vault path (first run creates a starter vault; the setup dialog lets users pick their own folder), generic sample agents, `docs/agents.md`, `CONTRIBUTING.md`.
+- **License:** none chosen yet. The maintainer decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
+- **Personal sample data:** `tests/` (sample todos, preferences and a few scheduler and context tests) and the examples in `docs/planner.md` still use one person's project and area names. Replace them with neutral ones.
+- **Done:** all commits use the GitHub noreply address (history rewritten and force-pushed 2026-11-22); planner defaults are neutral (Work / Personal / Training, placeholder calendar "Planner"); the README is written for a public audience and the planner reference moved to `docs/planner.md`; no hard-coded vault path (first run creates a starter vault, the setup dialog lets users pick a folder); generic sample agents; `docs/agents.md`; `CONTRIBUTING.md`.
 - **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.
 
-## Open decisions (waiting for the user)
+## Startup setup: the framework every install works on (to specify, then build)
 
-1. **Calendar ownership — decided 2026-11-11: the app owns the blocks** (option 1). The weekly grid and day rules shape the week; Sync is the approval. The user turns off the Sunday Codex automation (`~/.codex/automations/plan-next-eth-week`) themselves in the Codex app (we don't edit `~/.codex`); until then its blocks are filled as containers and may sit next to app blocks. The "six sport sessions" come from TRAINING repeating tasks. Edit adoption ("calendar edits win") is unchanged.
-2. **Plan options.** Done: four strategies + Shuffle (2026-11-09), and **Plan with a wish** (2026-11-11; docs/planner.md "When the plan changes").
-3. **Braindump feature.** The user will explain it. **Don't design or build it before the spec.** It's related to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
+**Goal:** a defined framework (organization and rules) that AI Center works upon from the first launch, so anyone who installs it can use it without reverse-engineering someone else's vault. It also has to stay adjustable: users keep their own layout and edits, and the framework can be updated without overwriting them.
 
-## Later (agreed with the user, not now)
+**Where it falls short today.** A fresh install gets a three-file starter vault (`00_START_HERE.md`, `05_Tasks/daily-todos.md`, `05_Tasks/braindump-inbox.md`, plus empty folders), but the app and its prompts assume more:
+- the Update context prompt tells the AI to read `03_Workflows/context-maintenance.md` and `03_Workflows/assistant-file-update-rules.md`, which a new vault doesn't have;
+- Update context and the Review screen expect `04_Context_Docs/current-priorities.md` with an "## Active Priority Areas" numbered list; Docs pins files such as `goals-and-direction.md`; the daily brief reads `02_Projects/` and `04_Context_Docs/`;
+- folder names are spread over the code (`vault/service.ts`, `vault/starter.ts`, prompts) and the rules live partly in code, partly in a user's own notes.
 
-- **Skeleton-then-fill placement, with a front-loading option.** Today's order grew from patches: pins → training → breaks → deadlines within the guard → reserved grid hours → other tasks by score (each grabs the first free slot in its area's windows, i.e. front-loading). Proposed redesign (2026-11-09): lay down each area's grid hours first, areas in area-weight order (higher weight wins contested windows), then fill those blocks with tasks by score; unfilled blocks are dropped except for "reserve" areas. Keep the current front-loading behaviour as an option. Rewrites the middle of `scheduler/plan.ts`; most placement tests need review; blocks move once on the first full re-plan.
-  `plan()` is still one ~510-line function whose passes share closure state; splitting it into named passes was deliberately left for this redesign (2026-11-11), since the redesign rewrites that middle anyway.
+**Proposed scope** (to be refined with the maintainer before building):
+1. **One layout spec.** Define the vault layout once (folders, which files the app owns, which the user owns, naming) in a single module used by the starter, the Docs groups, the prompts and the docs, and document it for users.
+2. **Ship the rules with the starter vault.** Generic `context-maintenance.md` and `assistant-file-update-rules.md` (what an AI may edit, what needs confirmation), a `current-priorities.md` template, and a `00_START_HERE.md` that explains the layout. Update context must work on a fresh vault with no errors.
+3. **A real first-run flow.** Choose a folder (new starter or existing); when adopting an existing vault, detect missing framework pieces and offer to add them (never overwrite, line-local edits only); then areas, calendar, AI engines and optional sample agents, ending in a short checklist (calendar connected, engine found, areas set, first sync done).
+4. **Rules enforced, not just written.** Surface the hard rules the code already enforces (approvals for outside effects, line-local edits, protected calendars, AI diffs reviewed) in the setup and in Settings, so users know what the framework guarantees.
+5. **Adjustable.** Folder names and key file paths are settings (there is already `settings.agentsDir`), so users with an existing vault map their own layout instead of renaming it.
+6. **Updatable.** Version the shipped rules and templates; when the app ships newer ones, offer a diff to adopt, never an overwrite. An optional "Check setup" report lists missing or mismatched pieces.
+7. **Tests.** The starter vault contains every piece the app expects; a fresh vault passes the setup check; Update context runs against it.
 
-## Next (agreed or obvious)
+Open questions: how opinionated the default layout should be versus mapping to the user's own; whether the rules files are plain Markdown the user edits or app-managed with a diff; whether the first-run flow is a dialog, a checklist view, or both.
 
-- **Finish verifying Sync live with the user.** Done 2026-11-08: dry run, one block synced, move → pin. Still to do: delete a moved block in Calendar.app and check it disappears (bug fixed since), and confirm untagged events (the user's own, Codex's) stay untouched after a full Sync.
-- **Verify single-day sync live** (installed, never run against the real calendar; pushed anyway on 2026-11-11 at the user's go-ahead). Today → **Sync day**. The one thing to watch: syncing a single day must leave planner events on *other* days untouched, including ones that are out of date — the day-scoped diff deliberately does not clean them up. Worth pairing with the full-Sync check above, since both need the installed app.
-- **Watch the repeating-task skip live** (installed 2026-11-11). Today's trash on an open repeating task should move its `due:` on and keep the series; the Tasks view should still delete the whole thing. Verified in the dev vault only.
-- **Watch the 2026-11-11 (third session) fixes live** — verified in the dev app only:
-  - **checking off a repeating task inside a block**: the block should keep showing it checked, and the next occurrence should appear only in a later block (on its own date), not in this one. Unchecking it right away should leave a single open line in `daily-todos.md`. Before the fix the block jumped to the next occurrence, unchecked.
-  - **Settings → "Suggest estimates" and "Plan with a wish" ask → Codex**: both answer through `codex exec` (GPT-5.6 Luna). Default stays Claude Haiku.
-- **Watch the 2026-11-11 (second session) features live** — all verified in the dev app only:
-  - narrow windows on the real screen, including dragging a task from Today's narrow drawer onto the timeline (untested: CDP can't drive HTML5 drag);
-  - the weekly review on real data, especially **Archive checked tasks** against the real `daily-todos.md` (it removes `[x]` lines; they go to `05_Tasks/archive/done-YYYY.md`);
-  - a day rule (the sample "Lighter half-day" is off until the user turns it on), a habit (`3x/week`), Wrap up, Suggest estimates, Plan with a wish;
-  - "New in your todo list": on the first run it knows every existing task, so it should show nothing until the meeting automation, Codex or Obsidian adds a line.
-- **User's own setup, no code** (agreed 2026-11-11): Settings → headings Work / Work application / Mentoria / Masters to Outside work, Training's 07–09 window first, drop the DMS heading; turn off the Codex `plan-next-eth-week` and Saturday `weekly-review` automations once the in-app versions are trusted.
-- **Vault docs, via Update context with the user's OK:** `03_Workflows/daily-planning.md` still says not to create dated plan files; training Day 1 (vertical pull) and Day 3 (chest) have no TRAINING tasks.
-- **The user's Codex `daily-brief` automation** is paused (seen 2026-11-11) but still exists alongside the in-app brief and points to the non-existent path `/Users/glodimendes/Personal Vault/AI Center`. Suggest the user turn it off (they manage it in the Codex app; don't edit `~/.codex`). The vault's `03_Workflows/daily-brief.md` has the same wrong path and should be fixed via Update context or with the user's OK.
+## Open decisions
+
+1. **Braindump feature.** The maintainer will specify it. **Don't design or build it before the spec.** It relates to the Inbox view and ⌘⇧Space capture, which write to `05_Tasks/braindump-inbox.md` under `## YYYY-MM-DD` headings (`parseInbox` / `addInboxItem`).
+
+Decided: **the app owns the calendar blocks it creates** (2026-11-11). The weekly grid and day rules shape the week, Sync is the approval, and calendar edits by the user win. If another tool also writes blocks to the same calendars, its blocks are filled as containers and may sit next to the app's.
+
+## Later (agreed, not now)
+
+- **Skeleton-then-fill placement, with a front-loading option.** Today's order grew from patches: pins → training → breaks → deadlines within the guard → reserved grid hours → other tasks by score (each grabs the first free slot in its area's windows, i.e. front-loading). Proposed redesign (2026-11-09): lay down each area's grid hours first, areas in area-weight order (higher weight wins contested windows), then fill those blocks with tasks by score; unfilled blocks are dropped except for "reserve" areas. Keep the current front-loading behaviour as an option. This rewrites the middle of `scheduler/plan.ts`; most placement tests need review; blocks move once on the first full re-plan. `plan()` is still one ~510-line function whose passes share closure state; splitting it into named passes was deliberately left for this redesign.
+
+## Next
+
+- **Watch recent work on a real vault** (everything below was verified in the dev app and by tests only):
+  - single-day sync (**Sync day**): syncing one day must leave planner events on other days untouched, including out-of-date ones; and a full Sync must leave untagged events (the user's own, other tools') untouched;
+  - checking off a repeating task inside a block: the block keeps showing it checked, the next occurrence appears only in a later block, unchecking right away leaves a single open line;
+  - Today's trash on a repeating task skips one occurrence; the Tasks view still deletes the series;
+  - the weekly review on real data, especially **Archive checked tasks** (it removes `[x]` lines; they go to `05_Tasks/archive/done-YYYY.md`);
+  - a day rule, a habit (`3x/week`), Wrap up, Suggest estimates, Plan with a wish (also through Codex);
+  - narrow windows, including dragging a task from Today's narrow drawer onto the timeline (CDP can't drive HTML5 drag);
+  - the chat and agents work: an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex and Ollama.
+- **Live streaming of agent answers** (engines already emit `text` events).
+- **"Ask an agent"** from task rows, Home cards, Docs and ⌘K, with the item as context.
+- **An agent to replace the removed "AI preparation opportunities" Home card.**
+- **Phase 2/3 leftovers:** route the built-in brief and estimates through the budget gate and `limits`; watch the agents folder for changes; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
+
+## Protocols, later
+
+The app uses A2A's vocabulary (task states, context id, message, artifact), not its wire protocol. Two possible additions: a small MCP server exposing `list_agents` and `propose_handoff` (it only creates an approval, never runs anything), so a CLI agent proposes a handoff through a tool instead of a parsed fenced block; and an A2A server/client adapter (an agent card per agent on localhost, or an engine type that calls a remote A2A agent). Both need a network listener or outbound auth, so only when something outside the app needs to talk to these agents.
+
+## Idea: a modular, editable Home
+
+Home should become editable and modular: people arrange the cards that show their main agent interactions and outputs, scheduled or not (a daily-brief agent's answer, an agent's latest output file, a chat shortcut, today's plan, due tasks). Not designed yet; build it from generic primitives (widgets backed by agents, sources and views), not around one use case. The fixed "Active task notes" card was removed for this reason (it depended on one personal note convention).
 
 ## Known limitations
 
@@ -49,102 +68,44 @@ This branch (`ai-center-core`) grows the planner into a general agent hub: plan 
 - **Overrides** (assignments, exclusions, dismissals) stay in the weekly files permanently.
 - **Blocks that don't take new tasks:** logged or past blocks.
 - **Brief ribbon:** "In meetings / classes" counts events that are free only by a per-event override or the calendar's own free flag.
-- **Duplicate blocks:** new blocks may be created next to Codex-made ones for areas without matching containers, until the user turns the Sunday Codex automation off (ownership decided 2026-11-11: the app owns blocks).
-- **Packaging:** the app is signed with a local self-signed certificate (`scripts/sign-app.sh`, identity "AI Center Dev"), not an Apple Developer ID, so first launch may still need right-click → Open. `install-app` packages, signs, then replaces the bundle (and removes the old "AI Center Planner.app"); the user must restart the app. The certificate exists to keep the Calendar permission across rebuilds — an ad-hoc bundle's code hash changes every build, so macOS asked for access again each time.
+- **Duplicate blocks:** new blocks may be created next to blocks another tool made for areas without matching containers.
+- **Packaging:** the app is signed with a local self-signed certificate (`scripts/sign-app.sh`), not an Apple Developer ID, so first launch may need right-click → Open. `install-app` packages, signs, then replaces the bundle; the app must be restarted. The certificate exists to keep the Calendar permission across rebuilds.
 - **Vault auto-commits take whole files:** a manual edit to a file the app later writes (e.g. `daily-todos.md`) is included in the app's next `planner: …` commit.
 - **Kept-free slots** are released only by Re-plan or "Let the planner use it"; the morning re-plan keeps them.
 - **Re-plan options can look alike:** when the weekly hours grid is what limits each area (the usual case), strategies mostly reorder tasks inside the same blocks; the dialog says "same plan as Balanced right now" when nothing differs.
 - **Weights vs hours:** area weights only order tasks; hours per area come from the grid (and caps). Users expect weights to move hours; Settings explains it.
 - **Docs editor** may normalize Markdown (e.g. `-` → `*` bullets); it shows a diff and asks first.
-- **Event hand edits:** container events (calendar blocks the planner fills, e.g. "Thesis Deep Work") are still not draggable or editable in the app; deleting an event has no Undo (it asks first); editing a repeating event changes only that occurrence.
-- **Urgent is a score, not a rule:** `!urgent` weighs 2 (high 1) in the weighted score, so it usually beats high-priority tasks and far deadlines but still comes after guarded deadlines. Making it a hard "first" rule was offered to the user, not decided.
-- **Block panel auto-log** uses the "Time actually spent" field as it stands. For a block still running it defaults to the time elapsed so far (to 5 min); for a finished one, to the planned length. A checked task shows "0m planned here" (also true after Save log before).
-- **Tasks without estimates** use the area default (79 of 88 open tasks on 2026-11-09), so blocks are sized by guesses. Tasks → **Suggest estimates** fills them in with approval.
+- **Event hand edits:** container events (calendar blocks the planner fills) are not draggable or editable in the app; deleting an event has no Undo (it asks first); editing a repeating event changes only that occurrence.
+- **Urgent is a score, not a rule:** `!urgent` weighs 2 (high 1) in the weighted score, so it usually beats high-priority tasks and far deadlines but still comes after guarded deadlines. A hard "first" rule was offered, not decided.
+- **Block panel auto-log** uses the "Time actually spent" field as it stands. For a block still running it defaults to the time elapsed so far (to 5 min); for a finished one, to the planned length. A checked task shows "0m planned here".
+- **Tasks without estimates** use the area default, so blocks are sized by guesses. Tasks → **Suggest estimates** fills them in with approval.
 - **Week overrides** (a week's own grid, day picks, wish rules, focus) stay in that week's file; a wish's hours and the weekly review's hours share the same week grid, so "Back to usual hours" also drops a wish's hours.
-- **"New in your todo list"** goes by task id (file + heading + title), so a task renamed or moved in Obsidian shows up as new too.
+- **"New in your todo list"** goes by task id (file + heading + title), so a task renamed or moved in another editor shows up as new too.
 - **Wish focus blocks** are pins (`wish:` ids), so they don't move; they're listed under "Active wishes" in the Re-plan dialog with Remove. They hold the heading's tasks only, even if those take less than the block.
 - **Checked repeating tasks pile up as `[x]` lines** above each new occurrence until the weekly review archives them. Archiving shifts the open copy's id back to the old one (ids count same-titled tasks in order), which only matters for past blocks and logs naming it.
 - **Codex for one-shot questions** runs with its read-only sandbox from an empty folder: it can't write or reach the network, but unlike Haiku (no tools at all) it could read files on disk; Codex has no switch to turn its shell off.
 - **Habits:** a pin or block assignment that names a habit takes one of that week's open sessions; a habit with open subtasks is planned as a normal parent (waits for them). Checking a habit off can't be undone from the row (remove its ✓ block's log in the block panel).
-- **`plan()` is one long function:** splitting it into passes is left for the skeleton-then-fill redesign (see "Later").
+- **Agent queue:** a handoff or message to a busy agent waits (up to 5 per agent); a run that was *running* when the app quit is not replayed. An `act` agent's `add-task` in chat needs no click (the existing `act` rule).
 
 ## Ideas (proposed, not approved)
 
-- **Repeat counted from the completion date.** Today every rule is a *catch-up* repeater (org-mode `++`): the next due date is stepped from the current due date until it is past today, so the rhythm is anchored to the calendar. Org-mode's `.+` and Obsidian Tasks' `when done` instead count from when you actually did it, which suits "change the batteries" or a gym session where the *gap* matters more than the slot. Org's rationale for it: "if you forgot to call your father for 3 weeks, it does not make sense to call him 3 times in a single day to make up for it." Would need a token (e.g. `repeat:2w!`), a `nextOccurrence` branch and a RepeatPicker control. Offered to the user 2026-11-10; they chose not to do it then.
+- **Repeat counted from the completion date.** Today every rule is a *catch-up* repeater (org-mode `++`): the next due date is stepped from the current due date until it is past today. Org-mode's `.+` and Obsidian Tasks' `when done` instead count from when you actually did it, which suits "change the batteries" or a gym session where the *gap* matters more than the slot. Would need a token (e.g. `repeat:2w!`), a `nextOccurrence` branch and a RepeatPicker control.
 - **An end to a repeat** (`until:` / a count). Series currently run forever; "delete the series" from the Tasks view is the only way to stop one.
-- **Skip history.** A skip leaves no trace, so a task skipped every week looks identical to one being done on time. A counter or a log line would surface repeats that are not working — worth it only if the user wants the Review screen to show it.
-- Docs editor: keep the file's bullet style.
-
-## More Sunsama-style ideas (offered 2026-11-11, not picked yet)
-
-- Morning planning: choose today's tasks against the free time actually left, with an "overcommitted" warning past the daily cap.
-- Rollover count: "moved 4 times — reschedule, split or drop?".
-- Weekly objectives: the week's focus as checkable goals linked to tasks, with progress.
-- Shutdown note: a "what went well" line at Wrap up, shown in the weekly review.
-- Focus mode: one task full-screen with a timer that logs actual time.
-- Tags across areas (e.g. #applications) with time per tag in Review.
-- Email to task: an "Add to tasks" button on the Brief's email items.
-- (Offered earlier, not picked: a "Now" mini-window / menu-bar item; natural-language quick add.)
-
-## Ideas where AI could help (proposed, not approved)
-
-The scheduler stays deterministic. AI is useful where judgment is needed:
-- turn braindump entries into well-formed tasks under the right heading;
-- weekly review summary and "what to drop" suggestions when budgets are over.
+- **Skip history.** A skip leaves no trace, so a task skipped every week looks identical to one being done on time. A counter or a log line would surface repeats that are not working.
+- **Docs editor:** keep the file's bullet style.
+- **Sunsama-style ideas** (offered, not picked): morning planning against the free time actually left with an "overcommitted" warning; a rollover count ("moved 4 times — reschedule, split or drop?"); weekly objectives as checkable goals linked to tasks; a shutdown note at Wrap up; focus mode (one task full-screen with a timer that logs actual time); tags across areas with time per tag in Review; "Add to tasks" on the Brief's email items; a "Now" mini-window or menu-bar item; natural-language quick add.
+- **AI where judgment is needed** (the scheduler stays deterministic): turn braindump entries into well-formed tasks under the right heading; weekly review summary and "what to drop" suggestions when budgets are over.
 
 ## Done
 
 - **Vault:** line-local, id-based parser and editor; watcher; batched git commits under the user's identity.
-- **Planner:**
-  - containers, chunking, budgets, deep-work cap, pins, warnings; training as an ordinary area (the 7-day cycle reader was removed 2026-11-09; sessions are repeating tasks);
-  - finer rules: daily cap, per-task-per-day cap, preferred windows, min block sizes, floating breaks, gaps, deadline slack, stale tasks;
-  - strategy: weighted score with deadline guard, weekly hours grid with reserve, ASAP/spread per area and per task (`@spread` / `@asap`);
-  - stable re-planning: incremental by default, full daily after 04:00, on a preference change, or via Re-plan.
-- **Screens:** Brief (landing), Today, Week, Tasks, Alerts, Inbox, Docs (Milkdown), Review, Settings, ⌘K palette, quick capture.
-- **2026-11-09:**
-  - blocks: resize (edge drag or hh:mm), draw on the grid or "+ Block" (area / no area, optional auto-fill), removed blocks leave their time free until Re-plan, postpone all tasks in a block;
-  - calendar views 00:00–24:00; Today icon shows the day of the month; app renamed AI Center with a white icon;
-  - Re-plan options (Balanced / Deadlines first / Deep work first / Light week) with metrics and Shuffle;
-  - Alerts page (grouped, with fixes); Today search, sort, Show filter and area chips; compact rows;
-  - tasks: `repeat:` (common + custom, every N weeks on weekdays), `postpone:` (🌙), check-off logs a 15-min block;
-  - training as ordinary tasks (cycle reader removed); keep-tasks-whole option; training placed before breaks;
-  - reserved grid hours placed before other tasks; 0 grid hours = leftover time by priority; "little slack" warning removed;
-  - Settings: add/remove areas, several preferred windows, durations as hh:mm;
-  - brief uses only visible calendars; dev runs isolated from the installed app's data and vault;
-  - priority levels low / medium / high / urgent (`!urgent`, flag chip cycles with distinct icons);
-  - checking a task in the block panel saves at once (task done + block log, no Save click);
-  - subtasks in the Tasks view (add, nest, un-nest; Tab / ⇧Tab);
-  - hand edits of the user's own calendar events (panel edit/delete, drag/resize with Undo; one occurrence; protected/read-only locked).
-- **Settings:** selection-based heading → area map, container picker, colour swatches, strategy sliders, grid editor, planning rules, breaks.
-- **Time logging:** actual ≠ planned, written to weekly files; budget bars.
-- **Calendar:**
-  - macOS Calendar provider (Swift EventKit helper) with Google API as the alternative;
-  - protected calendars;
-  - tagged-only sync with a confirm dialog;
-  - calendar edits win;
-  - visibility and Busy/Free per calendar and per event.
-- **Block editing:** drop a task into a block, add or remove tasks in the panel, remove a block (Delete key) with Undo.
-- **Daily brief:** in-app, on first open per day, Claude Haiku read-only with Gmail; editable prompt in `06_Prompts/daily-brief.md`; Run daily brief button; TEMPORARY INBOX suggestions behind an Add click.
-- **Update context (⌘U):** Codex Luna (default) or Claude Haiku, with diff review and Keep/Undo.
-- **2026-11-10:** skip one occurrence of a repeating task — Today's trash moves a repeating task's `due:` on (`Controller.skipOccurrence`) instead of deleting the line; the Tasks view still deletes the series. Prior art checked: org-mode repeaters (`+` / `++` / `.+`), Obsidian Tasks (`every week` vs `when done`), iCalendar `EXDATE` / `RECURRENCE-ID`.
-- **2026-11-10:** single-day sync — **Sync day** in Today's header syncs only the day on screen, through the same approval dialog (`buildSyncDiff(..., day?)` → `syncPreview(day?)` → `SyncDialog day`). The week's Sync still covers the whole window. Other days are never touched by a day sync. Unit-tested (104 tests) and checked in the dev app; not yet run against the real calendar.
-- **2026-11-11:** the packaged app is signed with the user's self-signed "AI Center Dev" certificate (`scripts/sign-app.sh`, run by `install-app`), so macOS stops asking for Calendar access after every rebuild. Not an Apple Developer ID: Gatekeeper can still ask for right-click → Open.
-- **2026-11-11 (second session, evaluation plan `~/.claude/plans/foamy-discovering-breeze.md`):**
-  - readable at any window size (min 640×480, icon sidebar, drawers/overlays, sideways-scrolling week, portal popovers, scrolling modals; collapsed sidebar sized for the window buttons);
-  - safety: Update context undo reverts only the agent's lines; offline calendars don't dismiss blocks; IPC allow-list; CLI runs escalate to SIGKILL;
-  - speed: one re-plan per change, throttled focus refresh, async plan cache, serialized git with retry and a visible error;
-  - code health: tests run from a fresh clone (synthetic samples), calendar adoption and re-plan cadence are pure and tested, Update context in its own module, BlockPanel split;
-  - routine as settings: Day rules, in-app weekly review (archive, focus, week grid, picks), block ownership decided (app owns);
-  - projected finish per heading/task, habits `3x/week`, Wrap up the day, Suggest estimates, Plan with a wish (with focus on a heading, after the user's "make tomorrow's first half of the day focus on Tamanduá" failed: the prompt didn't name today/tomorrow and a wish could only set area hours), "New in your todo list".
-- **Handoff:** AGENTS.md, README.md, ROADMAP.md, `scripts/cdp.mjs`.
-
-## Chat and agents: done 2026-11-22, next steps
-
-- **Done (uncommitted at the time of writing):** richer answer formatting; model dropdown (available models only); Hand over / Add as task / Copy / Ask again / run details on each message, per section and on selected text; agent-suggested handoffs as one-click lines under the answer; handoffs continue in the target agent's own chat; routing suggestion by word overlap.
-- **Also done:** waiting queue (chat turns and handoffs to a busy agent wait, show as pending bubbles, survive a restart; `Supervisor.queueFile`); handoff packet (objective, material, expected answer, long text as a file); chain limit of 3 and a duplicate guard; "answered ↗" note and **Send back**; chain view with tokens and cost in Activity. An `act` agent's `add-task` in chat needs no click (owner's decision, same as the existing `act` rule).
-- **Not done, offered:** live streaming of the answer while the agent works (engines already emit `text` events); "Ask an agent" from task rows, Home cards, Docs and ⌘K with the item as context.
-- **Protocols, later (researched 2026-11-22):** the app uses A2A's vocabulary, not its wire protocol. Two possible additions: a small MCP server exposing `list_agents` and `propose_handoff` (it only creates an approval, never runs anything) so a CLI agent proposes a handoff through a tool instead of a parsed fenced block; and an A2A server/client adapter (agent card per agent on localhost, or a new engine type that calls a remote A2A agent). Both need a network listener or outbound auth, so only when something outside the app needs to talk to these agents.
-
-## Idea (user, 2026-11-22): a modular, editable Home
-
-Home (formerly Brief) should become editable and modular: people arrange the cards that show their main agent interactions and outputs, scheduled or not (e.g. a daily-brief agent's answer, an agent's latest output file, a chat shortcut, today's plan, due tasks). Not designed yet; build it from generic primitives (widgets backed by agents, sources and views), not around one use case. The fixed "Active task notes" card was removed for this reason (it depended on one personal note convention).
+- **Planner:** containers, chunking, budgets, deep-work cap, pins, warnings; training as an ordinary area (sessions are repeating tasks); finer rules (daily cap, per-task-per-day cap, preferred windows, min block sizes, floating breaks, gaps, deadline slack, stale tasks); weighted score with deadline guard, weekly hours grid with reserve, ASAP/spread per area and per task; stable re-planning (incremental by default, full daily after 04:00, on a preference change, or via Re-plan); Re-plan options (Balanced / Deadlines first / Deep work first / Light week) with metrics and Shuffle; Plan with a wish (date limits, a day's hours, a strategy, focus time on a heading); day rules; weekly review (archive, focus, week grid, picks); projected finish per heading and task; habits (`3x/week`); Wrap up the day; Suggest estimates.
+- **Screens:** Home (formerly Brief), Today, Week, Tasks, Alerts, Inbox ("New in your todo list" + braindump), Docs (Milkdown), Review, Chat, Agents, Settings, ⌘K palette, quick capture. Readable at any window size.
+- **Tasks:** `repeat:` (common and custom, weekdays, every N weeks), `postpone:`, subtasks that inherit deadline and timing, four priority levels, drag to reorder, skip one occurrence, check-off logs a short block.
+- **Blocks:** resize, draw, edit tasks in a block, remove with Undo, postpone, keep-tasks-whole option.
+- **Time logging:** actual versus planned in weekly files; budget bars.
+- **Calendar:** macOS Calendar provider (Swift EventKit helper) with Google API as the alternative; protected calendars; tagged-only sync with a confirm dialog (week or single day); calendar edits win; hand edits of the user's own events; visibility and Busy/Free per calendar and per event; web edits pulled without opening Calendar.app.
+- **Daily brief:** in-app, first open per day, read-only, with an editable prompt; polished cards; TEMPORARY INBOX suggestions behind an Add click.
+- **Update context (⌘U):** Codex or Claude edits the vault; diff review with Keep/Undo; undo reverts only the AI's lines.
+- **Agent hub:** Markdown agent definitions, permissions and approvals, engines (Claude, Codex, Antigravity, Ollama, custom command) with account profiles and usage windows, triggers, sources (vault, files, URLs, Gmail draft-only), goals with a coordinator, chat with Markdown rendering and a central thread, Hand over (whole answer, section or selection, suggested agent), agent-proposed handoffs, a persisted queue for busy agents, handoff packets with chain limits, chain view with cost, model dropdown.
+- **Packaging:** signed app via `scripts/sign-app.sh`; the README has install steps.
