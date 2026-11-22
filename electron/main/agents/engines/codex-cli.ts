@@ -36,7 +36,7 @@ export const codexCli: Engine = {
     const common = ['-m', model, '-c', `model_reasoning_effort="${effort}"`, '--skip-git-repo-check']
     // A chat keeps its thread so the next turn can resume it. `exec resume` has no -s/-C: the sandbox goes in as config, the folder is the process cwd.
     const args = spec.session?.resume
-      ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, '--json', '-o', last, spec.session.id, spec.prompt]
+      ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, ...(edit && spec.addDirs?.length ? ['-c', `sandbox_workspace_write.writable_roots=${JSON.stringify(spec.addDirs)}`] : []), '--json', '-o', last, spec.session.id, spec.prompt]
       : ['exec', ...common, '-C', cwd, '-s', sandbox, ...(edit ? (spec.addDirs ?? []).flatMap((d) => ['--add-dir', d]) : []), ...(spec.session ? [] : ['--ephemeral']), ...(edit || spec.session ? ['--json'] : []), '-o', last, spec.prompt]
     return { binary: 'codex', args, cwd, output: edit || spec.session ? 'stream' : 'none', lastMessageFile: last, tempDir: dir }
   },

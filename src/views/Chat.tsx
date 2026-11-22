@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Folder, Loader2, MessageSquarePlus, Sparkles, Square } from 'lucide-react'
-import type { Action, AgentDef, ChatMessage, Run } from '@shared/agents'
+import { ArrowUp, FileText, Loader2, MessageSquarePlus, Paperclip, Sparkles, Square } from 'lucide-react'
+import type { Action, AgentDef, ChatMessage, FileHit, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
@@ -8,15 +8,18 @@ import { groupSections } from '@/lib/agentGroups'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
 import { MessageFooter, PartButton, PartMenu } from '@/components/MessageActions'
 import { Markdown } from '@/lib/markdown'
+import { FileChips } from '@/components/FileChips'
+import { ModelPicker } from '@/components/ModelPicker'
+import { FolderMenu } from '@/components/FolderMenu'
 
 const CENTRAL = '_central'
 
-/** `@tags` in a user message, highlighted. */
-function withTags(text: string): ReactNode[] {
-  return text.split(/(^|\s)(@[^\s@]+)/g).map((part, i) => (part.startsWith('@') ? <span key={i} className="rounded-full bg-accent px-2 pt-px pb-[3px] text-white">{part}</span> : part))
+/** `/agent` references in a user message, highlighted (only names of real agents). */
+function withTags(text: string, ids: Set<string>): ReactNode[] {
+  return text.split(/(^|\s)(\/[^\s/]+)/g).map((part, i) => (part.startsWith('/') && ids.has(part.slice(1).toLowerCase()) ? <span key={i} className="rounded-full bg-accent px-2 pt-px pb-[3px] text-white">{part}</span> : part))
 }
 
-/** Chat: a central conversation where you coordinate (tag agents with @), and one conversation per agent. */
+/** Chat: a central conversation where you coordinate (refer to agents with /), and one conversation per agent. */
 export function Chat() {
   const s = useStore((st) => st.state)!
   const target = useStore((st) => st.chatTarget)
@@ -37,6 +40,9 @@ export function Chat() {
   const setDraft = useStore((st) => st.setDraft)
   const text = drafts[key] ?? ''
   const setText = (t: string) => setDraft(key, t)
+  const files = useStore((st) => st.draftFiles[key]) ?? []
+  const setDraftFiles = useStore((st) => st.setDraftFiles)
+  const addFiles = (paths: string[]) => setDraftFiles(key, [...new Set([...files, ...paths.filter(Boolean)])])
   const [sending, setSending] = useState(false)
   const [pick, setPick] = useState(0)
   const end = useRef<HTMLDivElement>(null)
@@ -66,26 +72,54 @@ export function Chat() {
   }, [text])
 
   // @-completion: the tag being typed at the end of the text.
-  const tag = isCentral ? text.match(/(^|\s)@([^\s@]*)$/) : null
-  const options = useMemo(() => {
-    if (!tag) return []
-    const q = tag[2].toLowerCase()
-    return agents.filter((g) => g.id.includes(q) || g.name.toLowerCase().replace(/\s+/g, '').includes(q)).slice(0, 6)
-  }, [tag?.[2], agents.length])
-  const choose = (g: AgentDef) => {
-    setText(text.replace(/@[^\s@]*$/, `@${g.id} `))
+  // `/` refers to an agent (in Central it sends the message to it), `@` to a file.
+  const query = text.match(/(^|\s)@([^\s@]*)$/)?.[2]
+  const slashQuery = text.match(/(^|\s)\/([^\s/]*)$/)?.[2]
+  const [fileOpts, setFileOpts] = useState<FileHit[]>([])
+  useEffect(() => {
+    if (query === undefined || slashQuery !== undefined || (isCentral && !query)) return void setFileOpts([])
+    let live = true
+    const t = setTimeout(() => api.chatFiles(key, query).then((h) => live && setFileOpts(h.slice(0, 8)), () => live && setFileOpts([])), 120)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [query, key])
+  type Option = { kind: 'agent'; g: AgentDef } | { kind: 'file'; f: FileHit }
+  const options = useMemo<Option[]>(() => {
+    if (slashQuery !== undefined) {
+      const q = slashQuery.toLowerCase()
+      return agents.filter((g) => g.id !== agent?.id && (g.id.includes(q) || g.name.toLowerCase().replace(/\s+/g, '').includes(q))).slice(0, 6).map((g): Option => ({ kind: 'agent', g }))
+    }
+    return query === undefined ? [] : fileOpts.map((f): Option => ({ kind: 'file', f }))
+  }, [query, slashQuery, agents.length, fileOpts, agent?.id])
+  const choose = (o: Option) => {
+    if (o.kind === 'agent') setText(text.replace(/\/[^\s/]*$/, `/${o.g.id} `))
+    else (setText(text.replace(/(^|\s)@[^\s@]*$/, '$1')), addFiles([o.f.path]))
     setPick(0)
     box.current?.focus()
+  }
+  // Pasted images have no file: keep them in app data, then attach them like any other.
+  const onPaste = (e: React.ClipboardEvent) => {
+    const imgs = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'))
+    if (!imgs.length) return
+    e.preventDefault()
+    for (const f of imgs) {
+      const r = new FileReader()
+      r.onload = () => api.saveAttachment(key, f.name || 'image.png', String(r.result).split(',')[1] ?? '').then((p) => addFiles([p]), (err) => toast((err as Error).message, 'error'))
+      r.readAsDataURL(f)
+    }
   }
 
   const send = async () => {
     const t = text.trim()
-    if (!t || sending) return
+    if ((!t && !files.length) || sending) return
     setSending(true)
     try {
-      if (isCentral) await api.centralSend(t)
-      else await api.chatSend(agent!.id, t, origins[agent!.id])
+      if (isCentral) await api.centralSend(t, files)
+      else await api.chatSend(agent!.id, t, origins[agent!.id], files)
       setText('')
+      setDraftFiles(key, [])
       if (!isCentral && origins[agent!.id]) useStore.setState((st) => ({ origins: { ...st.origins, [agent!.id]: '' } }))
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -96,7 +130,7 @@ export function Chat() {
 
   const nameOf = (id?: string) => agents.find((g) => g.id === id)?.name ?? id ?? 'Agent'
   const title = isCentral ? 'Central' : (agent?.name ?? 'Chat')
-  const subtitle = isCentral ? 'Tag agents with @, or just ask: your coordinator splits the work.' : (agent?.description ?? '')
+  const subtitle = isCentral ? 'Use / to send work to an agent, @ for a file, or just ask: your coordinator splits the work.' : (agent?.description ?? '')
   const workingLabel = goal
     ? ((d) => (d ? `Asking ${nameOf(d.agent)}…` : 'Coordinating…'))(goal.steps.at(-1)?.delegations.find((x) => x.status === 'queued'))
     : active[0]
@@ -127,26 +161,7 @@ export function Chat() {
             <h1 className="text-[15px] font-semibold truncate">{title}</h1>
             {subtitle && <div className="text-[12px] text-muted truncate">{subtitle}</div>}
           </div>
-          {!isCentral && (
-            <span className="no-drag flex items-center rounded-lg border border-line text-[12px] text-muted max-w-[14rem]">
-              <button
-                onClick={async () => {
-                  const f = await api.chooseVault()
-                  if (f) act(api.chatSetFolder(key, f), 'Folder set for this conversation')
-                }}
-                title={folder ? `This conversation works in ${folder}. Click to change.` : "Set a folder for this conversation (default: the agent's own setting)"}
-                className="flex items-center gap-1.5 px-2 py-1 min-w-0 hover:text-ink"
-              >
-                <Folder size={13} className="shrink-0" />
-                <span className="truncate">{folder ? folder.split('/').filter(Boolean).pop() : 'Folder'}</span>
-              </button>
-              {folder && (
-                <button onClick={() => act(api.chatSetFolder(key, null), 'Folder cleared')} title="Use the agent's own folder again" className="px-1.5 py-1 hover:text-danger">
-                  ×
-                </button>
-              )}
-            </span>
-          )}
+          {agent && <FolderMenu agent={agent} convo={key} folder={folder} extra={a.chatExtraFolders[key] ?? []} vault={s.vault.vaultPath} />}
           {messages.length > 0 && (
             <button
               onClick={() => act(api.chatReset(key), 'Conversation cleared')}
@@ -166,6 +181,7 @@ export function Chat() {
               <Message
                 key={i}
                 m={m}
+                agentIds={new Set(agents.map((g) => g.id))}
                 name={m.agentId ? nameOf(m.agentId) : (agent?.name ?? 'Agent')}
                 origin={key}
                 run={m.runId ? a.runs.find((r) => r.id === m.runId) : undefined}
@@ -212,16 +228,39 @@ export function Chat() {
         <div className="px-6 pb-5">
           <div className="max-w-[44rem] mx-auto relative">
             {options.length > 0 && (
-              <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-line bg-panel shadow-lg p-1 z-10">
-                {options.map((g, i) => (
-                  <button key={g.id} onMouseDown={(e) => (e.preventDefault(), choose(g))} className={cx('w-full text-left px-3 py-2 rounded-lg text-[13.5px] flex items-center gap-2', i === pick % options.length ? 'bg-sunken' : 'hover:bg-sunken/60')}>
-                    <span className="font-medium">{g.name}</span>
-                    <span className="text-faint text-[12px]">@{g.id}</span>
+              <div className="absolute bottom-full mb-2 left-0 w-96 max-w-full rounded-xl border border-line bg-panel shadow-lg p-1 z-10">
+                {options.map((o, i) => (
+                  <button key={o.kind === 'agent' ? o.g.id : o.f.path} onMouseDown={(e) => (e.preventDefault(), choose(o))} className={cx('w-full text-left px-3 py-2 rounded-lg text-[13.5px] flex items-center gap-2', i === pick % options.length ? 'bg-sunken' : 'hover:bg-sunken/60')}>
+                    {o.kind === 'agent' ? (
+                      <>
+                        <span className="font-medium">{o.g.name}</span>
+                        <span className="text-faint text-[12px]">/{o.g.id}</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileText size={13} className="shrink-0 text-faint" />
+                        <span className="truncate">{o.f.rel}</span>
+                      </>
+                    )}
                   </button>
                 ))}
               </div>
             )}
-            <div className="rounded-3xl border border-line bg-panel shadow-sm flex items-end gap-2 pl-5 pr-2.5 py-2.5 focus-within:border-accent/60">
+            <div
+              onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+              onDrop={(e) => {
+                const paths = [...e.dataTransfer.files].map((f) => window.api.pathForFile(f))
+                if (!paths.length) return
+                e.preventDefault()
+                addFiles(paths)
+              }}
+              className="rounded-3xl border border-line bg-panel shadow-sm px-2.5 py-2.5 pl-3 focus-within:border-accent/60"
+            >
+              <FileChips files={files} onRemove={(f) => setDraftFiles(key, files.filter((x) => x !== f))} className="px-2 pb-2" />
+              <div className="flex items-end gap-1.5">
+              <button onClick={async () => addFiles(await api.chooseFiles())} title="Attach files" className="shrink-0 w-8 h-8 rounded-full text-muted hover:text-ink hover:bg-sunken grid place-items-center">
+                <Paperclip size={16} />
+              </button>
               <textarea
                 ref={box}
                 value={text}
@@ -238,18 +277,21 @@ export function Chat() {
                     void send()
                   }
                 }}
+                onPaste={onPaste}
                 rows={1}
-                placeholder={isCentral ? 'Ask, or tag an agent with @…' : `Message ${agent?.name ?? 'agent'}…`}
+                placeholder={isCentral ? 'Ask, / for an agent, @ for a file…' : `Message ${agent?.name ?? 'agent'}… (/ for an agent, @ for a file)`}
                 className="flex-1 bg-transparent outline-none resize-none text-[15px] leading-6 py-1 placeholder:text-faint"
               />
+              {agent && <ModelPicker agent={agent} override={a.chatModels[agent.id]} />}
               <button
                 onClick={send}
-                disabled={!text.trim() || sending}
+                disabled={(!text.trim() && !files.length) || sending}
                 title="Send"
                 className="shrink-0 w-8 h-8 rounded-full bg-accent text-white grid place-items-center disabled:opacity-30 hover:opacity-90"
               >
                 <ArrowUp size={16} />
               </button>
+              </div>
             </div>
           </div>
         </div>
@@ -264,6 +306,7 @@ function PendingTurn({ run, ahead }: { run: Run; ahead: number }) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] rounded-3xl bg-sunken/60 border border-dashed border-line px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
+        {run.input.attachments && <FileChips files={run.input.attachments} className="mb-1.5" />}
         {run.input.text}
         <div className="mt-1 flex items-center gap-2 text-[11.5px] text-faint whitespace-normal">
           {run.status === 'running' ? <Loader2 size={11} className="animate-spin text-accent" /> : null}
@@ -288,7 +331,7 @@ function ListItem({ active, onClick, icon, label, dot }: { active: boolean; onCl
   )
 }
 
-function Message({ m, name, origin, run, onRetry, canRetry, proposals, backTo }: { m: ChatMessage; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; backTo?: { key: string; name: string } }) {
+function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals, backTo }: { m: ChatMessage; agentIds: Set<string>; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; backTo?: { key: string; name: string } }) {
   const openDoc = useStore((st) => st.openDoc)
   const openChat = useStore((st) => st.openChat)
   const [sel, setSel] = useState<{ text: string; x: number; y: number } | null>(null)
@@ -303,7 +346,10 @@ function Message({ m, name, origin, run, onRetry, canRetry, proposals, backTo }:
   if (m.role === 'user')
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-3xl bg-sunken px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">{withTags(m.text)}</div>
+        <div className="max-w-[85%] rounded-3xl bg-sunken px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
+          {m.files && <FileChips files={m.files} className="mb-1.5" />}
+          {withTags(m.text, agentIds)}
+        </div>
       </div>
     )
   const time = new Date(m.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
@@ -362,8 +408,8 @@ function Welcome({ central, agent, hasAgents }: { central: boolean; agent?: Agen
       <p className="mt-2 text-[14px] text-muted max-w-md mx-auto">
         {central
           ? hasAgents
-            ? 'Tag one of your agents with @ to give it work directly, or write a goal and your coordinator will split it between them.'
-            : 'Create an agent first, then tag it here with @ or let a coordinator split goals between several.'
+            ? 'Type / and pick one of your agents to give it work directly, or write a goal and your coordinator will split it between them.'
+            : 'Create an agent first, then use / here to give it work or let a coordinator split goals between several.'
           : (agent?.description ?? 'A direct conversation. It remembers earlier messages until you start a new one.')}
       </p>
       {central && !hasAgents && (

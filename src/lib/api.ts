@@ -3,6 +3,7 @@ import type { Api, AppState } from '@shared/api'
 declare global {
   interface Window {
     api: {
+      pathForFile: (f: File) => string
       call: (method: keyof Api, ...args: unknown[]) => Promise<unknown>
       onState: (cb: (s: AppState) => void) => () => void
       onProgress: (cb: (line: string) => void) => () => void

@@ -41,10 +41,17 @@ export function renderPacket(p: HandoffPacket, fromName: string): string {
 }
 
 /** A resumed chat turn is just the user's message: the CLI already holds the instructions and earlier turns. */
-export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = '', where?: { cwd: string; vault: string }): string {
+export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = '', where?: { cwd: string; vault: string; extra?: string[] }): string {
   if (resumed) return input.trim()
   const parts = [def.instructions, `Today is ${date}.`]
-  if (where && where.cwd !== where.vault) parts.push(`You work in ${where.cwd}. The user's vault (their notes, tasks and projects) is at ${where.vault}: read it there when you need it.`)
+  if (where && where.cwd !== where.vault) {
+    const others = (where.extra ?? []).filter((d) => d !== where.vault)
+    parts.push(
+      `You work in ${where.cwd}: save the files you create there.` +
+        (others.length ? ` You may also use these folders: ${others.join(', ')}.` : '') +
+        ` The user's vault (their notes, tasks and projects) is at ${where.vault}: read it there for context.`
+    )
+  }
   if (sources) parts.push(sources)
   if (input.trim()) parts.push(`The user's input for this run:\n"""\n${input.trim()}\n"""`)
   if (def.permission === 'read') parts.push('You can only read files; you cannot change anything. Answer in plain text.')
@@ -71,6 +78,10 @@ export interface RunContext {
   session?: { id: string; resume: boolean }
   /** Where the agent works (see resolveCwd). Unset = the vault. */
   cwd?: string
+  /** Other folders it may use (see resolveDirs); unset = just the vault. */
+  extraDirs?: string[]
+  /** Folders of attached files that lie outside every other folder (see attachDirs). */
+  attachDirs?: string[]
 }
 
 /**
@@ -81,6 +92,24 @@ export function resolveCwd(def: Pick<AgentDef, 'id' | 'workdir'>, o: { vaultRoot
   const pick = o.chatFolder || def.workdir
   if (pick) return isAbsolute(pick) ? pick : join(o.vaultRoot, pick)
   return join(o.workspaces, def.id)
+}
+
+/** The main folder plus the other folders the agent may use: its extra `folders` and the vault (each unless already inside another). */
+export function resolveDirs(def: Pick<AgentDef, 'id' | 'workdir' | 'folders'>, o: { vaultRoot: string; workspaces: string; chatFolder?: string; chatExtra?: string[] }): { cwd: string; extra: string[] } {
+  const cwd = resolveCwd(def, o)
+  const extra: string[] = []
+  for (const f of [...(def.folders ?? []), ...(o.chatExtra ?? []), o.vaultRoot]) {
+    const dir = isAbsolute(f) ? f : join(o.vaultRoot, f)
+    if (!inside(cwd, dir) && !extra.some((e) => inside(e, dir))) extra.push(dir)
+  }
+  // The vault usually contains a folder listed before it: keep only the outer one.
+  return { cwd, extra: extra.filter((d) => !extra.some((o) => o !== d && inside(o, d))) }
+}
+
+/** Whether `dir` is `root` or somewhere under it. */
+function inside(root: string, dir: string): boolean {
+  const rel = relative(root, dir)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
 /** The vault as an extra folder, unless the agent already works inside it. */
@@ -98,12 +127,12 @@ export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext)
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: engineMode(def.permission),
-    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff, { cwd, vault: ctx.vaultRoot }),
+    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff, { cwd, vault: ctx.vaultRoot, extra: ctx.extraDirs }),
     session: ctx.session,
     model: def.model,
     effort: def.effort,
     cwd,
-    addDirs: vaultDirs(cwd, ctx.vaultRoot),
+    addDirs: [...(ctx.extraDirs ?? vaultDirs(cwd, ctx.vaultRoot)), ...(ctx.attachDirs ?? [])],
     purpose: `agent:${def.id}`,
     timeoutMs,
     onEvent: (ev) => {

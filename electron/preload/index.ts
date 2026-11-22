@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Api, AppState } from '@shared/api'
 
 const api = new Proxy({} as Api, {
@@ -13,6 +13,8 @@ const api = new Proxy({} as Api, {
 })
 
 contextBridge.exposeInMainWorld('api', {
+  /** The path of a file dropped on the window (the File object itself has none). */
+  pathForFile: (f: File) => webUtils.getPathForFile(f),
   call: (method: keyof Api, ...args: unknown[]) => (api[method] as (...a: unknown[]) => Promise<unknown>)(...args),
   onState: (cb: (s: AppState) => void) => {
     const listener = (_e: unknown, s: AppState) => cb(s)

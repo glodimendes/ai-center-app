@@ -57,7 +57,12 @@ An **account profile** is one login of one tool. Built in: Claude Code, Codex, A
 The **Chat** page has a conversation list on the left: **Central** and one entry per agent.
 
 - **One agent:** a direct conversation that remembers earlier messages until you start a new one (Claude, Codex and Antigravity keep a real session; other engines are sent the recent transcript).
-- **Central:** coordinate several agents. Tag agents with `@` (autocomplete as you type) to give them work directly; each answers in the thread under its name. A message with no tag goes to a coordinator agent (the Coordinator example, or any read-only agent named like one), which splits it between your other agents and writes the final answer.
+- **Central:** coordinate several agents. Refer to agents with `/` (autocomplete as you type, e.g. `/writer draft this`) to give them work directly; each answers in the thread under its name. A message with no tag goes to a coordinator agent (the Coordinator example, or any read-only agent named like one), which splits it between your other agents and writes the final answer.
+
+- **Model and effort:** the pill left of Send picks the account, model and effort for this conversation, from every account you have. The agent's own settings (Agents → edit → Model, Effort) are the default; **New chat** returns to them. Changing the model keeps the session; changing the account starts a new one and carries the transcript as text.
+- **Files:** the paperclip, dragging files onto the box, pasting an image, or typing `@` and choosing a file from the conversation's folders and the vault.
+- **Referring to agents:** `/` lists your agents. In Central it sends the message to that agent. In an agent's chat it tells the agent you mean the other one, and it may propose handing the work over (your click decides).
+- **Folders:** the folder chip in the header shows where the agent works and saves, the other folders it may use and the vault. Change the main folder, add folders for this conversation, or save them as the agent's default. Files stay where they are (a pasted image is kept in the app's data folder); the agent is told their paths, and engines that can't open files (Ollama, a custom command) get text files inline.
 
 Answers render tables, nested and checkbox lists, code (with a copy button) and links: `[[note]]` or a relative `.md` path opens in Docs.
 
@@ -88,7 +93,7 @@ Each message is a normal run: it queues, respects the usage ceiling and your rev
 
 ## Working folders
 
-Each agent works in its own empty workspace (kept in the app's data folder) unless you give it a folder: in its settings (**Working folder**, a vault folder like `projects` or any folder on your Mac) or for one conversation (the folder chip in the chat header, cleared by New chat). The vault is always readable too, wherever the agent works. Edits an agent makes inside the vault are reviewed as before; edits in another folder you chose are not.
+Each agent works in its own empty workspace (kept in the app's data folder) unless you give it a **main folder**: where it works and saves its files. In its settings, **Folders** also takes more folders it may use (`folders:` in the file); the vault is always added. Any folder works, in the vault (like `projects`) or on your Mac; one conversation can use another main folder (the folder chip in the chat header, cleared by New chat). The vault is always readable too, wherever the agent works. Edits an agent makes inside the vault are reviewed as before; edits in another folder you chose are not.
 
 ## Several agents at once
 

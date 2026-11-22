@@ -542,14 +542,15 @@ import { parseMentions, withHistory } from '../electron/main/agents/capture'
 
 describe('central chat helpers', () => {
   const agents = [parseAgent('writer', '---\nname: Haiku Writer\n---\nx'), parseAgent('editor', '---\nname: Editor\n---\nx'), { ...parseAgent('brief', '---\nname: Brief\n---\nx'), builtin: true }]
-  it('finds @tags anywhere, by id or name, removes them, and reports unknown ones', () => {
-    const m = parseMentions('@writer write about rain, then @Editor check it. Mail me@x.test', agents)
+  it('finds /references anywhere, by id or name, removes them, and leaves paths, words and unknown names alone', () => {
+    const m = parseMentions('/writer write about rain, then /Editor check it. Mail me@x.test', agents)
     expect(m.agents.map((a) => a.id)).toEqual(['writer', 'editor'])
     expect(m.text).toBe('write about rain, then check it. Mail me@x.test')
-    expect(parseMentions('@haikuwriter hi', agents).agents.map((a) => a.id)).toEqual(['writer'])
-    expect(parseMentions('hello @nobody and @brief', agents)).toMatchObject({ agents: [], unknown: ['nobody', 'brief'] })
-    expect(parseMentions('@writer @writer twice', agents).agents).toHaveLength(1)
-    expect(parseMentions('no tags here', agents)).toEqual({ agents: [], text: 'no tags here', unknown: [] })
+    expect(parseMentions('/haikuwriter hi', agents).agents.map((a) => a.id)).toEqual(['writer'])
+    expect(parseMentions('see /tmp/writer and/or /nobody and /brief', agents)).toEqual({ agents: [], text: 'see /tmp/writer and/or /nobody and /brief' })
+    expect(parseMentions('/writer /writer twice', agents).agents).toHaveLength(1)
+    expect(parseMentions('thanks, /editor.', agents).agents.map((a) => a.id)).toEqual(['editor'])
+    expect(parseMentions('no tags here', agents)).toEqual({ agents: [], text: 'no tags here' })
   })
   it('gives engines without sessions the recent transcript as text', () => {
     expect(withHistory([], 'hi')).toBe('hi')

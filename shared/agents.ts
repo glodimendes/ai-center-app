@@ -57,6 +57,8 @@ export interface AgentDef {
   permission: Permission
   /** Folder the agent works in: relative to the vault or an absolute path. Unset = its own empty workspace; the vault is always readable too. */
   workdir?: string
+  /** More folders the agent may use besides the main one (vault-relative or absolute). The vault itself is always added. */
+  folders?: string[]
   /** Data source ids from Settings (Phase 3). */
   sources: string[]
   /** Triggers as written, e.g. `manual`, `schedule: 07:00` (Phase 3 interprets them). */
@@ -190,6 +192,33 @@ export interface ChatMessage {
   runId?: string
   /** note: the conversation it points to (an agent id). */
   link?: string
+  /** user: absolute paths of the files attached to this message. */
+  files?: string[]
+}
+
+/** A conversation's own account, model and effort, chosen in the chat (the agent's own settings are the default). */
+export interface ChatOverride {
+  profile: string
+  model?: string
+  effort?: string
+}
+
+/** What the chat's model picker offers for one account. */
+export interface ChatModelOption {
+  profile: string
+  label: string
+  engine: EngineId
+  models: string[]
+  efforts: string[]
+}
+
+/** A file found for an `@` reference. */
+export interface FileHit {
+  path: string
+  /** Path relative to the root it was found under. */
+  rel: string
+  /** Which folder it is in: the main folder, an extra one or the vault. */
+  root: string
 }
 
 export interface GoalDelegation {
@@ -281,6 +310,10 @@ export interface AgentsState {
   chats: Record<string, ChatMessage[]>
   /** Folder a conversation works in (set from the chat header); absent = the agent's own setting. */
   chatFolders: Record<string, string>
+  /** Folders added to one conversation on top of the agent's own. */
+  chatExtraFolders: Record<string, string[]>
+  /** Account, model and effort a conversation switched to (absent = the agent's own). */
+  chatModels: Record<string, ChatOverride>
   goals: Goal[]
   /** Folder the definitions are read from. */
   dir: string

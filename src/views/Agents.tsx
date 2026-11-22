@@ -402,13 +402,19 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
       live = false
     }
   }, [d.profile])
+  // Effort levels the account's engine accepts; empty = none to choose.
+  const [efforts, setEfforts] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    api.chatModels().then((l) => setEfforts(Object.fromEntries(l.map((o) => [o.profile, o.efforts]))), () => {})
+  }, [])
   const unavailable = Boolean(d.model && models && models.length > 0 && !models.includes(d.model))
   const set = (p: Partial<AgentDef>) => setD({ ...d, ...p })
   const field = 'h-9 px-3 rounded-xl border border-line bg-bg text-[13.5px] outline-none focus:border-accent'
   const slug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
   const save = async () => {
     try {
-      await api.saveAgent({ ...d, id: isNew ? slug(d.name) : d.id, name: d.name.trim() || d.id })
+      const folders = (d.folders ?? []).map((f) => f.trim()).filter(Boolean)
+      await api.saveAgent({ ...d, folders: folders.length ? folders : undefined, id: isNew ? slug(d.name) : d.id, name: d.name.trim() || d.id })
       onClose()
     } catch (e) {
       setError((e as Error).message)
@@ -429,7 +435,7 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
         <div className="grid grid-cols-2 gap-4 @max-3xl:grid-cols-1 text-[13px]">
           <label className="flex flex-col gap-1.5">
             <span className="text-muted">Account</span>
-            <select className={field} value={d.profile} onChange={(e) => set({ profile: e.target.value, model: undefined })}>
+            <select className={field} value={d.profile} onChange={(e) => set({ profile: e.target.value, model: undefined, effort: undefined })}>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -479,14 +485,38 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
               </select>
               {unavailable && <span className="text-[12px] text-danger">This account can't run “{d.model}”. Pick one from the list.</span>}
             </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-muted">Working folder</span>
+            {(efforts[d.profile]?.length ?? 0) > 0 && (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-muted">Effort</span>
+                <select className={field} value={d.effort ?? ''} onChange={(e) => set({ effort: e.target.value || undefined })}>
+                  <option value="">Account default</option>
+                  {efforts[d.profile].map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11.5px] text-faint">The default for its chats too; the chat can switch model and effort for one conversation.</span>
+              </label>
+            )}
+            <div className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
+              <span className="text-muted">Folders</span>
               <div className="flex gap-2">
-                <input className={cx(field, 'flex-1 min-w-0')} value={d.workdir ?? ''} onChange={(e) => set({ workdir: e.target.value || undefined })} placeholder="its own workspace" />
-                <Button onClick={async () => { const f = await api.chooseVault(); if (f) set({ workdir: f }) }}>Choose…</Button>
+                <input className={cx(field, 'flex-1 min-w-0')} value={d.workdir ?? ''} onChange={(e) => set({ workdir: e.target.value || undefined })} placeholder="Main folder: it works and saves its files here (default: its own workspace)" />
+                <Button onClick={async () => { const f = await api.chooseFolder(); if (f) set({ workdir: f }) }}>Choose…</Button>
               </div>
-              <span className="text-[11.5px] text-faint">A folder in the vault (projects) or any folder on your Mac. The vault is always readable too. Edits outside the vault aren't reviewed.</span>
-            </label>
+              {(d.folders ?? []).map((f, i) => (
+                <div key={i} className="flex gap-2">
+                  <input className={cx(field, 'flex-1 min-w-0')} value={f} onChange={(e) => set({ folders: (d.folders ?? []).map((x, j) => (j === i ? e.target.value : x)) })} placeholder="Another folder it may use" />
+                  <Button kind="ghost" onClick={() => set({ folders: (d.folders ?? []).filter((_, j) => j !== i) })}>Remove</Button>
+                </div>
+              ))}
+              <div>
+                <Button onClick={async () => { const f = await api.chooseFolder(); if (f) set({ folders: [...(d.folders ?? []), f] }) }}>Add folder…</Button>
+              </div>
+              <div className="h-9 px-3 rounded-xl border border-dashed border-line text-[13px] text-faint flex items-center">AI Center vault · always available for context</div>
+              <span className="text-[11.5px] text-faint">Folders in the vault (projects) or anywhere on your Mac. Edits outside the vault aren't reviewed.</span>
+            </div>
             <label className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
               <span className="text-muted">Runs on its own (one per line: schedule: 07:00, on-open, file-watch: {TASKS_DIR}/*.md)</span>
               <textarea className="px-3 py-2 rounded-xl border border-line bg-bg text-[13px] font-mono outline-none focus:border-accent resize-none" rows={2} value={d.triggers.filter((t) => t !== 'manual').join('\n')} onChange={(e) => set({ triggers: ['manual', ...e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)] })} />

@@ -18,26 +18,23 @@ export function routeCapture(text: string, agents: AgentDef[]): CaptureRoute {
 }
 
 export interface Mentions {
-  /** Agents tagged with @id or @name (in order, without duplicates). */
+  /** Agents referenced with /id or /name (in order, without duplicates). */
   agents: AgentDef[]
-  /** The message with the tags removed. */
+  /** The message with the references removed. */
   text: string
-  /** Tags that matched no agent. */
-  unknown: string[]
 }
 
-/** `@agent` tags anywhere in a message (not inside words or e-mail addresses). Built-in agents aren't addressable. */
+/** `/agent` references anywhere in a message, as whole words (so paths like /tmp/x and words like and/or are left alone). Built-in agents aren't addressable. */
 export function parseMentions(text: string, agents: AgentDef[]): Mentions {
   const squash = (s: string) => slug(s).replace(/-/g, '')
   const found: AgentDef[] = []
-  const unknown: string[] = []
-  const stripped = text.replace(/(^|\s)@([^\s@]+)/g, (whole, lead: string, name: string) => {
+  const stripped = text.replace(/(^|\s)\/([^\s/]+?)(?=[.,;:!?]?(\s|$))/g, (whole, lead: string, name: string) => {
     const hit = agents.filter((a) => !a.builtin).find((a) => a.id === slug(name) || squash(a.name) === squash(name) || squash(a.id) === squash(name))
-    if (!hit) return unknown.push(name), whole
+    if (!hit) return whole
     if (!found.includes(hit)) found.push(hit)
     return lead
   })
-  return { agents: found, text: stripped.replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim(), unknown }
+  return { agents: found, text: stripped.replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim() }
 }
 
 /** A transcript as plain text, for engines that can't keep a conversation themselves. */

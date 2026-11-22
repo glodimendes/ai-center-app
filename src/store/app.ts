@@ -26,6 +26,9 @@ interface Store {
   /** Per target conversation: where the text in its draft was handed over from. */
   origins: Record<string, string>
   setDraft: (key: string, text: string) => void
+  /** Files attached to the unsent message, per conversation. */
+  draftFiles: Record<string, string[]>
+  setDraftFiles: (key: string, files: string[]) => void
   /** Opens `agentId`'s chat with `text` quoted in its draft, remembering `origin`. */
   handOff: (target: string, text: string, origin: string) => void
   setState: (s: AppState) => void
@@ -54,6 +57,8 @@ export const useStore = create<Store>((set, get) => ({
   drafts: {},
   origins: {},
   setDraft: (key, text) => set({ drafts: { ...get().drafts, [key]: text } }),
+  draftFiles: {},
+  setDraftFiles: (key, files) => set({ draftFiles: { ...get().draftFiles, [key]: files } }),
   handOff: (target, text, origin) => {
     const quoted = text.trim().split('\n').map((l) => `> ${l}`).join('\n')
     const { drafts, origins } = get()

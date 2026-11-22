@@ -68,6 +68,8 @@ export function parseAgent(id: string, text: string): AgentDef {
   if (budget !== undefined && !(budget > 0 && budget <= 100)) throw new AgentError('"budget" is a percent between 1 and 100.')
   const workdir = fm.workdir == null ? undefined : String(fm.workdir)
   if (workdir && workdir.split('/').includes('..')) throw new AgentError('"workdir" can\'t contain "..". Use a folder in the vault (projects) or an absolute path.')
+  const folders = list(fm.folders, 'folders')
+  if (folders.some((f) => f.split('/').includes('..'))) throw new AgentError('"folders" can\'t contain "..". Use folders in the vault or absolute paths.')
   const instructions = m[2].trim()
   if (!instructions) throw new AgentError('The instructions (text after the frontmatter) are empty.')
   return {
@@ -79,6 +81,7 @@ export function parseAgent(id: string, text: string): AgentDef {
     effort: fm.effort ? String(fm.effort) : undefined,
     permission,
     workdir,
+    folders: folders.length ? folders : undefined,
     sources: list(fm.sources, 'sources'),
     triggers: list(fm.triggers, 'triggers').length ? list(fm.triggers, 'triggers') : ['manual'],
     output,
@@ -175,6 +178,7 @@ export function serializeAgent(a: AgentDef): string {
   if (a.model) fm.model = a.model
   if (a.effort) fm.effort = a.effort
   if (a.workdir) fm.workdir = a.workdir
+  if (a.folders?.length) fm.folders = a.folders
   if (a.sources.length) fm.sources = a.sources
   if (a.budget) fm.budget = a.budget
   return `---\n${dump(fm, { lineWidth: 120 })}---\n\n${a.instructions.trim()}\n`

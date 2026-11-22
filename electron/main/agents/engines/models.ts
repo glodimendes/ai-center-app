@@ -9,6 +9,12 @@ export const CONTEXT_MODELS = {
   claude: { model: 'claude-haiku-5-5', effort: 'medium' }
 } as const
 
+/** Effort levels each engine accepts (`--effort` for Claude, `model_reasoning_effort` for Codex). Others have none. */
+export const EFFORTS: Record<string, string[]> = {
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['minimal', 'low', 'medium', 'high', 'xhigh']
+}
+
 /** Claude CLI model ids offered in the agent editor (the CLI has no list command). */
 export const CLAUDE_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2']
 

@@ -40,7 +40,7 @@ export class Supervisor {
     private queueFile: string | null = null
   ) {}
 
-  enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string; chat?: boolean; packet?: HandoffPacket; chainId?: string; hops?: number } = {}): Run {
+  enqueue(def: AgentDef, text: string, opts: { from?: string; parentRunId?: string; chat?: boolean; packet?: HandoffPacket; chainId?: string; hops?: number; attachments?: string[] } = {}): Run {
     const run: Run = {
       id: `${Date.now().toString(36)}-${++this.seq}`,
       agentId: def.id,
@@ -50,7 +50,7 @@ export class Supervisor {
       chainId: opts.chainId,
       hops: opts.hops,
       chat: opts.chat || undefined,
-      input: { from: opts.from ?? 'user', to: def.id, text, packet: opts.packet },
+      input: { from: opts.from ?? 'user', to: def.id, text, packet: opts.packet, attachments: opts.attachments?.length ? opts.attachments : undefined },
       status: 'queued',
       queuedAt: new Date().toISOString(),
       progress: []
@@ -73,7 +73,7 @@ export class Supervisor {
   private saveQueue() {
     if (!this.queueFile || this.closing) return
     try {
-      const items = this.queue.filter((q) => Supervisor.keep(q.run)).map(({ run }) => ({ agentId: run.agentId, text: run.input.text, from: run.input.from, parentRunId: run.parentRunId, chainId: run.chainId, hops: run.hops, chat: run.chat, packet: run.input.packet }))
+      const items = this.queue.filter((q) => Supervisor.keep(q.run)).map(({ run }) => ({ agentId: run.agentId, text: run.input.text, from: run.input.from, parentRunId: run.parentRunId, chainId: run.chainId, hops: run.hops, chat: run.chat, packet: run.input.packet, attachments: run.input.attachments }))
       writeFileSync(this.queueFile, JSON.stringify(items))
     } catch {
       /* the queue is best effort */
@@ -81,16 +81,16 @@ export class Supervisor {
   }
 
   /** Puts the waiting items of the last session back in the queue. Items whose agent is gone are dropped. */
-  restore(find: (agentId: string) => AgentDef | undefined): number {
+  restore(find: (agentId: string, chat?: boolean) => AgentDef | undefined): number {
     if (!this.queueFile || !existsSync(this.queueFile)) return 0
     let n = 0
     try {
-      const items = JSON.parse(readFileSync(this.queueFile, 'utf8')) as { agentId: string; text: string; from: string; parentRunId?: string; chainId?: string; hops?: number; chat?: boolean; packet?: HandoffPacket }[]
+      const items = JSON.parse(readFileSync(this.queueFile, 'utf8')) as { agentId: string; text: string; from: string; parentRunId?: string; chainId?: string; hops?: number; chat?: boolean; packet?: HandoffPacket; attachments?: string[] }[]
       writeFileSync(this.queueFile, '[]')
       for (const it of items) {
-        const def = find(it.agentId)
+        const def = find(it.agentId, it.chat)
         if (!def) continue
-        this.enqueue(def, it.text, { from: it.from, parentRunId: it.parentRunId, chainId: it.chainId, hops: it.hops, chat: it.chat, packet: it.packet })
+        this.enqueue(def, it.text, { from: it.from, parentRunId: it.parentRunId, chainId: it.chainId, hops: it.hops, chat: it.chat, packet: it.packet, attachments: it.attachments })
         n++
       }
     } catch {

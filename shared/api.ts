@@ -1,4 +1,4 @@
-import type { AccountProfile, Action, AgentDef, AgentsState, OrganizeChange, SourceDef } from './agents'
+import type { AccountProfile, Action, AgentDef, AgentsState, ChatModelOption, ChatOverride, FileHit, OrganizeChange, SourceDef } from './agents'
 import type {
   SetupCheck,
   Block,
@@ -185,7 +185,7 @@ export interface Api {
   allowRun(runId: string, raise: boolean): Promise<void>
   saveProfiles(list: AccountProfile[]): Promise<void>
   /** The central chat: `@agent` tags go to those agents; an untagged message goes to the coordinator agent. The thread is `agents.chats._central`. */
-  centralSend(text: string): Promise<void>
+  centralSend(text: string, files?: string[]): Promise<void>
   /** A goal for a coordinator agent: it delegates to your other agents turn by turn; returns the goal id. */
   startGoal(coordinatorId: string, text: string): Promise<string>
   stopGoal(id: string): Promise<void>
@@ -193,13 +193,27 @@ export interface Api {
   resumeGoal(id: string): Promise<void>
   /** One chat turn with a custom agent: continues its conversation (Claude `--resume`, Codex `exec resume`); returns the run id. */
   /** `origin`: the conversation the text was handed over from (`_central` or an agent id); it gets a "Sent to" note. */
-  chatSend(agentId: string, text: string, origin?: string): Promise<string>
+  chatSend(agentId: string, text: string, origin?: string, files?: string[]): Promise<string>
+  /** Every account with its models and effort levels (the chat's model picker). */
+  chatModels(): Promise<ChatModelOption[]>
+  /** Switches one conversation's account, model and effort; null = the agent's own. */
+  chatSetModel(agentId: string, o: ChatOverride | null): Promise<void>
+  /** Files matching an `@` reference in a conversation (its folders and the vault). */
+  chatFiles(agentId: string, query: string): Promise<FileHit[]>
+  /** Opens the file dialog; returns the chosen paths. */
+  chooseFiles(): Promise<string[]>
+  /** Keeps a pasted image in app data and returns its path. */
+  saveAttachment(agentId: string, name: string, base64: string): Promise<string>
   /** Forgets the agent's conversation and transcript. */
   chatReset(agentId: string): Promise<void>
   /** Usage log: which screen or feature was opened (name only). */
   track(kind: string, name: string): Promise<void>
   /** Sets (or with null clears) the folder one conversation works in. */
   chatSetFolder(agentId: string, folder: string | null): Promise<void>
+  /** Sets the extra folders one conversation may use besides the agent's own. */
+  chatSetExtraFolders(agentId: string, folders: string[]): Promise<void>
+  /** Opens the folder dialog; returns the chosen folder. */
+  chooseFolder(): Promise<string | null>
   /** Gmail sign-in (read mail, create drafts; never send) with the Google client set for the calendar. */
   connectGmail(): Promise<void>
   disconnectGmail(): Promise<void>
@@ -228,7 +242,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, checkSetup: true, applySetup: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, track: true, chatSetFolder: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, organizeAgents: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, checkSetup: true, applySetup: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, chatModels: true, chatSetModel: true, chatFiles: true, chooseFiles: true, saveAttachment: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, track: true, chatSetFolder: true, chatSetExtraFolders: true, chooseFolder: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, organizeAgents: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

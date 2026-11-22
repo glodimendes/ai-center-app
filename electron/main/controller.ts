@@ -778,11 +778,27 @@ export class Controller implements Api {
   async resumeGoal(id: string) {
     this.agents.resumeGoal(id)
   }
-  async centralSend(text: string) {
-    this.agents.sendCentral(text)
+  async centralSend(text: string, files?: string[]) {
+    this.agents.sendCentral(text, files)
   }
-  async chatSend(agentId: string, text: string, origin?: string): Promise<string> {
-    return this.agents.sendChat(agentId, text, origin)
+  async chatSend(agentId: string, text: string, origin?: string, files?: string[]): Promise<string> {
+    return this.agents.sendChat(agentId, text, origin, { attachments: files })
+  }
+  chatModels() {
+    return this.agents.chatModels()
+  }
+  async chatSetModel(agentId: string, o: Parameters<Api['chatSetModel']>[1]) {
+    await this.agents.setChatModel(agentId, o)
+  }
+  async chatFiles(agentId: string, query: string) {
+    return this.agents.chatFiles(agentId, query)
+  }
+  async saveAttachment(agentId: string, name: string, base64: string) {
+    return this.agents.saveAttachment(agentId, name, base64)
+  }
+  async chooseFiles() {
+    const res = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })
+    return res.canceled ? [] : res.filePaths
   }
   async track(kind: string, name: string) {
     metrics.event('ui', { kind: String(kind).slice(0, 30), name: String(name).slice(0, 40) })
@@ -790,6 +806,14 @@ export class Controller implements Api {
 
   async chatSetFolder(agentId: string, folder: string | null) {
     this.agents.setChatFolder(agentId, folder)
+  }
+
+  async chatSetExtraFolders(agentId: string, folders: string[]) {
+    this.agents.setChatExtraFolders(agentId, folders)
+  }
+  async chooseFolder() {
+    const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], defaultPath: this.settings.vaultPath })
+    return res.canceled ? null : res.filePaths[0]
   }
 
   async chatReset(agentId: string) {
