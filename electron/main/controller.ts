@@ -20,6 +20,8 @@ import { loadSettings, saveSettings } from './settings'
 import { ContextSession } from './context/session'
 import { AgentHub } from './agent-hub'
 import { createStarterVault } from './vault/starter'
+import { initRepo } from './vault/git'
+import { checkFramework, ensureFrameworkDirs, missingFiles } from './vault/framework'
 import { GmailAuth } from './gmail-auth'
 import type { AccountProfile, Action, AgentDef, SourceDef } from '@shared/agents'
 import { askJson } from './context/ask'
@@ -90,11 +92,17 @@ export class Controller implements Api {
     this.triggerTimer = setInterval(() => this.agents.fire('tick'), 60_000)
   }
 
-  private openVault() {
+  /** `chosen`: the user just picked this folder, so it gets the framework files it lacks (never overwriting one). */
+  private openVault(chosen = false) {
     void this.vault?.close()
+    this.setupAdded = []
     // A vault folder that doesn't exist yet (the default starter vault on first run) is created with a few example files.
-    if (!existsSync(this.settings.vaultPath)) createStarterVault(this.settings.vaultPath)
+    if (!existsSync(this.settings.vaultPath)) {
+      createStarterVault(this.settings.vaultPath)
+      initRepo(this.settings.vaultPath, 'AI Center starter vault')
+    }
     this.vault = new VaultService(this.settings.vaultPath, () => this.settings.autoCommit, () => this.push())
+    if (chosen) this.setupAdded = this.addMissingFramework()
     this.loadSeenTasks()
     this.vault.onExternalChange = (p) => this.agents?.fileChanged(p)
     this.vault.onOwnTaskIds = (ids) => {
@@ -103,6 +111,27 @@ export class Controller implements Api {
       this.saveSeenTasks()
     }
     this.vault.startWatching()
+  }
+
+  // --- vault setup (framework files) ----------------------------------------
+  private setupAdded: string[] = []
+
+  private addMissingFramework(): string[] {
+    const files = missingFiles(this.settings.vaultPath)
+    ensureFrameworkDirs(this.settings.vaultPath)
+    if (files.length) this.vault.writeFramework(files, 'add AI Center framework files')
+    return files.map((f) => f.path)
+  }
+
+  async checkSetup() {
+    this.push()
+    return { ...checkFramework(this.settings.vaultPath), added: this.setupAdded }
+  }
+
+  async applySetup() {
+    const done = this.addMissingFramework()
+    this.push()
+    return done
   }
 
   private planCacheFile = () => join(app.getPath('userData'), 'plan-cache.json')
@@ -389,7 +418,8 @@ export class Controller implements Api {
       settings: { ...this.settings, googleClientSecret: this.settings.googleClientSecret ? '••••••' : undefined },
       brief: { running: this.briefRunning, error: this.briefError },
       newTaskIds: this.newTaskIds(vault),
-      agents: this.agents.state()
+      agents: this.agents.state(),
+      setup: { check: { ...checkFramework(this.settings.vaultPath), added: this.setupAdded }, synced: Object.keys(this.synced).length > 0 }
     }
   }
 
@@ -624,7 +654,7 @@ export class Controller implements Api {
     saveSettings(next)
     if (vaultChanged) {
       this.lastPlan = null
-      this.openVault()
+      this.openVault(true)
     }
     if (googleChanged && next.googleClientId && next.googleClientSecret) this.google.configure(next.googleClientId, next.googleClientSecret)
     if (patch.calendarProvider) {

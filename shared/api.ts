@@ -1,5 +1,6 @@
 import type { AccountProfile, Action, AgentDef, AgentsState, SourceDef } from './agents'
 import type {
+  SetupCheck,
   Block,
   BriefData,
   CalEvent,
@@ -76,11 +77,18 @@ export interface AppState {
   /** Open tasks that appeared in the todo file from outside the app (an automation, Codex, Obsidian) and aren't reviewed yet. */
   newTaskIds: string[]
   agents: AgentsState
+  /** Framework check of the vault (run at every start, so after every update) and what the Home checklist needs. */
+  setup: { check: SetupCheck; synced: boolean }
 }
 
 /** Everything the renderer can ask the main process to do. */
 export interface Api {
   getState(): Promise<AppState>
+  // vault setup (framework files)
+  /** Re-runs the framework check. */
+  checkSetup(): Promise<SetupCheck>
+  /** Adds the missing framework files (never overwriting one). Returns the files written. */
+  applySetup(): Promise<string[]>
   // tasks
   patchTask(taskId: string, patch: TaskPatch): Promise<void>
   addTask(section: string[], body: string): Promise<void>
@@ -214,7 +222,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, checkSetup: true, applySetup: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

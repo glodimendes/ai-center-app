@@ -32,10 +32,10 @@ The planner and the agent hub are one app on `main`, pushed to the public repo `
 - **Handoff packet:** `AgentMessage.packet` (`HandoffPacket`: objective, input, expect, context files, origin), rendered by `renderPacket`; input over `SPILL_CHARS` (2000) is written to `tasks/agent-output/handoffs/<chainId>/` and passed as a path (only if the target's `workdir` can reach it). `Run.chainId/hops`; `MAX_HOPS` 3 and a duplicate guard (`repeatKey` from `goals.ts`) enforced in the `run-agent` executor. The thread a handoff came from gets "X answered ↗"; the answer offers **Send back to X**. Agents → Activity groups chains with tokens and cost (`shared/chains.ts`).
 - **Model dropdown:** the agent editor lists the models the account can run (`availableModels` in `engines/models.ts`: Claude fixed list, Codex's own `models_cache.json`, Ollama's server); `AgentHub.save` refuses an unavailable model.
 - **Protocols:** the app uses A2A's vocabulary (task states, context id, message, artifact), not its wire protocol; an MCP `propose_handoff` server and an A2A adapter are ROADMAP items. See `docs/agents.md`.
-- **Not yet verified on a real vault:** an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex/Ollama on screen. Also never exercised live: Gmail OAuth, Ollama streaming, the dark theme, the first-run Setup dialog on a fresh install.
+- **Not yet verified on a real vault:** an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex/Ollama on screen. Also never exercised live: Gmail OAuth, Ollama streaming, the dark theme, the first-run Setup dialog on a fresh install, completing a chosen existing folder, the Home "Get set up" checklist and the setup notice (the maintainer will test these later).
 
 **Open items, in rough priority:**
-1. **Startup setup** (ROADMAP "Startup setup: the framework every install works on"): the maintainer wants a defined framework (vault layout, shipped rules files, first-run flow) so anyone installing the app can use it. Specify it with them before building. Done so far: paths in one module (`shared/paths.ts`); plain lowercase folder names (2026-11-22); the starter vault ships the vault's `AGENTS.md` and `CLAUDE.md`, both rules files, `about-me.md` and `current-priorities.md`. Still open: per-vault mapping (old numbered vaults), the first-run flow.
+1. **Startup setup** (ROADMAP "Startup setup: the framework every install works on"): the maintainer wants a defined framework (vault layout, shipped rules files, first-run flow) so anyone installing the app can use it. Done 2026-11-22: paths in one module (`shared/paths.ts`); plain lowercase folder names; the framework templates in `vault/framework.ts` (the vault's `AGENTS.md` and `CLAUDE.md`, both rules files, `about-me.md`, `current-priorities.md`, todo and inbox files); a folder the user chooses gets the files it lacks (`Controller.openVault(true)`); the setup check for missing files at every start; Setup's sample-agents step; the Home checklist (`components/SetupPanel.tsx`). Later: mapping other layouts (a numbered vault gets nothing and a note), the "evolve" setting with template updates for existing vaults (ROADMAP, to specify).
 2. Live streaming of answers (engines already emit `text` events); "Ask an agent" from task rows, Home cards, Docs and ⌘K; the removed "AI preparation" Home card is now a user-defined agent in the maintainer's vault; a generic sample is optional. Ask the maintainer what they want next.
 3. Modular, editable Home (ROADMAP idea): widgets backed by agents and outputs.
 4. Phase 2/3 leftovers: route the built-in brief/estimates through the budget gate and `limits`; watch the agents folder; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
@@ -64,6 +64,7 @@ The agent hub is a normal app where anyone defines the agents they need; it is *
    - `tasks/briefs/YYYY-MM-DD.md`: the daily brief.
    - `prompts/daily-brief.md`: the brief prompt, written only from Settings.
    - `prompts/agents/*.md` (or `settings.agentsDir`): custom agent definitions, written only from the Agents view. `tasks/agent-output/<agent>/`: answers of agents with `output: file`, and `handoffs/` files, written by the app, never by the agent.
+   - Framework files (`vault/framework.ts` `TEMPLATES`): the app only *adds* a missing one (when the user chooses a folder, or on a click); it never changes an existing one.
 4. **Calendar safety:**
    - Only planner-tagged events may be changed or deleted by the planner/Sync. macOS: `[planner:<id>]` in the notes, enforced inside the Swift helper too. Google: `extendedProperties.private.aiCenterPlanner`.
    - **Exception, user-approved 2026-11-09: the user's own hand edits.** The event panel (edit title/time, delete with confirm) and dragging an event on the grid call `Controller.editEvent` / `deleteEvent` → provider `userUpdate` / `userRemove` → helper `user-update` / `user-delete` (one occurrence; refuses planner events and read-only calendars). Never call these from Sync, the planner or any AI path.
@@ -104,7 +105,8 @@ electron/main/
   vault/                parser.ts (tasks, inbox), tokens.ts (~2h, due:/by 31/10, !high, @spread/@asap, repeat:, postpone:, 3x/week),
                         edits.ts (line patches, takeDone for the archive), service.ts (read/write/watch, brief, overrides,
                         archive, week picks/grid/notes/wishes), git.ts (batched, serialized commits with retry),
-                        preferences.ts (defaults + frontmatter, migrations, dayRules), weekly.ts (log/pins/overrides/holds/notes)
+                        preferences.ts (defaults + frontmatter, migrations, dayRules), weekly.ts (log/pins/overrides/holds/notes),
+                        framework.ts (shipped templates, the missing-files check), starter.ts (new vault; the controller gives it its own git history via git.ts initRepo)
   scheduler/plan.ts     pure planner (docs/planner.md "Planning rules"); variants.ts: Re-plan strategies + metrics;
                         cadence.ts: planning day (04:00 rollover) and full-vs-incremental decision; habits.ts: `3x/week`
                         → per-week sessions (ids `<task>@<week>#n`, mapped back before plan() returns); wish.ts: "Plan with
@@ -131,7 +133,7 @@ src/                    React 19 + Tailwind 4 + zustand
   components/           TimeGrid (own grid: drag, resize, draw), BlockPanel (+ block-panel/: event editing, block tools),
                         TaskRow, RepeatPicker, NewBlock, ReplanButton (Re-plan options dialog), CalendarFilter, SyncDialog,
                         DocEditor (Milkdown), WeeklyReview (Review → "Review & plan the week"), Shutdown (Today → Wrap up),
-                        EstimateSuggestions (Tasks), MessageActions (Hand over), Inline (approval/review cards),
+                        EstimateSuggestions (Tasks), MessageActions (Hand over), Setup (first run), SetupPanel (vault check, Home checklist), Inline (approval/review cards),
                         ui (Button, Header, Modal, Popover in a portal, useEscape)
   lib/                  markdown.tsx + mdparse.ts (chat Markdown), greeting.ts, util.ts, taskSort.ts
 tests/                  vitest: vault, scheduler, sync, brief, context, inbox, agents, markdown, routing, chains. sample/ = synthetic
@@ -163,7 +165,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 243 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
+npm test              # 247 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer

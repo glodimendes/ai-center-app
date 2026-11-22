@@ -333,10 +333,24 @@ export interface ContextResult {
   changes: ContextChange[]
 }
 
+/** How the vault compares with the framework the app ships (vault/framework.ts). */
+export interface SetupCheck {
+  /** Framework files the vault doesn't have. */
+  missing: string[]
+  /** Numbered top-level folders (another layout): nothing is added, since other layouts aren't mapped yet. */
+  otherLayout: boolean
+  /** Files added when the user chose this folder (shown in Setup). */
+  added: string[]
+}
+
 export interface Settings {
   vaultPath: string
   /** The first-run setup has been completed or skipped. */
   setupDone?: boolean
+  /** The setup-check result the user dismissed (its signature); a different result shows again. */
+  setupCheckDismissed?: string
+  /** The Home "Get set up" checklist was dismissed. */
+  checklistDismissed?: boolean
   autoCommit: boolean
   contextEngine: ContextEngine
   /** Who answers the one-shot planning questions (Suggest estimates, Plan with a wish). */

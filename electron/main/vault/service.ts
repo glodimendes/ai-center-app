@@ -375,6 +375,11 @@ export class VaultService {
     return text?.trim() ? text : null
   }
 
+  /** Missing framework files (vault/framework.ts picks them; never an existing file). One commit. */
+  writeFramework(files: { path: string; text: string }[], message: string) {
+    for (const f of files) this.write(f.path, f.text, message)
+  }
+
   writeBriefPrompt(text: string) {
     this.write(BRIEF_PROMPT_FILE, text.endsWith('\n') ? text : `${text}\n`, 'update daily brief prompt')
   }

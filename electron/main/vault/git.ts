@@ -1,9 +1,30 @@
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const run = promisify(execFile)
+
+/**
+ * Gives a vault the app just created its own git history (one first commit, the user's identity), so every
+ * later app change is a commit that can be undone. Without git or a git identity the vault works as before,
+ * just without history; the commit error then shows in the app on the next save.
+ */
+export function initRepo(root: string, message: string): boolean {
+  if (existsSync(join(root, '.git'))) return true
+  try {
+    execFileSync('git', ['-C', root, 'init', '-q'], { stdio: 'ignore' })
+  } catch {
+    return false
+  }
+  try {
+    execFileSync('git', ['-C', root, 'add', '-A'], { stdio: 'ignore' })
+    execFileSync('git', ['-C', root, 'commit', '-q', '-m', message], { stdio: 'ignore' })
+  } catch {
+    /* no identity yet: the repository exists, the first commit comes with the next save */
+  }
+  return true
+}
 
 /**
  * Batches app saves into small commits authored by the user's own git identity.

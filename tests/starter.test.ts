@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { createStarterVault } from '../electron/main/vault/starter'
 import { parseTasks } from '../electron/main/vault/parser'
 import { DEFAULT_PREFERENCES } from '../electron/main/vault/preferences'
+import { initRepo } from '../electron/main/vault/git'
 import { ABOUT_ME_FILE, CLAUDE_FILE, MAINTENANCE_FILE, PRIORITIES_FILE, RULES_FILE, TODOS_FILE } from '../shared/paths'
 
 describe('starter vault', () => {
@@ -26,6 +27,15 @@ describe('starter vault', () => {
     writeFileSync(join(root, TODOS_FILE), '# mine\n')
     createStarterVault(root)
     expect(readFileSync(join(root, TODOS_FILE), 'utf8')).toBe('# mine\n')
+    rmSync(root, { recursive: true })
+  })
+
+  it('gets its own git history so app changes can be undone', () => {
+    const root = mkdtempSync(join(tmpdir(), 'starter-git-'))
+    createStarterVault(root)
+    expect(initRepo(root, 'starter')).toBe(true)
+    expect(existsSync(join(root, '.git'))).toBe(true)
+    expect(readFileSync(join(root, '.gitignore'), 'utf8')).toContain('.DS_Store')
     rmSync(root, { recursive: true })
   })
 })

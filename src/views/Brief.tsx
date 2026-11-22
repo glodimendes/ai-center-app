@@ -10,6 +10,7 @@ import { greetingFor } from '@/lib/greeting'
 import { inline } from '@/lib/markdown'
 import { calendarColor, categoryOf, cx, inlineMd, relDay } from '@/lib/util'
 import { Button, Dot, Header } from '@/components/ui'
+import { SetupChecklist, SetupNotice } from '@/components/SetupPanel'
 
 const RIBBON_START = 7
 const RIBBON_END = 23
@@ -106,6 +107,8 @@ export function Brief() {
               <Button onClick={() => act(api.generateBrief())}>Try again</Button>
             </div>
           )}
+          <SetupNotice />
+          <SetupChecklist />
           <div className="grid grid-cols-4 @max-3xl:grid-cols-2 gap-4">
             <Stat icon={<Timer size={14} />} label="Planned work" value={fmtDuration(plannedMin)}>
               <div className="flex h-1.5 rounded-full overflow-hidden mt-2 bg-sunken">

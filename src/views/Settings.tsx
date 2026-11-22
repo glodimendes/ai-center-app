@@ -13,6 +13,7 @@ import { DayRules } from './settings/DayRules'
 import { BriefPromptEditor } from './settings/BriefPrompt'
 import { EnginesSettings } from './settings/Engines'
 import { SourcesSettings } from './settings/Sources'
+import { SetupStatus } from '@/components/SetupPanel'
 
 const PAGES = [
   { key: 'general', label: 'General', icon: SettingsIcon },
@@ -109,6 +110,19 @@ export function Settings() {
                 <input type="checkbox" checked={s.settings.autoCommit} onChange={(e) => act(api.saveSettings({ autoCommit: e.target.checked }))} />
                 Commit each change to the vault's git history (authored by you) so everything can be undone
               </label>
+            </Card>
+            <Card title="Vault setup" desc="The framework AI Center works on: the entry point AI tools read first, the rules they follow, and your context and task files. Checked at every start, so after every update. Missing files can be added; existing files are never changed.">
+              <SetupStatus />
+              <div className="flex gap-2 mt-3">
+                <Button kind="ghost" onClick={() => act(api.checkSetup(), 'Setup checked')}>
+                  Check now
+                </Button>
+                {(s.settings.checklistDismissed || s.settings.setupCheckDismissed) && (
+                  <Button kind="ghost" onClick={() => act(api.saveSettings({ checklistDismissed: false, setupCheckDismissed: '' }))}>
+                    Show the Home checklist again
+                  </Button>
+                )}
+              </div>
             </Card>
             </>
           )}

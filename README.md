@@ -74,6 +74,8 @@ prompts/agents/              one Markdown file per agent
 
 `decisions/` and `references/` are optional. AI tools may read the app's folders but never edit them; the rules files say so.
 
+A new vault gets its own git history right away, so every change the app makes can be undone. If you choose a folder you already have, the app adds the files from this list that it lacks and changes nothing you wrote. It checks this at every start, so after every update: Settings → General → Vault setup lists anything missing, which you add with a click. A folder in another layout, such as numbered folders like `05_Tasks/`, isn't mapped yet; nothing is added to it. Until setup is complete, Home shows a short checklist (vault, AI tool, calendar, areas, first sync, first agent).
+
 The app edits single lines, found again by task id, so you can keep editing the same files in Obsidian or any editor at the same time. By default each change is committed to the folder's own git history ("auto-commit" can be turned off in Settings).
 
 A task line can carry optional details: `~2h` estimate, `due:2026-12-01` or `by 1/12`, `!urgent` `!high` `!low`, `@spread` or `@asap`, `repeat:weekly`, `postpone:2026-12-05`, `3x/week`. The full syntax and every planning rule are in [docs/planner.md](docs/planner.md).
