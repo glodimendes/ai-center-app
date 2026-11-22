@@ -77,6 +77,15 @@ Each message is a normal run: it queues, respects the usage ceiling and your rev
 
 **Agents** lists your agents (edit, or jump to a chat) and the built-in ones. **Activity** shows what is waiting for you, your goals and the recent runs with their usage.
 
+**Only agents made or accepted in the app count.** Other tools (Codex, Claude Code, Claude Desktop, a script) may write files into the agents folder too. Such a file isn't an agent until you accept it: it doesn't run, chat, react to triggers or receive handoffs. It appears under **Found in your agents folder** with a preview of how it would be imported:
+- A file in the app's format, or a Claude Code subagent with a valid file name, is imported as it is; the file isn't changed.
+- Anything else (a Codex prompt, a file without frontmatter, a name like `Review PR.md`) is saved as a new file in the app's format, and the original stays where it is, hidden.
+- Fields other tools use (tool lists, argument hints, colours) are named and ignored: what an agent may do always comes from its permission in the app, read-only unless the file says otherwise in the app's format. `model: inherit` means the account's default; `$ARGUMENTS` isn't filled in, your message follows the instructions instead.
+
+**Ignore** hides a file; the ignored list at the bottom brings it back. Agents that were in the folder when this was introduced count as accepted.
+
+**Groups and pins.** Put each agent in a group you name (the group picker on its row; groups you no longer use disappear) and order groups with the arrows. The pin decides whether an agent is listed in the Chat sidebar; an unpinned agent's chat is still one click away from the Agents page, and it shows in the sidebar while it's working or open. New, sample and imported agents start pinned. This organization is kept in the app (`agents-org.json` in its data folder), not in the agent files.
+
 ## Goals
 
 A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.

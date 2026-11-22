@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Loader2, MessageSquare, Pencil, Plus, Square, Trash2 } from 'lucide-react'
-import type { AgentDef, AgentOutput, Permission, Run } from '@shared/agents'
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FileInput, Loader2, MessageSquare, Pencil, Pin, PinOff, Plus, Square, Trash2 } from 'lucide-react'
+import type { AgentDef, AgentOutput, FoundAgent, Permission, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
 import { groupChains } from '@shared/chains'
 import { TASKS_DIR } from '@shared/paths'
+import { groupSections } from '@/lib/agentGroups'
 import { Goals } from '@/components/Goals'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
 import { Button, Header, Modal } from '@/components/ui'
@@ -62,24 +63,55 @@ export function Agents() {
 
           {tab === 'agents' && (
             <>
+              {a.found.length > 0 && <Found found={a.found} />}
               {custom.length > 0 ? (
-                <div className="rounded-2xl border border-line bg-panel divide-y divide-line/70 overflow-hidden">
-                  {custom.map((g) => (
-                    <div key={g.id} className="flex items-center gap-4 px-5 py-4">
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setEditing(g)}>
-                        <div className="text-[15px] font-medium truncate">{g.name}</div>
-                        <div className="text-[13px] text-muted truncate">{g.description ?? g.instructions.split('\n')[0]}</div>
+                groupSections(custom, a.organization).map((sec) => (
+                  <section key={sec.name || '_none'}>
+                    {a.organization.groups.length > 0 && (
+                      <div className="flex items-center gap-1 mb-2 text-[12px] text-faint">
+                        <span className="flex-1">{sec.name || 'No group'}</span>
+                        {sec.name && a.organization.groups.length > 1 && (
+                          <>
+                            <button title="Move group up" onClick={() => act(api.organizeAgents({ kind: 'move-group', group: sec.name, dir: -1 }))} className="p-1 rounded hover:text-ink">
+                              <ArrowUp size={12} />
+                            </button>
+                            <button title="Move group down" onClick={() => act(api.organizeAgents({ kind: 'move-group', group: sec.name, dir: 1 }))} className="p-1 rounded hover:text-ink">
+                              <ArrowDown size={12} />
+                            </button>
+                          </>
+                        )}
                       </div>
-                      <div className="text-[12px] text-faint shrink-0 @max-3xl:hidden">{label(g)}</div>
-                      <button onClick={() => setEditing(g)} title="Edit" className="p-2 rounded-lg text-faint hover:text-ink hover:bg-sunken">
-                        <Pencil size={15} />
-                      </button>
-                      <button onClick={() => openChat(g.id)} title="Chat" className="p-2 rounded-lg text-faint hover:text-accent hover:bg-sunken">
-                        <MessageSquare size={15} />
-                      </button>
+                    )}
+                    <div className="rounded-2xl border border-line bg-panel divide-y divide-line/70 overflow-hidden">
+                      {sec.list.map((g) => {
+                        const pinned = a.organization.pinned.includes(g.id)
+                        return (
+                          <div key={g.id} className="flex items-center gap-3 px-5 py-4">
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setEditing(g)}>
+                              <div className="text-[15px] font-medium truncate">{g.name}</div>
+                              <div className="text-[13px] text-muted truncate">{g.description ?? g.instructions.split('\n')[0]}</div>
+                            </div>
+                            <div className="text-[12px] text-faint shrink-0 @max-3xl:hidden">{label(g)}</div>
+                            <GroupPicker id={g.id} current={a.organization.group[g.id] ?? ''} groups={a.organization.groups} />
+                            <button
+                              onClick={() => act(api.organizeAgents({ kind: 'pin', id: g.id, pinned: !pinned }))}
+                              title={pinned ? 'Pinned to Chat: click to remove it from the Chat list' : 'Not in the Chat list: click to pin it'}
+                              className={cx('p-2 rounded-lg hover:bg-sunken', pinned ? 'text-accent' : 'text-faint hover:text-ink')}
+                            >
+                              {pinned ? <Pin size={15} /> : <PinOff size={15} />}
+                            </button>
+                            <button onClick={() => setEditing(g)} title="Edit" className="p-2 rounded-lg text-faint hover:text-ink hover:bg-sunken">
+                              <Pencil size={15} />
+                            </button>
+                            <button onClick={() => openChat(g.id)} title="Chat" className="p-2 rounded-lg text-faint hover:text-accent hover:bg-sunken">
+                              <MessageSquare size={15} />
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
-                  ))}
-                </div>
+                  </section>
+                ))
               ) : (
                 <div className="text-center pt-10">
                   <h2 className="text-[20px] font-semibold">Define your first agent</h2>
@@ -97,6 +129,7 @@ export function Agents() {
                   + Add from examples
                 </button>
               )}
+              {a.ignored.length > 0 && <Ignored files={a.ignored} />}
               <div>
                 <div className="text-[12px] text-faint mb-2">Built in</div>
                 <div className="rounded-2xl border border-line/70 divide-y divide-line/60 overflow-hidden">
@@ -124,6 +157,117 @@ export function Agents() {
       </div>
       {editing && <Editor def={editing} onClose={() => setEditing(null)} />}
       {examples && <Examples onClose={() => setExamples(false)} />}
+    </div>
+  )
+}
+
+function GroupPicker({ id, current, groups }: { id: string; current: string; groups: string[] }) {
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const set = (group: string) => act(api.organizeAgents({ kind: 'group', id, group }))
+  if (adding)
+    return (
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => (name.trim() && set(name), setAdding(false), setName(''))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') (setName(''), setAdding(false))
+        }}
+        placeholder="New group"
+        className="w-28 h-7 px-2 rounded-lg border border-line bg-bg text-[12px] outline-none focus:border-accent"
+      />
+    )
+  return (
+    <select
+      value={current}
+      title="Group"
+      onChange={(e) => (e.target.value === '__new' ? setAdding(true) : set(e.target.value))}
+      className="h-7 max-w-28 px-1.5 rounded-lg border border-line/70 bg-bg text-[12px] text-muted outline-none @max-3xl:hidden"
+    >
+      <option value="">No group</option>
+      {groups.map((g) => (
+        <option key={g} value={g}>
+          {g}
+        </option>
+      ))}
+      <option value="__new">New group…</option>
+    </select>
+  )
+}
+
+/** Files another tool put into the agents folder: not agents until imported. */
+function Found({ found }: { found: FoundAgent[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  return (
+    <section className="rounded-2xl border border-warn/40 bg-warn-soft/40 p-4 space-y-3">
+      <div>
+        <h2 className="text-[14px] font-semibold flex items-center gap-2">
+          <FileInput size={15} className="text-warn" /> Found in your agents folder
+        </h2>
+        <p className="text-[12.5px] text-muted mt-0.5">These files weren't made in AI Center (another tool may have written them). They don't run, chat or get handoffs until you import them. Importing keeps the app's rules: an imported agent starts read-only unless its file says otherwise in the app's format.</p>
+      </div>
+      {found.map((f) => (
+        <div key={f.file} className="rounded-xl bg-panel border border-line/70 px-4 py-3 text-[13px]">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">
+                {f.def?.name ?? f.file} <span className="text-faint font-normal">· {f.file}</span>
+              </div>
+              {f.def?.description && <div className="text-muted truncate">{f.def.description}</div>}
+              {f.def && (
+                <div className="text-[12px] text-faint mt-0.5">
+                  Imports as: {f.def.permission} · {OUTPUT_HELP[f.def.output].toLowerCase()} · account {f.def.profile}
+                  {f.def.model ? ` · model ${f.def.model}` : ''}
+                </div>
+              )}
+              {f.error && <div className="text-danger mt-0.5">Can't be imported: {f.error}</div>}
+              {f.notes.map((n) => (
+                <div key={n} className="text-[12px] text-muted mt-0.5">
+                  {n}
+                </div>
+              ))}
+              {f.def && (
+                <button onClick={() => setOpen(open === f.file ? null : f.file)} className="text-[12px] text-accent mt-1">
+                  {open === f.file ? 'Hide instructions' : 'Show instructions'}
+                </button>
+              )}
+              {open === f.file && f.def && <pre className="mt-2 text-[11.5px] bg-sunken rounded-md p-2 max-h-48 overflow-auto whitespace-pre-wrap">{f.def.instructions}</pre>}
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              {f.def && <Button onClick={() => act(api.organizeAgents({ kind: 'import', file: f.file }), `${f.def!.name} imported`)}>Import</Button>}
+              <Button kind="ghost" onClick={() => act(api.organizeAgents({ kind: 'ignore', file: f.file, ignore: true }))}>
+                Ignore
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function Ignored({ files }: { files: string[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="text-[12.5px]">
+      <button onClick={() => setOpen(!open)} className="text-muted hover:text-ink">
+        {open ? '▾' : '▸'} {files.length} ignored file{files.length === 1 ? '' : 's'} in the agents folder
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1">
+          {files.map((f) => (
+            <div key={f} className="flex items-center gap-2 pl-4">
+              <span className="flex-1 text-muted truncate">{f}</span>
+              <button onClick={() => act(api.organizeAgents({ kind: 'ignore', file: f, ignore: false }))} className="text-accent">
+                Show again
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

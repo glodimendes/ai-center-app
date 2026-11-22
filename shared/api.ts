@@ -1,4 +1,4 @@
-import type { AccountProfile, Action, AgentDef, AgentsState, SourceDef } from './agents'
+import type { AccountProfile, Action, AgentDef, AgentsState, OrganizeChange, SourceDef } from './agents'
 import type {
   SetupCheck,
   Block,
@@ -209,6 +209,8 @@ export interface Api {
   /** Models an account can run, for the agent editor's dropdown. Empty = the engine picks its own. */
   agentModels(profileId: string): Promise<string[]>
   deleteAgent(id: string): Promise<void>
+  /** Agents view organization: import or ignore a found file, set an agent's group, order groups, pin to Chat. */
+  organizeAgents(change: OrganizeChange): Promise<void>
   approveAction(id: string): Promise<Action>
   rejectAction(id: string): Promise<void>
   contextUpdate(instruction: string): Promise<ContextResult>
@@ -222,7 +224,7 @@ export type ApiMethod = keyof Api
 
 /** The renderer may call these and nothing else on the controller. Typed so it can't drift from Api. */
 export const API_METHODS: Record<ApiMethod, true> = {
-  getState: true, checkSetup: true, applySetup: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
+  getState: true, checkSetup: true, applySetup: true, runAgent: true, capture: true, cancelRun: true, allowRun: true, saveProfiles: true, saveSources: true, addSampleAgent: true, connectGmail: true, chatSend: true, centralSend: true, startGoal: true, stopGoal: true, resumeGoal: true, chatReset: true, disconnectGmail: true, previewSource: true, testProfile: true, saveAgent: true, agentModels: true, deleteAgent: true, organizeAgents: true, approveAction: true, rejectAction: true, patchTask: true, addTask: true, deleteTask: true, indentTask: true, addSubtask: true, reorderTask: true,
   completeTask: true, skipOccurrence: true, addInbox: true, inboxToTask: true, removeInbox: true, replan: true, planOption: true,
   applyPlanOption: true, pin: true, unpin: true, logBlock: true, unlog: true, getBrief: true, generateBrief: true, getBriefPrompt: true,
   saveBriefPrompt: true, setCalendarVisible: true, setCalendarBusy: true, setEventAvailability: true, editEvent: true, deleteEvent: true,

@@ -4,6 +4,7 @@ import type { Action, AgentDef, ChatMessage, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
 import { cx } from '@/lib/util'
+import { groupSections } from '@/lib/agentGroups'
 import { ApprovalCard, PausedCard, ReviewCard } from '@/components/Inline'
 import { MessageFooter, PartButton, PartMenu } from '@/components/MessageActions'
 import { Markdown } from '@/lib/markdown'
@@ -23,6 +24,8 @@ export function Chat() {
   const toast = useStore((st) => st.toast)
   const a = s.agents
   const agents = a.agents.filter((g) => !g.builtin)
+  const busyIds = new Set(a.runs.filter((r) => ['queued', 'running', 'paused'].includes(r.status)).map((r) => r.agentId))
+  const listed = agents.filter((g) => a.organization.pinned.includes(g.id) || g.id === target || busyIds.has(g.id))
   const isCentral = target === 'central'
   const agent = isCentral ? undefined : agents.find((g) => g.id === target)
   const key = isCentral ? CENTRAL : (agent?.id ?? CENTRAL)
@@ -103,12 +106,18 @@ export function Chat() {
     <div className="flex-1 min-h-0 flex">
       <aside className="w-60 shrink-0 border-r border-line/70 overflow-y-auto p-3 @max-3xl:w-14 @max-3xl:p-2">
         <ListItem active={isCentral} onClick={() => openChat('central')} icon={<Sparkles size={15} className="text-accent" />} label="Central" />
-        <div className="mt-5 mb-1 px-3 text-[12px] text-faint @max-3xl:hidden">Agents</div>
-        {agents.map((g) => {
-          const running = a.runs.some((r) => r.agentId === g.id && ['queued', 'running', 'paused'].includes(r.status))
-          return <ListItem key={g.id} active={target === g.id} onClick={() => openChat(g.id)} icon={<span className="grid place-items-center w-[15px] text-[12px] font-medium text-muted">{g.name[0]?.toUpperCase()}</span>} label={g.name} dot={running} />
-        })}
-        {!agents.length && <div className="px-3 py-2 text-[12.5px] text-faint @max-3xl:hidden">No agents yet. Create one in Agents.</div>}
+        {/* Only pinned agents are listed (Agents → pin), in their groups; an unpinned one shows while its chat is open or busy. */}
+        {groupSections(listed, a.organization).map((sec, i) => (
+          <div key={sec.name || '_none'}>
+            <div className={cx('mb-1 px-3 text-[12px] text-faint @max-3xl:hidden', i === 0 ? 'mt-5' : 'mt-3')}>{sec.name || (a.organization.groups.length ? 'Other agents' : 'Agents')}</div>
+            {sec.list.map((g) => {
+              const running = a.runs.some((r) => r.agentId === g.id && ['queued', 'running', 'paused'].includes(r.status))
+              return <ListItem key={g.id} active={target === g.id} onClick={() => openChat(g.id)} icon={<span className="grid place-items-center w-[15px] text-[12px] font-medium text-muted">{g.name[0]?.toUpperCase()}</span>} label={g.name} dot={running} />
+            })}
+          </div>
+        ))}
+        {!agents.length && <div className="mt-5 px-3 py-2 text-[12.5px] text-faint @max-3xl:hidden">No agents yet. Create one in Agents.</div>}
+        {agents.length > 0 && !listed.length && <div className="mt-5 px-3 py-2 text-[12.5px] text-faint @max-3xl:hidden">No agents pinned. Pin the ones you talk to in Agents.</div>}
       </aside>
 
       <section className="flex-1 min-w-0 flex flex-col">

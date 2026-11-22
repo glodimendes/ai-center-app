@@ -220,8 +220,46 @@ export interface Goal {
   seen: string[]
 }
 
+/**
+ * A file in the agents folder that wasn't created or accepted in the app (another tool may have written it).
+ * It isn't an agent until the user imports it: it doesn't run, chat or receive handoffs.
+ */
+export interface FoundAgent {
+  /** File name in the agents folder. */
+  file: string
+  /** The agent the app would import, when the file can be read. */
+  def?: AgentDef
+  /** What importing changes or leaves out (fields other tools use, a new file name). */
+  notes: string[]
+  /** Why it can't be imported. */
+  error?: string
+}
+
+/** In-app organization of the agents, kept in app data (not in the agent files). */
+export interface AgentOrganization {
+  /** Group names in display order. */
+  groups: string[]
+  /** Agent id → its group. */
+  group: Record<string, string>
+  /** Agents shown in the Chat sidebar. */
+  pinned: string[]
+}
+
+/** One change to the in-app organization (Agents view). */
+export type OrganizeChange =
+  | { kind: 'import'; file: string }
+  | { kind: 'ignore'; file: string; ignore: boolean }
+  | { kind: 'group'; id: string; group: string }
+  | { kind: 'move-group'; group: string; dir: -1 | 1 }
+  | { kind: 'pin'; id: string; pinned: boolean }
+
 export interface AgentsState {
   agents: AgentDef[]
+  /** Files in the agents folder waiting to be imported or ignored. */
+  found: FoundAgent[]
+  /** File names the user chose to ignore. */
+  ignored: string[]
+  organization: AgentOrganization
   errors: { id: string; message: string }[]
   runs: Run[]
   approvals: Action[]

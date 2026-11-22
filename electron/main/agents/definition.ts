@@ -44,7 +44,8 @@ export function parseAgent(id: string, text: string): AgentDef {
     id,
     name,
     profile,
-    model: fm.model ? String(fm.model) : undefined,
+    // Claude Code's `inherit` means "the default model", which is what no model means here.
+    model: fm.model && fm.model !== 'inherit' ? String(fm.model) : undefined,
     effort: fm.effort ? String(fm.effort) : undefined,
     permission,
     workdir,
@@ -54,6 +55,87 @@ export function parseAgent(id: string, text: string): AgentDef {
     budget,
     description: fm.description ? String(fm.description) : undefined,
     instructions
+  }
+}
+
+/** Frontmatter fields other tools use in their agent or prompt files (Claude Code subagents and commands, Codex prompts). */
+const FOREIGN: Record<string, string> = {
+  tools: 'tool list',
+  'allowed-tools': 'tool list',
+  allowedTools: 'tool list',
+  disallowedTools: 'tool list',
+  'disallowed-tools': 'tool list',
+  permissionMode: 'permission mode',
+  mcpServers: 'MCP servers',
+  'argument-hint': 'argument hint',
+  color: 'colour'
+}
+
+export const slugId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+
+/**
+ * How a file another tool wrote would be imported. Claude Code and Codex files differ (tool lists, model aliases,
+ * `$ARGUMENTS`, no frontmatter at all), so this is lenient where parseAgent is strict: unknown fields are
+ * ignored and named, a missing frontmatter means the whole text is the instructions, and an id the app can't use
+ * becomes a new file name. What the agent may do always comes from the app's own permission (default: read).
+ * `inPlace`: the file reads as it is; otherwise importing writes `<def.id>.md` and leaves the original alone.
+ */
+export function readForeignAgent(file: string, text: string, taken: (id: string) => boolean): { def: AgentDef; notes: string[]; inPlace: boolean } {
+  const stem = file.replace(/\.md$/i, '')
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
+  let fm: any = {}
+  if (m) {
+    try {
+      fm = load(m[1]) ?? {}
+    } catch (e) {
+      throw new AgentError(`Frontmatter isn't valid YAML: ${(e as Error).message.split('\n')[0]}`)
+    }
+    if (typeof fm !== 'object' || Array.isArray(fm)) throw new AgentError('Frontmatter must be key: value lines.')
+  }
+  const notes: string[] = []
+  const foreign = [...new Set(Object.keys(fm).filter((k) => k in FOREIGN).map((k) => FOREIGN[k]))]
+  if (foreign.length) notes.push(`Ignored: ${foreign.join(', ')}. What it may do comes from its permission in the app.`)
+  if (!m) notes.push('No frontmatter: the whole file becomes its instructions.')
+  const body = (m ? m[2] : text).trim()
+  if (/\$ARGUMENTS|\$\d\b/.test(body)) notes.push('Uses $ARGUMENTS: in the app, your message is sent after these instructions instead.')
+  // The strict reader first, so a file in the app's own format is imported exactly as it is.
+  if (ID_RE.test(stem) && m) {
+    try {
+      return { def: parseAgent(stem, text), notes, inPlace: true }
+    } catch {
+      /* fall through to the lenient reading */
+    }
+  }
+  const heading = body.match(/^#\s+(.+)$/m)?.[1]?.trim()
+  const name = typeof fm.name === 'string' && fm.name.trim() ? fm.name.trim() : (heading ?? stem)
+  // `taken` covers every file in the folder too, so the original is never overwritten.
+  let id = slugId(typeof fm.name === 'string' && ID_RE.test(fm.name) ? fm.name : stem) || slugId(name) || 'imported-agent'
+  for (let n = 2; taken(id); n++) id = `${slugId(typeof fm.name === 'string' && ID_RE.test(fm.name) ? fm.name : stem).slice(0, 36) || 'imported-agent'}-${n}`
+  const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T, label: string): T => {
+    if (v == null) return fallback
+    if (allowed.includes(v as T)) return v as T
+    notes.push(`"${label}: ${String(v)}" isn't one the app knows; using ${fallback}.`)
+    return fallback
+  }
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' || typeof x === 'number').map(String) : typeof v === 'string' ? [v] : [])
+  if (!body) throw new AgentError('The file has no instructions.')
+  notes.push(`Saved as ${id}.md in the app's format; the original file stays where it is, hidden.`)
+  const model = typeof fm.model === 'string' && fm.model !== 'inherit' ? fm.model : undefined
+  return {
+    def: {
+      id,
+      name,
+      profile: typeof fm.profile === 'string' && fm.profile ? fm.profile : 'claude',
+      model,
+      permission: pick(fm.permission, PERMISSIONS, 'read', 'permission'),
+      output: pick(fm.output, OUTPUTS, 'reply', 'output'),
+      sources: strings(fm.sources),
+      triggers: strings(fm.triggers).length ? strings(fm.triggers) : ['manual'],
+      description: typeof fm.description === 'string' ? fm.description : undefined,
+      instructions: body
+    },
+    notes,
+    inPlace: false
   }
 }
 

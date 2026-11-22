@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
-import type { AccountProfile, Action, ChatMessage, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits } from '@shared/agents'
+import type { AccountProfile, Action, ChatMessage, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits, OrganizeChange } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { AGENT_OUTPUT_DIR, BRIEFS_DIR, HANDOFFS_DIR } from '@shared/paths'
 import { ApprovalStore, parseActions } from './agents/actions'
@@ -98,7 +98,7 @@ export class AgentHub {
     } catch {
       /* worst case a schedule catches up once more */
     }
-    this.registry = new AgentRegistry(deps.agentsDir)
+    this.registry = new AgentRegistry(deps.agentsDir, join(deps.userData, 'agents-org.json'))
     this.approvals = new ApprovalStore(
       join(deps.userData, 'approvals.json'),
       {
@@ -194,6 +194,9 @@ export class AgentHub {
     const pending = this.deps.context.pendingResult
     return {
       agents: [...BUILTINS, ...agents],
+      found: this.registry.found(),
+      ignored: this.registry.ignored(),
+      organization: this.registry.organization(),
       errors,
       runs: this.supervisor.list(),
       approvals: this.approvals.list(),
@@ -571,6 +574,16 @@ export class AgentHub {
       if (models.length && !models.includes(def.model)) throw new AgentError(`"${def.model}" is not available on this account. Pick one from the list.`)
     }
     this.registry.save({ ...def, builtin: undefined })
+    this.deps.push()
+  }
+
+/** In-app organization: import or ignore found files, groups, pins. Changes app data only, except an import that needs a new file. */
+  organize(change: OrganizeChange) {
+    if (change.kind === 'import') this.registry.importFile(change.file)
+    else if (change.kind === 'ignore') this.registry.ignoreFile(change.file, change.ignore)
+    else if (change.kind === 'group') this.registry.setGroup(change.id, change.group)
+    else if (change.kind === 'move-group') this.registry.moveGroup(change.group, change.dir)
+    else if (change.kind === 'pin') this.registry.setPinned(change.id, change.pinned)
     this.deps.push()
   }
 

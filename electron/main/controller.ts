@@ -812,6 +812,9 @@ export class Controller implements Api {
   async deleteAgent(id: string) {
     this.agents.remove(id)
   }
+  async organizeAgents(change: Parameters<Api['organizeAgents']>[0]) {
+    this.agents.organize(change)
+  }
   approveAction(id: string): Promise<Action> {
     return this.agents.approve(id)
   }
