@@ -2,32 +2,32 @@
 
 Last reviewed: 2026-11-07
 
-Synthetic sample with the same shape as the real file (headings, tabs, tokens, mixed languages). No real data.
+Synthetic sample with the same shape as a real file (headings, tabs, tokens, a non-English title). No real data.
 
-## ETH
+## School
 
 ### Thesis
-- [ ] Submit the thesis registration form
+- [ ] Submit the project registration form
 - [ ] Implement `parser.py`, `loader.py` (pipeline skeleton) by 31/10
 - [ ] Hand-check the first 100 coded rows (`research/coding_sample.xlsx`) by 01/11 ~2h
 - [ ] Download the raw bill lists into `data/raw/`
 - [ ] Draft methods section ~2h !high
 
-### AI in Education
-- [ ] Anotar resumo do paper 1 by 01/09
-- [ ] Anotar resumo do paper 2 by 01/09
-- [ ] Responder pergunta sobre paper 3
-- [ ] Revisar matemática do método usado
+### Course A
+- [ ] Summarise paper 1 by 01/09
+- [ ] Summarise paper 2 by 01/09
+- [ ] Answer the question on paper 3
+- [ ] Réviser les mathématiques du cours
 
-### RTAI
-- [ ] Revisar a matéria da primeira aula
-- [ ] Fazer exercícios de programação ~1h30m
-- [ ] Fazer exercícios de matemática
+### Course B
+- [ ] Review the first lesson
+- [ ] Do the programming exercises ~1h30m
+- [ ] Do the maths exercises
 
-### DMS
-- [ ] Assistir última lecture
-- [ ] Anotar última lecture
-- [ ] Treinar SQL
+### Databases
+- [ ] Watch the last lecture
+- [ ] Take notes on the last lecture
+- [ ] Practise SQL
 
 
 
@@ -42,16 +42,16 @@ Synthetic sample with the same shape as the real file (headings, tabs, tokens, m
 - [ ] Apply to Sample AG ~1h
 - [ ] Ask a former colleague for a referral
 
-### Mentoria
-- [ ] Preparar a terceira semana
-- [ ] Marcar o próximo encontro
+### Mentoring
+- [ ] Prepare the third week
+- [ ] Book the next meeting
 
-## Masters/Future
+## Future studies
 - [ ] List three programmes to compare
 - [ ] Read the admission requirements
 
-## BRASA
-- [ ] Fazer o PPT do webinar by 20/10
+## Community
+- [ ] Make the slides for the webinar by 20/10
 - [ ] Email to a partner organisation
 - [ ] Plan the next meetup !low
 
@@ -60,9 +60,9 @@ Synthetic sample with the same shape as the real file (headings, tabs, tokens, m
 - [ ] Renew the transport pass ~15m
 - [ ] Choose a new health insurance
 
-## TAMANDUÁ (EDUCATION PROJECT)
-- [ ] Revisar a documentação do projeto
-- [ ] Lançar o MVP ~3h
+## SIDE PROJECT
+- [ ] Review the project documentation
+- [ ] Launch the MVP ~3h
 - [ ] Write the onboarding guide
 
 ## TEMPORARY INBOX

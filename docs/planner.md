@@ -2,7 +2,7 @@
 
 The reference for AI Center's planner: what each screen does, the task syntax, and every planning rule. The overview and install steps are in the [README](../README.md); agents are in [agents.md](agents.md).
 
-Area names in the examples below (Thesis, Courses, Outside work) and the hour values are one person's setup. A fresh vault starts with the neutral areas Work, Personal and Training, and every number here is editable in Settings.
+Where the text below names areas and values, it uses the defaults of a fresh vault (the areas Work, Personal and Training). Every number is editable in Settings and stored in the vault's `05_Tasks/planner/preferences.md`.
 
 ## Features
 
@@ -32,7 +32,7 @@ Code: `electron/main/scheduler/plan.ts` (pure function, unit-tested). Every numb
 ### When the plan changes
 - **The plan stays put during the day.** Adding, editing or finishing tasks, logging time and calendar refreshes only change *what sits inside* existing blocks. New work goes into gaps. Blocks never move.
 - **Full re-plan** happens (a) each morning (the planning day rolls over at 04:00), (b) when you change preferences, (c) when you click **Re-plan**.
-- **Plan with a wish** (top of the Re-plan dialog): type a sentence ("keep Friday afternoon free, thesis 6 h on Monday"); Claude Haiku (or Codex, chosen in Settings), given only that sentence, the next 14 dates (today and tomorrow named, with working hours), your areas, todo headings and hours, turns it into date limits, hours for specific days (that week's grid), **focus time for a heading** ("tomorrow morning on Tamanduá" → a block pinned in the free part of that span, holding only that heading's open tasks, most urgent first) and optionally a strategy. You see the changes and the resulting plan before anything is saved; applied wishes are listed there and can be removed.
+- **Plan with a wish** (top of the Re-plan dialog): type a sentence ("keep Friday afternoon free, 6 h of work on Monday"); Claude Haiku (or Codex, chosen in Settings), given only that sentence, the next 14 dates (today and tomorrow named, with working hours), your areas, todo headings and hours, turns it into date limits, hours for specific days (that week's grid), **focus time for a heading** ("tomorrow morning on the side project" → a block pinned in the free part of that span, holding only that heading's open tasks, most urgent first) and optionally a strategy. You see the changes and the resulting plan before anything is saved; applied wishes are listed there and can be removed.
 - **Re-plan options**: Re-plan shows four strategies side by side, each with a mini week and metrics for the next 7 days (work, deep work, after 19:00, free working time, task switches, deadline warnings, doesn't fit). **Balanced** = your settings; **Deadlines first** = deadline weight ×3, guard +2 days, all ASAP; **Deep work first** = deep-work areas +25% grid hours, ×1.5 weight, +1 h deep-work cap, other areas −25% hours, ×0.8 weight; **Light week** = daily caps, deep-work cap, grid hours and weekly targets −25%, no reserved blocks. **Shuffle** = a different arrangement under the same strategy (score ±15%, seeded tie-breaks). The applied strategy stays for later re-plans until you pick another.
 - A block **already started** never moves, even on a full re-plan. **Pinned** blocks (dragged or logged) never move.
 - If a new calendar event collides with a block, only that block is re-placed, with a "conflict" warning.
@@ -42,7 +42,7 @@ Code: `electron/main/scheduler/plan.ts` (pure function, unit-tested). Every numb
 
 ### What gets planned first (Settings → Scheduling strategy)
 1. **Guarded deadlines**: tasks due within 2 days (or recently overdue), earliest first. They may go past the grid hours.
-2. Everything else by **weighted score** = (deadline weight 2 × urgency + priority weight 1 × priority) × area weight (Thesis 1.5, Courses 1.2, Outside 1, Personal 0.8). Urgency = 1 / (1 + days until due); priority urgent 2, high 1, medium 0.5, low 0.
+2. Everything else by **weighted score** = (deadline weight 2 × urgency + priority weight 1 × priority) × area weight (Work 1.2, Training 1, Personal 0.8). Urgency = 1 / (1 + days until due); priority urgent 2, high 1, medium 0.5, low 0.
 3. Last: **stale** tasks (overdue > 14 days), flagged "reschedule or drop it?".
 Ties are broken by order in the file. Only leaf tasks are planned (parents wait for their subtasks). A subtask without its own `due:` or `@spread` / `@asap` takes its parent's (nearest ancestor's; shown muted, never written to the line; repeating tasks and habits keep their own dates).
 
@@ -51,21 +51,21 @@ Ties are broken by order in the file. Only leaf tasks are planned (parents wait 
 - **Spread**: evenly over the working days until deadline − slack (or over 5 days if undated); leftovers fall back to ASAP. Set per area, or per task with the ⇄ button (writes `@spread` / `@asap` on the line). The spread subtasks of one task share a single even daily amount and are filled in file order, so the parts follow each other across the days instead of all starting on the first day.
 
 ### Weekly hours grid
-Hours per area per weekday (default: Thesis 4/2/4/2/4/2/–, Courses 2/3/1/3/1/–/–, Outside 1/1/2/1/2/1/–, Personal 0.5 weekdays, 1 at weekends). An area never gets more than its hours that day, except for guarded deadlines. **A 0 sets nothing aside rather than forbidding the area:** once every area with hours that day is planned, tasks still left over (any area, plus Other, which has no row) may use the remaining time on days where their area has 0 hours, ranked by the usual score. Areas marked **reserve** (Thesis) keep their hours as blocks even without concrete tasks. Reserved hours are placed right after training, breaks and deadlines due within the guard window, before other areas' tasks, so they get their preferred windows; the area's own tasks then fill them. **Weights only decide which tasks go first; the grid decides how many hours an area gets.** Training is outside the grid.
+Off by default; switch it on in Settings → Scheduling strategy (or set a week's own hours in the weekly review). Hours per area per weekday, for example Work 4 h on weekdays and Personal 1 h. An area never gets more than its hours that day, except for guarded deadlines. **A 0 sets nothing aside rather than forbidding the area:** once every area with hours that day is planned, tasks still left over (any area, plus Other, which has no row) may use the remaining time on days where their area has 0 hours, ranked by the usual score. Areas marked **reserve** (for example a main project area) keep their hours as blocks even without concrete tasks. Reserved hours are placed right after training, breaks and deadlines due within the guard window, before other areas' tasks, so they get their preferred windows; the area's own tasks then fill them. **Weights only decide which tasks go first; the grid decides how many hours an area gets.** Training is outside the grid.
 
 ### Areas and headings
 Settings → **Todo headings → areas** lists every heading of `daily-todos.md`: click a colour to assign it, and sub-headings inherit from their parent. Container events are picked from the titles actually in the area's calendar.
-Duration = `~` estimate or the category default (Thesis 90m, Courses 60m, Outside 30m, Personal 15m).
+Duration = `~` estimate or the area's default (Work 60m, Training 60m, Personal 30m, Other 30m).
 
 ### Day rules (Settings → Day rules)
-Rules for some days, so a routine change is a setting: **Every** chosen weekday, or **One day a week, the lightest of** some weekdays (the one with the least calendar time; pick another per week in the weekly review). Each rule either keeps areas out of part of the day (**No** work / chosen areas, from–to; e.g. no work after 13:00) or caps them (**At most** 2 h of Outside work). They apply to time the planner adds; your calendar events, pins and already-placed blocks stay. A sample "Lighter half-day" rule ships switched off.
+Rules for some days, so a routine change is a setting: **Every** chosen weekday, or **One day a week, the lightest of** some weekdays (the one with the least calendar time; pick another per week in the weekly review). Each rule either keeps areas out of part of the day (**No** work / chosen areas, from–to; e.g. no work after 13:00) or caps them (**At most** 2 h of Personal tasks). They apply to time the planner adds; your calendar events, pins and already-placed blocks stay. A sample "Lighter half-day" rule ships switched off.
 
 ### Shape of a day
 | Rule | Default |
 |---|---|
 | Working hours | Mon–Fri 08–21, Sat–Sun 09–19 |
 | Max planned work per day (training and breaks don't count) | 8 h weekdays, 4 h weekends |
-| Max deep work (Thesis + Courses) per day | 6 h |
+| Max deep work (areas marked deep work, Work by default) per day | 6 h |
 | Max time on one task per day (big tasks spread over days) | 3 h |
 | Longest block | 3 h |
 | Gaps | 30 min after deep work and around training, 15 min otherwise |
@@ -77,25 +77,23 @@ Each area can have several preferred windows, tried in order, then its allowed w
 
 | Category | Tried first (preferred) | Allowed (hard window) | Shortest new block |
 |---|---|---|---|
-| Thesis | 08:00–12:30 | 08:00–19:00 | 60 min |
-| Courses | 13:30–17:30 | 08:00–20:00 | 45 min |
-| Outside work | 14:00–19:00 | 08:00–21:00 | 30 min |
+| Work | 08:00–12:30 | 08:00–19:00 | 45 min |
 | Personal | 17:00–20:00 | 09:00–20:00 | 30 min (small tasks batch into one block) |
 | Training | 18:00–21:00, then 07:00–09:00 | 07:00–21:30 | 30 min |
 
 ### Placement order for each day, per task
-1. Your existing calendar blocks with matching titles ("Thesis Deep Work", "Outside Work", "Course Consolidation").
+1. Your existing calendar blocks with matching titles (the container titles you list per area in Settings, for example "Focus time").
 2. Free room in blocks already planned for that category.
 3. Growing a planned block (end only, up to 3 h).
 4. A new block in each preferred window in turn, then anywhere in the hard window.
-The next day is tried only after all of that fails, subject to the daily, deep-work, per-task and weekly caps (Outside work ≤ 12 h/week).
+The next day is tried only after all of that fails, subject to the daily, deep-work, per-task and weekly caps (an area's own weekly maximum, if you set one).
 
 ### Training and budgets
-- Training is an ordinary area: its tasks (under the headings mapped to Training, typically with a `repeat:` rule) get the same scoring, windows, grid hours, warnings and Re-plan options as everything else. It fills your Sports events ("Sport", "Running") like any container, and a new single-session block is named after the session. Differences: it's placed before breaks (dinner floats around it), a session is never split ("Keep tasks whole" in Settings → Areas, on for Training), a gap around it, and it doesn't count toward (or use up) the daily work cap.
+- Training is an ordinary area: its tasks (under the headings mapped to Training, typically with a `repeat:` rule) get the same scoring, windows, grid hours, warnings and Re-plan options as everything else. It fills the container events you name for it (for example "Sport") like any area, and a new single-session block is named after the session. Differences: it's placed before breaks (dinner floats around it), a session is never split ("Keep tasks whole" in Settings → Areas, on for Training), a gap around it, and it doesn't count toward (or use up) the daily work cap.
 - Repeating tasks are planned by their rule: weekday rules (`repeat:mon`, `repeat:3w:sun`) **on** their due day; interval rules (`repeat:weekly`, `repeat:3d`) anywhere in the period ending on the due date.
 - **Postponed** tasks (`postpone:2026-11-20`, the 🌙 chip) aren't planned before that date; from then on they're ranked as usual.
 - **Habits** (`3x/week`) become that many sessions per week, minus sessions already logged this week: each due at the end of its week, not before its slot (spread over the days left), one per day, each kept whole. Weeks cut off by the 14-day horizon only get the sessions inside it.
-- Weekly minimums: Thesis gets reserved blocks until 18 h/week (logged + planned) is reached.
+- Weekly minimums: an area with a weekly minimum and **reserve** switched on gets reserved blocks until the minimum (logged + planned) is reached.
 - Warnings: overdue, deadline at risk, stale, doesn't fit in 14 days, budget behind/over, calendar conflict.
 
 **Calendar connection:** macOS Calendar by default (EventKit via the bundled `native/calendar-helper`; your Google calendars come through System Settings → Internet Accounts; no Cloud project). Google Calendar API directly is the alternative (Settings → Calendar). Planner events are tagged (macOS: `[planner:<id>]` in the notes; Google: a hidden property); untagged events are never changed. Protected calendars (the ones you list in Settings → Calendar, e.g. Birthdays or a class timetable) are never written.

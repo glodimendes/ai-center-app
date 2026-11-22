@@ -8,7 +8,7 @@ const now = new Date(2026, 10, 9, 7, 0)
 const calendars: CalendarInfo[] = [
   { id: 'study', name: 'Study Schedule', color: '#00f', writable: true },
   { id: 'sports', name: 'Sports', color: '#f00', writable: true },
-  { id: 'eth', name: 'ETH Classes HS26', color: '#888', writable: false }
+  { id: 'classes', name: 'School Classes', color: '#888', writable: false }
 ]
 const block = (id: string, start: string, end: string, extra: Partial<Block> = {}): Block => ({
   id,
@@ -78,7 +78,7 @@ describe('buildSyncDiff', () => {
   })
 
   it('reports unknown or read-only calendars instead of writing', () => {
-    const r = diff([block('a', '2026-11-09T09:00:00', '2026-11-09T10:00:00', { calendarName: 'ETH Classes HS26' })], [])
+    const r = diff([block('a', '2026-11-09T09:00:00', '2026-11-09T10:00:00', { calendarName: 'School Classes' })], [])
     expect(r.ops).toEqual([])
     expect(r.problems[0]).toMatch(/protected|read-only/)
   })

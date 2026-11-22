@@ -5,7 +5,7 @@ Open decisions, next steps and known limits. Last revised 2026-11-22. For how th
 ## Open-source readiness: what is left
 
 - **License:** none chosen yet. The maintainer decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
-- **Personal sample data:** `tests/` (sample todos, preferences and a few scheduler and context tests) and the examples in `docs/planner.md` still use one person's project and area names. Replace them with neutral ones.
+- **Personal sample data:** done (2026-11-22): the test samples, the tests that named projects, calendars and accounts, and the examples in `docs/planner.md` use neutral names, and the planner doc now states the real shipped defaults. The earlier versions remain in the public git history. Local copies of real files for extra checks go in `tests/fixtures/` (gitignored); keep any such file out of commits.
 - **Done:** all commits use the GitHub noreply address (history rewritten and force-pushed 2026-11-22); planner defaults are neutral (Work / Personal / Training, placeholder calendar "Planner"); the README is written for a public audience and the planner reference moved to `docs/planner.md`; no hard-coded vault path (first run creates a starter vault, the setup dialog lets users pick a folder); generic sample agents; `docs/agents.md`; `CONTRIBUTING.md`.
 - **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.
 
@@ -19,15 +19,17 @@ Open decisions, next steps and known limits. Last revised 2026-11-22. For how th
 - folder names are spread over the code (`vault/service.ts`, `vault/starter.ts`, prompts) and the rules live partly in code, partly in a user's own notes.
 
 **Proposed scope** (to be refined with the maintainer before building):
-1. **One layout spec.** Define the vault layout once (folders, which files the app owns, which the user owns, naming) in a single module used by the starter, the Docs groups, the prompts and the docs, and document it for users.
+1. **One layout spec, without numbered prefixes.** Define the vault layout once as roles (tasks, projects, context, rules, agents and prompts) with a folder name each, in a single module used by the starter, the Docs groups, the prompts and the docs, and document it for users. New vaults get plain names (provisionally `tasks/`, `projects/`, `context/`, `rules/`, `prompts/agents/`); the numbered folders in use today (`05_Tasks`, `06_Prompts`, …) are an old convention, not a requirement. Existing vaults keep working unchanged: the layout is detected or mapped per vault, and renaming is offered, never forced. Which files the app owns versus the user is part of the spec (see `AGENTS.md` rule 3).
 2. **Ship the rules with the starter vault.** Generic `context-maintenance.md` and `assistant-file-update-rules.md` (what an AI may edit, what needs confirmation), a `current-priorities.md` template, and a `00_START_HERE.md` that explains the layout. Update context must work on a fresh vault with no errors.
-3. **A real first-run flow.** Choose a folder (new starter or existing); when adopting an existing vault, detect missing framework pieces and offer to add them (never overwrite, line-local edits only); then areas, calendar, AI engines and optional sample agents, ending in a short checklist (calendar connected, engine found, areas set, first sync done).
+3. **A real first-run flow.** Choose a folder (new starter or existing); when adopting an existing vault, detect missing framework pieces and offer to add them (never overwrite, line-local edits only); then areas, calendar, AI engines and optional sample agents. A short dialog covers the essentials (folder, calendar, AI tools); a checklist card on Home (calendar connected, engine found, areas set, first sync done, first agent) stays until everything is done or dismissed.
 4. **Rules enforced, not just written.** Surface the hard rules the code already enforces (approvals for outside effects, line-local edits, protected calendars, AI diffs reviewed) in the setup and in Settings, so users know what the framework guarantees.
 5. **Adjustable.** Folder names and key file paths are settings (there is already `settings.agentsDir`), so users with an existing vault map their own layout instead of renaming it.
 6. **Updatable.** Version the shipped rules and templates; when the app ships newer ones, offer a diff to adopt, never an overwrite. An optional "Check setup" report lists missing or mismatched pieces.
 7. **Tests.** The starter vault contains every piece the app expects; a fresh vault passes the setup check; Update context runs against it.
 
-Open questions: how opinionated the default layout should be versus mapping to the user's own; whether the rules files are plain Markdown the user edits or app-managed with a diff; whether the first-run flow is a dialog, a checklist view, or both.
+**Decided (2026-11-22):** an opinionated default layout with no numbering, plus mapping for existing vaults; the rules files are plain Markdown in the vault with versioned templates and a diff to adopt updates (the hard safety rules stay enforced in code either way); first run is a dialog followed by a checklist on Home.
+
+**Still open:** the exact folder names; where a vault's layout choice is stored (app settings, or a small file inside the vault so it travels with it); and whether and how to offer migrating an existing numbered vault.
 
 ## Open decisions
 

@@ -10,7 +10,7 @@ Synthetic sample with the same shape as the real file. No real data.
 
 - Build a small personal project for the portfolio.
 
-- Cybathlon.
+- A community hackathon.
 
 ## 2026-09-14
 

@@ -82,7 +82,7 @@ describe('plan', () => {
 
   it('splits a long task into chunks and never overlaps busy events', () => {
     const t = task('Big', 'thesis', { estimateMin: 600 })
-    const lecture = ev('RTAI Lecture', 'ETH Classes HS26', '2026-11-09T10:00:00', '2026-11-09T12:00:00')
+    const lecture = ev('Course B Lecture', 'School Classes', '2026-11-09T10:00:00', '2026-11-09T12:00:00')
     const p = plan({ tasks: [t], events: [lecture], prefs, weeks: {}, now })
     expect(minsIn(p.blocks, t.id)).toBe(600)
     for (const b of p.blocks) {
@@ -515,7 +515,7 @@ describe('preferred windows', () => {
 
 describe('busy / free events', () => {
   // A long Monday event: busy → no work may overlap it; free → the planner schedules over it.
-  const long = (extra: Partial<CalEvent> = {}) => ev('Hackathon', 'ETH Classes HS26', '2026-11-09T07:00:00', '2026-11-09T20:00:00', extra)
+  const long = (extra: Partial<CalEvent> = {}) => ev('Hackathon', 'School Classes', '2026-11-09T07:00:00', '2026-11-09T20:00:00', extra)
   const overlapsEvent = (p: ReturnType<typeof plan>, e: CalEvent) =>
     p.blocks.some((b) => b.kind !== 'break' && new Date(b.start).getTime() < new Date(e.end).getTime() && new Date(b.end).getTime() > new Date(e.start).getTime())
   const run = (e: CalEvent, extra: Partial<Parameters<typeof plan>[0]> = {}) =>
@@ -642,7 +642,7 @@ describe('day rules', () => {
   })
 
   it('"pick" takes the lightest candidate day, and a weekly choice overrides it', () => {
-    const busyDays = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-13'].map((d) => ev('Class', 'ETH Classes', `${d}T09:00:00`, `${d}T11:00:00`))
+    const busyDays = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-13'].map((d) => ev('Class', 'School Classes', `${d}T09:00:00`, `${d}T11:00:00`))
     const rule = halfDay({ when: 'pick', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'] })
     const p = plan({ tasks: lots(), events: busyDays, prefs: { ...prefs, dayRules: [rule] }, weeks: {}, now })
     expect(p.ruleDays?.filter((r) => r.day < '2026-11-16').map((r) => r.day)).toEqual(['2026-11-12'])
@@ -716,17 +716,17 @@ describe('plan with a wish', () => {
   })
 
   it('turns a focus on a heading into pinned time for that heading\'s tasks only, around calendar events', () => {
-    const headings = ['BRASA', 'TAMANDUÁ (EDUCATION PROJECT)', 'Work › Mentoria']
-    const w = sanitizeWish({ summary: 'Tamanduá morning', focus: [{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'tamanduá' }, { date: '2026-11-10', from: '09:00', to: '08:00', heading: 'BRASA' }] }, prefs, at, headings)
-    expect(w.focus).toEqual([{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'TAMANDUÁ (EDUCATION PROJECT)' }])
-    const t1 = task('Lançar o MVP', 'outside', { section: ['TAMANDUÁ (EDUCATION PROJECT)'], estimateMin: 120, due: '2026-11-20' })
-    const t2 = task('Write the onboarding guide', 'outside', { section: ['TAMANDUÁ (EDUCATION PROJECT)'], estimateMin: 60 })
-    const other = task('Email a partner', 'outside', { section: ['BRASA'], estimateMin: 60 })
+    const headings = ['COMMUNITY', 'SIDE PROJECT (LAUNCH)', 'Work › Mentoring']
+    const w = sanitizeWish({ summary: 'Side project morning', focus: [{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'side project' }, { date: '2026-11-10', from: '09:00', to: '08:00', heading: 'COMMUNITY' }] }, prefs, at, headings)
+    expect(w.focus).toEqual([{ date: '2026-11-10', from: '08:00', to: '12:30', heading: 'SIDE PROJECT (LAUNCH)' }])
+    const t1 = task('Launch the MVP', 'outside', { section: ['SIDE PROJECT (LAUNCH)'], estimateMin: 120, due: '2026-11-20' })
+    const t2 = task('Write the onboarding guide', 'outside', { section: ['SIDE PROJECT (LAUNCH)'], estimateMin: 60 })
+    const other = task('Email a partner', 'outside', { section: ['COMMUNITY'], estimateMin: 60 })
     const busy = [{ s: new Date(2026, 10, 10, 10, 0).getTime(), e: new Date(2026, 10, 10, 11, 0).getTime() }]
     const pins = focusPins(w, [other, t2, t1], busy, 's')
     expect(pins.map((p) => [p.start.slice(11, 16), p.end.slice(11, 16), p.title])).toEqual([
-      ['08:00', '10:00', 'TAMANDUÁ (EDUCATION PROJECT)'],
-      ['11:00', '12:30', 'TAMANDUÁ (EDUCATION PROJECT)']
+      ['08:00', '10:00', 'SIDE PROJECT (LAUNCH)'],
+      ['11:00', '12:30', 'SIDE PROJECT (LAUNCH)']
     ])
     expect(pins[0].taskIds).toEqual([t1.id, t2.id])
     const p = plan({ tasks: [other, t1, t2], events: [], prefs, weeks: weeksWithWish({}, w, prefs, 's', pins), now: at })

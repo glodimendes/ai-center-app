@@ -39,8 +39,8 @@ export const TEST_PREFERENCES: Preferences = {
   ],
   horizonDays: 14,
   syncDays: 7,
-  ignoreCalendars: ['Holidays in Switzerland', 'Feriados no Brasil'],
-  protectedCalendars: ['Birthdays', 'ETH Classes', 'ETH Tests', 'Family'],
+  ignoreCalendars: ['Public holidays', 'Regional holidays'],
+  protectedCalendars: ['Birthdays', 'School Classes', 'School Exams', 'Family'],
   categories: [
     {
       key: 'thesis',
@@ -62,7 +62,7 @@ export const TEST_PREFERENCES: Preferences = {
     {
       key: 'courses',
       label: 'Courses',
-      headings: ['AI in Education', 'RTAI', 'DMS'],
+      headings: ['Course A', 'Course B', 'Databases'],
       calendar: 'Study Schedule',
       containers: ['Course Consolidation'],
       defaultEstimateMinutes: 60,
@@ -78,7 +78,7 @@ export const TEST_PREFERENCES: Preferences = {
     {
       key: 'outside',
       label: 'Outside work',
-      headings: ['Work', 'Mentoria', 'BRASA', 'Tamanduá', 'Masters'],
+      headings: ['Work', 'Mentoring', 'Community', 'Side project', 'Future studies'],
       calendar: 'Study Schedule',
       containers: ['Outside Work'],
       defaultEstimateMinutes: 30,

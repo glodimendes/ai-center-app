@@ -3,7 +3,7 @@ import { addInboxItem, removeInboxItem } from '../electron/main/vault/edits'
 import { parseInbox } from '../electron/main/vault/parser'
 
 const FILE = '05_Tasks/braindump-inbox.md'
-const base = '# Braindump\n\n## 2026-11-10\n\n- Look into Hyrox Zurich race dates\n\n## Routing Notes\n\n- Portfolio ideas go to projects.\n'
+const base = '# Braindump\n\n## 2026-11-10\n\n- Look into local race dates\n\n## Routing Notes\n\n- Portfolio ideas go to projects.\n'
 
 describe('inbox', () => {
   it('removing the last item under a date drops the empty heading too', () => {
@@ -13,7 +13,7 @@ describe('inbox', () => {
   })
 
   it('keeps the heading while other items remain under it', () => {
-    const two = base.replace('- Look into Hyrox Zurich race dates\n', '- Look into Hyrox Zurich race dates\n- Book physio\n')
+    const two = base.replace('- Look into local race dates\n', '- Look into local race dates\n- Book physio\n')
     const item = parseInbox(two, FILE).find((i) => i.text.includes('Book physio'))!
     expect(removeInboxItem(two, FILE, item.id)).toBe(base)
   })

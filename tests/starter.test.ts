@@ -15,7 +15,7 @@ describe('starter vault', () => {
     expect(tasks.length).toBeGreaterThanOrEqual(3)
     // the shipped defaults know the starter headings and nothing personal
     expect(tasks.map((t) => t.category).sort()).toEqual(['personal', 'work', 'work'])
-    expect(JSON.stringify(DEFAULT_PREFERENCES)).not.toMatch(/ETH|Study Schedule|BRASA|Switzerland/)
+    expect(JSON.stringify(DEFAULT_PREFERENCES)).not.toMatch(/Study Schedule|Thesis|Courses|Outside work/)
     expect(tasks.find((t) => t.estimateMin === 120)).toBeTruthy()
     expect(tasks.find((t) => t.due === '2026-12-31')).toBeTruthy()
     writeFileSync(join(root, '05_Tasks/daily-todos.md'), '# mine\n')

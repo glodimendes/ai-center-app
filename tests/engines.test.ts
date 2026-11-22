@@ -82,7 +82,7 @@ describe('account profiles', () => {
     expect(profileEnv(findProfile('claude')).CLAUDE_CONFIG_DIR).toBe(process.env.CLAUDE_CONFIG_DIR)
   })
   it('a configDir points Claude at CLAUDE_CONFIG_DIR and Codex at CODEX_HOME', () => {
-    expect(profileEnv({ id: 'eth', engine: 'claude', label: 'ETH', configDir: '/h/.claude-eth' }).CLAUDE_CONFIG_DIR).toBe('/h/.claude-eth')
+    expect(profileEnv({ id: 'second', engine: 'claude', label: 'Second', configDir: '/h/.claude-second' }).CLAUDE_CONFIG_DIR).toBe('/h/.claude-second')
     expect(profileEnv({ id: 'c', engine: 'codex', label: 'C', configDir: '/h/.codex' }).CODEX_HOME).toBe('/h/.codex')
   })
   it('an unknown profile id is an error', () => {

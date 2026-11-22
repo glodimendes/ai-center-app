@@ -27,14 +27,14 @@ const diffLines = (a: string, b: string) => {
 describe('tokens', () => {
   it('parses the existing deadline styles', () => {
     expect(parseTokens('Implement load.py by 31/10', today)).toMatchObject({ title: 'Implement load.py', due: '2026-10-31', dueStyle: 'by-slash' })
-    expect(parseTokens('Fazer o cadastro da Data Annotation by 05.11', today)).toMatchObject({ due: '2026-11-05', dueStyle: 'by-dot' })
-    expect(parseTokens('Email pro Swissnext - by 30.10', today)).toMatchObject({ title: 'Email pro Swissnext', due: '2026-10-30' })
-    expect(parseTokens('Anotar paper 1 by 01/09', today).due).toBe('2026-09-01')
+    expect(parseTokens('Fill in the registration form by 05.11', today)).toMatchObject({ due: '2026-11-05', dueStyle: 'by-dot' })
+    expect(parseTokens('Email the partner - by 30.10', today)).toMatchObject({ title: 'Email the partner', due: '2026-10-30' })
+    expect(parseTokens('Summarise paper 1 by 01/09', today).due).toBe('2026-09-01')
   })
 
   it('parses estimate, iso due and priority', () => {
-    expect(parseTokens('Apply to UBS ~1h30m due:2026-11-15 !high', today)).toEqual({
-      title: 'Apply to UBS', estimateMin: 90, due: '2026-11-15', dueStyle: 'iso', priority: 'high'
+    expect(parseTokens('Apply to Acme Corp ~1h30m due:2026-11-15 !high', today)).toEqual({
+      title: 'Apply to Acme Corp', estimateMin: 90, due: '2026-11-15', dueStyle: 'iso', priority: 'high'
     })
     expect(parseTokens('Read ~45m', today).estimateMin).toBe(45)
     expect(parseTokens('Read ~1.5h', today).estimateMin).toBe(90)
@@ -64,14 +64,14 @@ describe('parseTasks on a daily-todos.md', () => {
 
   it('maps headings to categories', () => {
     const t = tasks.find((t) => t.title.startsWith('Implement `parser.py`'))!
-    expect(t.section).toEqual(['ETH', 'Thesis'])
+    expect(t.section).toEqual(['School', 'Thesis'])
     expect(t.category).toBe('thesis')
     expect(t.due).toBe('2026-10-31')
-    expect(tasks.find((t) => t.title.startsWith('Revisar matemática do método'))!.category).toBe('courses')
+    expect(tasks.find((t) => t.title.startsWith('Réviser les mathématiques'))!.category).toBe('courses')
     expect(tasks.find((t) => t.title.startsWith('Apply to Example Corp'))!.category).toBe('outside')
     expect(tasks.find((t) => t.title.startsWith('schedule dentist'))!.category).toBe('personal')
-    expect(tasks.find((t) => t.title.startsWith('Revisar a documentação do projeto'))!.category).toBe('outside')
-    expect(sections.some((s) => s.path.join('>') === 'ETH>Thesis')).toBe(true)
+    expect(tasks.find((t) => t.title.startsWith('Review the project documentation'))!.category).toBe('outside')
+    expect(sections.some((s) => s.path.join('>') === 'School>Thesis')).toBe(true)
   })
 
   it('nests subtasks', () => {
@@ -105,18 +105,18 @@ describe.skipIf(!existsSync(realTodos))('the real daily-todos.md copy (local onl
 
 describe('edits are line-local', () => {
   const { tasks } = parseTasks(todos, FILE, cats, today)
-  const target = tasks.find((t) => t.title.startsWith('Treinar SQL'))!
+  const target = tasks.find((t) => t.title.startsWith('Practise SQL'))!
 
   it('toggling done changes exactly one line', () => {
     const out = patchTask(todos, FILE, target.id, { done: true }, cats, today)
     expect(diffLines(todos, out)).toEqual([target.line])
-    expect(out.split('\n')[target.line]).toBe('- [x] Treinar SQL')
+    expect(out.split('\n')[target.line]).toBe('- [x] Practise SQL')
   })
 
   it('adding an estimate changes exactly one line', () => {
     const out = patchTask(todos, FILE, target.id, { estimateMin: 60 }, cats, today)
     expect(diffLines(todos, out)).toEqual([target.line])
-    expect(out.split('\n')[target.line]).toBe('- [ ] Treinar SQL ~1h')
+    expect(out.split('\n')[target.line]).toBe('- [ ] Practise SQL ~1h')
   })
 
   it('finds the task after unrelated lines shift', () => {
@@ -126,10 +126,10 @@ describe('edits are line-local', () => {
   })
 
   it('inserts into a section after its last item', () => {
-    const out = insertTask(todos, ['ETH', 'DMS'], 'Watch lecture 8 ~1h')
+    const out = insertTask(todos, ['School', 'Databases'], 'Watch lecture 8 ~1h')
     const lines = out.split('\n')
     const idx = lines.indexOf('- [ ] Watch lecture 8 ~1h')
-    expect(lines[idx - 1]).toContain('Treinar SQL')
+    expect(lines[idx - 1]).toContain('Practise SQL')
     expect(out.split('\n').length).toBe(todos.split('\n').length + 1)
   })
 
@@ -141,7 +141,7 @@ describe('edits are line-local', () => {
 })
 
 describe('subtasks', () => {
-  const md = ['# Todos', '', '## ETH', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
+  const md = ['# Todos', '', '## School', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
   const parse = (t: string) => parseTasks(t, FILE, cats, today).tasks
   const byTitle = (t: string, title: string) => parse(t).find((x) => x.title === title)!
 
@@ -154,9 +154,9 @@ describe('subtasks', () => {
   })
 
   it('un-nests after the parent subtree, so later siblings keep their parent', () => {
-    const two = ['## ETH', '- [ ] P', '\t- [ ] X', '\t- [ ] Y', '- [ ] Q'].join('\n')
+    const two = ['## School', '- [ ] P', '\t- [ ] X', '\t- [ ] Y', '- [ ] Q'].join('\n')
     const out = indentTask(two, FILE, byTitle(two, 'X').id, 'out', cats, today)
-    expect(out.split('\n')).toEqual(['## ETH', '- [ ] P', '\t- [ ] Y', '- [ ] X', '- [ ] Q'])
+    expect(out.split('\n')).toEqual(['## School', '- [ ] P', '\t- [ ] Y', '- [ ] X', '- [ ] Q'])
     expect(byTitle(out, 'Y').parentId).toBe(byTitle(out, 'P').id)
   })
 
@@ -174,7 +174,7 @@ describe('subtasks', () => {
   })
 
   it('subtasks take the parent\'s deadline and timing unless they set their own; editing one never writes them', () => {
-    const tree = ['## ETH', '- [ ] P due:2026-11-20 @spread', '\t- [ ] P1 ~1h', '\t\t- [ ] P1a', '\t- [ ] P2 due:2026-11-15 @asap', '\t- [ ] P3 repeat:weekly', '- [ ] Q'].join('\n')
+    const tree = ['## School', '- [ ] P due:2026-11-20 @spread', '\t- [ ] P1 ~1h', '\t\t- [ ] P1a', '\t- [ ] P2 due:2026-11-15 @asap', '\t- [ ] P3 repeat:weekly', '- [ ] Q'].join('\n')
     expect(byTitle(tree, 'P1')).toMatchObject({ due: '2026-11-20', timing: 'spread', dueFromParent: true, timingFromParent: true })
     expect(byTitle(tree, 'P1a')).toMatchObject({ due: '2026-11-20', timing: 'spread', dueFromParent: true })
     expect(byTitle(tree, 'P2')).toMatchObject({ due: '2026-11-15', timing: 'asap' })
@@ -187,7 +187,7 @@ describe('subtasks', () => {
 })
 
 describe('reordering', () => {
-  const md = ['# Todos', '', '## ETH', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
+  const md = ['# Todos', '', '## School', '', '### Thesis', '- [ ] A', '- [ ] B ~1h', '\t- [ ] B1', '- [ ] C', '', '## Other', '- [ ] D', ''].join('\n')
   const parse = (t: string) => parseTasks(t, FILE, cats, today).tasks
   const byTitle = (t: string, title: string) => parse(t).find((x) => x.title === title)!
 
@@ -222,15 +222,15 @@ describe('habit token', () => {
 })
 
 describe('takeDone (weekly review tidy)', () => {
-  const md = ['## ETH', '### Thesis', '- [x] A', '- [ ] B', '\t- [x] B1', '\t- [ ] B2', '- [x] C', '\t- [x] C1', '- [x] D', '\t- [ ] D1', '', '## Other', '- [x] E', ''].join('\n')
+  const md = ['## School', '### Thesis', '- [x] A', '- [ ] B', '\t- [x] B1', '\t- [ ] B2', '- [x] C', '\t- [x] C1', '- [x] D', '\t- [ ] D1', '', '## Other', '- [x] E', ''].join('\n')
 
   it('takes fully done subtrees, and done subtasks of open parents, and nothing else', () => {
     const { text, taken } = takeDone(md, FILE, cats, today)
-    expect(text.split('\n')).toEqual(['## ETH', '### Thesis', '- [ ] B', '\t- [ ] B2', '- [x] D', '\t- [ ] D1', '', '## Other', ''])
+    expect(text.split('\n')).toEqual(['## School', '### Thesis', '- [ ] B', '\t- [ ] B2', '- [x] D', '\t- [ ] D1', '', '## Other', ''])
     expect(taken).toEqual([
-      { section: ['ETH', 'Thesis'], lines: ['- [x] A'] },
-      { section: ['ETH', 'Thesis'], lines: ['- [x] B1'] },
-      { section: ['ETH', 'Thesis'], lines: ['- [x] C', '\t- [x] C1'] },
+      { section: ['School', 'Thesis'], lines: ['- [x] A'] },
+      { section: ['School', 'Thesis'], lines: ['- [x] B1'] },
+      { section: ['School', 'Thesis'], lines: ['- [x] C', '\t- [x] C1'] },
       { section: ['Other'], lines: ['- [x] E'] }
     ])
   })
@@ -244,14 +244,14 @@ describe('takeDone (weekly review tidy)', () => {
 describe('inbox', () => {
   it('parses dated items and ignores routing notes', () => {
     const items = parseInbox(inbox, '05_Tasks/braindump-inbox.md')
-    expect(items.map((i) => i.text)).toContain('Cybathlon.')
+    expect(items.map((i) => i.text)).toContain('A community hackathon.')
     expect(items.some((i) => i.text.includes('Portfolio and internship ideas'))).toBe(false)
   })
 
   it('adds a new dated section before routing notes', () => {
-    const out = addInboxItem(inbox, 'Look into Hyrox Zurich', today)
+    const out = addInboxItem(inbox, 'Look into a local 10k race', today)
     const items = parseInbox(out, 'x')
-    expect(items.find((i) => i.text === 'Look into Hyrox Zurich')?.date).toBe('2026-11-08')
+    expect(items.find((i) => i.text === 'Look into a local 10k race')?.date).toBe('2026-11-08')
     expect(out.indexOf('## 2026-11-08')).toBeLessThan(out.indexOf('## Routing Notes'))
   })
 })
@@ -320,7 +320,7 @@ describe('repeating tasks', () => {
   })
 
   it('unchecking right after checking off restores the file', () => {
-    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu postpone:2026-11-09\n- [ ] Other\n'
+    const text = '## Personal\n\n- [ ] Strength session A due:2026-11-09 repeat:mon,thu postpone:2026-11-09\n- [ ] Other\n'
     const t = parseTasks(text, FILE, cats, mon).tasks[0]
     const done = patchTask(text, FILE, t.id, { done: true }, cats, mon)
     expect(patchTask(done, FILE, t.id, { done: false }, cats, mon)).toBe(text)
@@ -343,11 +343,11 @@ describe('repeating tasks', () => {
 
   // Today's trash skips one occurrence instead of deleting the line (Controller.skipOccurrence).
   it('skipping one occurrence moves the due date on and keeps the series', () => {
-    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
+    const text = '## Personal\n\n- [ ] Strength session A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
     const before = parseTasks(text, FILE, cats, mon).tasks[0]
     const next = nextOccurrence(before.repeat!, before.due, mon)!
     const out = patchTask(text, FILE, before.id, { due: next, postponed: null }, cats, mon)
-    expect(out.split('\n')[2]).toBe('- [ ] Treino Push A due:2026-11-12 repeat:mon,thu')
+    expect(out.split('\n')[2]).toBe('- [ ] Strength session A due:2026-11-12 repeat:mon,thu')
     // Same number of lines: nothing deleted, no second copy of the task.
     expect(out.split('\n').length).toBe(text.split('\n').length)
     const after = parseTasks(out, FILE, cats, mon).tasks
@@ -364,10 +364,10 @@ describe('repeating tasks', () => {
 
   // Why Today must not call deleteTask on a repeating task: it takes the whole series with it.
   it('deleting a repeating task removes the series', () => {
-    const text = '## Personal\n\n- [ ] Treino Push A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
+    const text = '## Personal\n\n- [ ] Strength session A due:2026-11-09 repeat:mon,thu\n- [ ] Other\n'
     const t = parseTasks(text, FILE, cats, mon).tasks[0]
     const out = deleteTask(text, FILE, t.id, cats, mon)
-    expect(out).not.toContain('Treino Push A')
+    expect(out).not.toContain('Strength session A')
     expect(parseTasks(out, FILE, cats, mon).tasks).toHaveLength(1)
   })
 

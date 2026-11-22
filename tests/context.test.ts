@@ -5,24 +5,24 @@ const doc = (...lines: string[]) => lines.join('\n') + '\n'
 
 describe('revertEdits (Update context undo)', () => {
   const before = doc('# Priorities', '', '- Thesis', '- Courses', '', 'Last updated: 2026-11-01')
-  const after = doc('# Priorities', '', '- Thesis', '- Courses', '- BRASA webinar', '', 'Last updated: 2026-11-11')
+  const after = doc('# Priorities', '', '- Thesis', '- Courses', '- Community webinar', '', 'Last updated: 2026-11-11')
 
   it('restores the file when nothing else changed it', () => {
     expect(revertEdits(before, after, after)).toBe(before)
   })
 
   it('keeps edits made elsewhere in the file after the run', () => {
-    const current = after.replace('# Priorities', '# Priorities (HS26)')
-    expect(revertEdits(before, after, current)).toBe(before.replace('# Priorities', '# Priorities (HS26)'))
+    const current = after.replace('# Priorities', '# Priorities (Autumn)')
+    expect(revertEdits(before, after, current)).toBe(before.replace('# Priorities', '# Priorities (Autumn)'))
   })
 
   it('keeps lines added after the run next to the agent edit', () => {
-    const current = after.replace('- BRASA webinar\n', '- BRASA webinar\n- Mentoring\n')
+    const current = after.replace('- Community webinar\n', '- Community webinar\n- Mentoring\n')
     expect(revertEdits(before, after, current)).toBe(before.replace('- Courses\n', '- Courses\n- Mentoring\n'))
   })
 
   it('gives up when the agent line itself was edited since', () => {
-    const current = after.replace('- BRASA webinar', '- BRASA webinar (moved to Friday)')
+    const current = after.replace('- Community webinar', '- Community webinar (moved to Friday)')
     expect(revertEdits(before, after, current)).toBeNull()
   })
 
