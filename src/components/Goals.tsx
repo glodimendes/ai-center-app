@@ -58,6 +58,7 @@ export function Goals() {
                   {s.delegations.map((d, i) => (
                     <div key={i}>
                       <div>
+                        {d.from && <span className="text-muted">{name(d.from)} asked </span>}
                         <b>{name(d.agent)}</b> <span className={d.status === 'error' ? 'text-danger' : d.status === 'done' ? 'text-ok' : 'text-muted'}>{d.status}</span>
                       </div>
                       <div className="text-muted">Asked: {d.message}</div>

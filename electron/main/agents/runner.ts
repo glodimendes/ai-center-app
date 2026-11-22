@@ -1,4 +1,4 @@
-import { join, relative } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import type { AgentDef } from './definition'
 import type { HandoffPacket, Limits } from '@shared/agents'
 import { ENGINES, EngineTimeout, failureMessage, runEngine, type Usage } from './engines'
@@ -41,9 +41,10 @@ export function renderPacket(p: HandoffPacket, fromName: string): string {
 }
 
 /** A resumed chat turn is just the user's message: the CLI already holds the instructions and earlier turns. */
-export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = ''): string {
+export function buildPrompt(def: AgentDef, input: string, date: string, sources = '', resumed = false, handoff = '', where?: { cwd: string; vault: string }): string {
   if (resumed) return input.trim()
   const parts = [def.instructions, `Today is ${date}.`]
+  if (where && where.cwd !== where.vault) parts.push(`You work in ${where.cwd}. The user's vault (their notes, tasks and projects) is at ${where.vault}: read it there when you need it.`)
   if (sources) parts.push(sources)
   if (input.trim()) parts.push(`The user's input for this run:\n"""\n${input.trim()}\n"""`)
   if (def.permission === 'read') parts.push('You can only read files; you cannot change anything. Answer in plain text.')
@@ -68,22 +69,42 @@ export interface RunContext {
   handoff?: string
   /** Continue (or start) a chat conversation for this agent. */
   session?: { id: string; resume: boolean }
+  /** Where the agent works (see resolveCwd). Unset = the vault. */
+  cwd?: string
+}
+
+/**
+ * The folder an agent works in: the conversation's own folder, else the agent's `workdir` (vault-relative or absolute),
+ * else its own empty workspace under the app's data folder. The vault is always added next to it (see vaultDirs).
+ */
+export function resolveCwd(def: Pick<AgentDef, 'id' | 'workdir'>, o: { vaultRoot: string; workspaces: string; chatFolder?: string }): string {
+  const pick = o.chatFolder || def.workdir
+  if (pick) return isAbsolute(pick) ? pick : join(o.vaultRoot, pick)
+  return join(o.workspaces, def.id)
+}
+
+/** The vault as an extra folder, unless the agent already works inside it. */
+export function vaultDirs(cwd: string, vaultRoot: string): string[] {
+  const rel = relative(vaultRoot, cwd)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)) ? [] : [vaultRoot]
 }
 
 /** Runs one agent definition through its engine, with the permission mapped to flags. Returns the final text. */
 export async function runAgentDef(def: AgentDef, input: string, ctx: RunContext): Promise<{ text: string; usage?: Usage; sessionId?: string }> {
   const profile = findProfile(def.profile, ctx.profiles)
-  const cwd = def.workdir ? join(ctx.vaultRoot, def.workdir) : ctx.vaultRoot
+  const cwd = ctx.cwd ?? ctx.vaultRoot
   const rel = (p: string) => (p ? relative(ctx.vaultRoot, p) || p : '')
   const timeoutMs = ctx.timeoutMs ?? 6 * 60_000
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: engineMode(def.permission),
-    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff),
+    prompt: buildPrompt(def, input, ctx.date, ctx.sources, ctx.session?.resume, ctx.handoff, { cwd, vault: ctx.vaultRoot }),
     session: ctx.session,
     model: def.model,
     effort: def.effort,
     cwd,
+    addDirs: vaultDirs(cwd, ctx.vaultRoot),
+    purpose: `agent:${def.id}`,
     timeoutMs,
     onEvent: (ev) => {
       if (ev.type === 'tool') ctx.onProgress(`${ev.name} ${['Read', 'Edit', 'Write'].includes(ev.name) ? rel(ev.target) : ev.target}`.trim())

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Loader2, MessageSquarePlus, Sparkles, Square } from 'lucide-react'
+import { ArrowUp, Folder, Loader2, MessageSquarePlus, Sparkles, Square } from 'lucide-react'
 import type { Action, AgentDef, ChatMessage, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
@@ -30,6 +30,7 @@ export function Chat() {
   const agent = isCentral ? undefined : agents.find((g) => g.id === target)
   const key = isCentral ? CENTRAL : (agent?.id ?? CENTRAL)
   const messages = a.chats[key] ?? []
+  const folder = a.chatFolders[key]
 
   const drafts = useStore((st) => st.drafts)
   const origins = useStore((st) => st.origins)
@@ -126,6 +127,26 @@ export function Chat() {
             <h1 className="text-[15px] font-semibold truncate">{title}</h1>
             {subtitle && <div className="text-[12px] text-muted truncate">{subtitle}</div>}
           </div>
+          {!isCentral && (
+            <span className="no-drag flex items-center rounded-lg border border-line text-[12px] text-muted max-w-[14rem]">
+              <button
+                onClick={async () => {
+                  const f = await api.chooseVault()
+                  if (f) act(api.chatSetFolder(key, f), 'Folder set for this conversation')
+                }}
+                title={folder ? `This conversation works in ${folder}. Click to change.` : "Set a folder for this conversation (default: the agent's own setting)"}
+                className="flex items-center gap-1.5 px-2 py-1 min-w-0 hover:text-ink"
+              >
+                <Folder size={13} className="shrink-0" />
+                <span className="truncate">{folder ? folder.split('/').filter(Boolean).pop() : 'Folder'}</span>
+              </button>
+              {folder && (
+                <button onClick={() => act(api.chatSetFolder(key, null), 'Folder cleared')} title="Use the agent's own folder again" className="px-1.5 py-1 hover:text-danger">
+                  ×
+                </button>
+              )}
+            </span>
+          )}
           {messages.length > 0 && (
             <button
               onClick={() => act(api.chatReset(key), 'Conversation cleared')}

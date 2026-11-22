@@ -64,6 +64,7 @@ export async function runContextAgent(engine: ContextEngine, vault: string, inst
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: 'edit',
+    purpose: 'context',
     prompt: prompt(instruction),
     cwd: vault,
     timeoutMs: 6 * 60_000,

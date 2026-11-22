@@ -2,6 +2,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, nativeTheme } from 'electr
 import { join } from 'node:path'
 import { API_METHODS, type ApiMethod, type AppState } from '@shared/api'
 import { Controller } from './controller'
+import { metrics, startedAt } from './metrics'
 
 // App data stays in the folder from before the rename to "AI Center" (settings, plan cache, sync state).
 // Dev builds share the productName with the installed app; keep their settings, caches and sync state apart.
@@ -64,6 +65,8 @@ function openCapture() {
 }
 
 app.whenReady().then(() => {
+  metrics.init(join(app.getPath('userData'), 'metrics'))
+  metrics.event('startup', { phase: 'ready', ms: Date.now() - startedAt, packaged: app.isPackaged })
   const broadcast = (state: AppState) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('state', state))
   controller = new Controller(broadcast, (channel, payload) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(channel, payload)))
 
@@ -71,10 +74,13 @@ app.whenReady().then(() => {
     // Only the public API: the controller's internal methods (restore, computePlan…) are not reachable.
     if (!Object.hasOwn(API_METHODS, method)) throw new Error(`Unknown method ${method}`)
     const fn = controller[method] as (...a: unknown[]) => Promise<unknown>
-    return fn.apply(controller, args)
+    // Which calls happen and how long they take (the usage log skips its own and the per-keystroke ones).
+    return method === 'track' ? fn.apply(controller, args) : metrics.time('ipc', () => fn.apply(controller, args), { method })
   })
 
   createMain()
+  main?.once('ready-to-show', () => metrics.event('startup', { phase: 'window', ms: Date.now() - startedAt }))
+  main?.webContents.once('did-finish-load', () => metrics.event('startup', { phase: 'loaded', ms: Date.now() - startedAt }))
   globalShortcut.register('CommandOrControl+Shift+Space', openCapture)
   void controller.refreshCalendar().catch(() => {}).finally(() => void controller.maybeRunBrief())
 
@@ -92,6 +98,7 @@ app.on('will-quit', (e) => {
     e.preventDefault()
     void controller.dispose().finally(() => {
       controller = undefined as unknown as Controller
+      metrics.close()
       app.exit(0)
     })
   }

@@ -1,6 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { AgentDef, AgentMessage, HandoffPacket, Run, RunStatus, Usage } from '@shared/agents'
+import { metrics } from '../metrics'
+import { needsReview } from './permissions'
 
 export type { AgentMessage, Run, RunStatus }
 
@@ -14,14 +16,18 @@ export type Gate = (run: Run, def: AgentDef) => Promise<string | null> | string 
 
 export type Execute = (run: Run, def: AgentDef, onProgress: (line: string) => void, signal: { cancel: (fn: () => void) => void }) => Promise<Outcome>
 
+/** Runs that may be active at once. The CLIs' own rate limits are the real ceiling; this only keeps the machine calm. */
+export const MAX_PARALLEL = 3
+
 /**
- * Runs agents one at a time (concurrency 1: a second run waits in the queue). Each run is logged as JSON lines
- * under `<logDir>/YYYY-MM/<id>.jsonl`. No Electron imports; `execute` is injected.
+ * Runs agents in parallel up to MAX_PARALLEL, with two rules: an agent never has two runs at once (a chat session takes one
+ * turn at a time), and a run that needs review (propose/act) runs alone, because its vault snapshot would otherwise show
+ * other runs' writes. Each run is logged as JSON lines under `<logDir>/YYYY-MM/<id>.jsonl`. No Electron imports; `execute` is injected.
  */
 export class Supervisor {
   private runs: Run[] = []
   private queue: { run: Run; def: AgentDef }[] = []
-  private current: { run: Run; cancel: () => void; resume?: () => void } | null = null
+  private active = new Map<string, { run: Run; exclusive: boolean; cancel: () => void; resume?: () => void }>()
   private seq = 0
   private waiters = new Map<string, ((r: Run) => void)[]>()
 
@@ -52,10 +58,10 @@ export class Supervisor {
     run.chainId ??= run.id
     this.runs.push(run)
     this.queue.push({ run, def })
-    this.log(run, { type: 'queued', input: run.input })
+    this.log(run, { type: 'queued', input: run.input, permission: def.permission, model: def.model, chainId: run.chainId, hops: run.hops, parentRunId: run.parentRunId })
     this.saveQueue()
     this.onChange()
-    void this.pump()
+    this.pump()
     return run
   }
 
@@ -121,7 +127,7 @@ export class Supervisor {
       const [{ run }] = this.queue.splice(q, 1)
       this.saveQueue()
       this.finish(run, 'cancelled', 'Cancelled.')
-    } else if (this.current?.run.id === id) this.current.cancel()
+    } else this.active.get(id)?.cancel()
   }
 
   /** App quit: stop everything but leave the saved queue as it is, so waiting items come back next time. */
@@ -132,44 +138,56 @@ export class Supervisor {
 
   cancelAll() {
     for (const { run } of [...this.queue]) this.cancel(run.id)
-    this.current?.cancel()
+    for (const a of this.active.values()) a.cancel()
   }
 
   /** Lets a paused run start (once). */
   allow(id: string) {
-    if (this.current?.run.id === id) this.current.resume?.()
+    this.active.get(id)?.resume?.()
   }
 
   isBusy() {
-    return this.current !== null || this.queue.length > 0
+    return this.active.size > 0 || this.queue.length > 0
   }
 
-  private async pump() {
-    if (this.current) return
-    const next = this.queue.shift()
-    if (!next) return
-    this.saveQueue()
-    const { run, def } = next
+  /** Starts every queued run that may start now, in queue order. A waiting review run isn't overtaken, so it can't starve. */
+  private pump() {
+    for (;;) {
+      if (this.active.size >= MAX_PARALLEL || [...this.active.values()].some((a) => a.exclusive)) return
+      const busy = new Set([...this.active.values()].map((a) => a.run.agentId))
+      const i = this.queue.findIndex((q) => !busy.has(q.def.id))
+      if (i < 0) return
+      const exclusive = needsReview(this.queue[i].def)
+      if (exclusive && this.active.size > 0) return
+      const [next] = this.queue.splice(i, 1)
+      this.saveQueue()
+      void this.runOne(next.run, next.def, exclusive)
+    }
+  }
+
+  private async runOne(run: Run, def: AgentDef, exclusive: boolean) {
     let cancelled = false
     let stop: () => void = () => {}
-    this.current = { run, cancel: () => ((cancelled = true), stop()) }
+    const slot: { run: Run; exclusive: boolean; cancel: () => void; resume?: () => void } = { run, exclusive, cancel: () => ((cancelled = true), stop()) }
+    this.active.set(run.id, slot)
     try {
       const reason = this.gate ? await this.gate(run, def) : null
       if (reason) {
-        // Hold the queue until the user decides: allow once, or skip (cancel).
+        // This run waits for the user (allow once, or skip); other runs carry on.
         run.status = 'paused'
         run.pauseReason = reason
         this.log(run, { type: 'paused', reason })
         this.onChange()
         await new Promise<void>((resolve, reject) => {
-          this.current!.resume = resolve
-          this.current!.cancel = () => ((cancelled = true), reject(new Error('Cancelled.')))
+          slot.resume = resolve
+          slot.cancel = () => ((cancelled = true), reject(new Error('Cancelled.')))
         })
         run.pauseReason = undefined
-        this.current!.cancel = () => ((cancelled = true), stop())
+        slot.cancel = () => ((cancelled = true), stop())
       }
       run.status = 'running'
       run.startedAt = new Date().toISOString()
+      this.log(run, { type: 'start', queueMs: Date.parse(run.startedAt) - Date.parse(run.queuedAt), parallel: this.active.size })
       this.onChange()
       const out = await this.execute(
         run,
@@ -189,8 +207,8 @@ export class Supervisor {
       const msg = (e as Error).message
       this.finish(run, cancelled || msg === 'Cancelled.' ? 'cancelled' : 'error', cancelled ? 'Cancelled.' : msg)
     } finally {
-      this.current = null
-      void this.pump()
+      this.active.delete(run.id)
+      this.pump()
     }
   }
 
@@ -199,6 +217,20 @@ export class Supervisor {
     run.error = status === 'done' ? undefined : error
     run.endedAt = new Date().toISOString()
     this.log(run, { type: 'end', status, profile: run.profile, error: run.error, output: run.output, usage: run.usage })
+    // Speed side of the usage log: waiting in the queue vs running, and how many ran together (sizes and times only).
+    const t = (iso?: string) => (iso ? Date.parse(iso) : undefined)
+    const started = t(run.startedAt)
+    metrics.event('run', {
+      agent: run.agentId,
+      status,
+      chat: run.chat,
+      hops: run.hops,
+      from: run.input.from.startsWith('goal:') ? 'goal' : run.input.from,
+      queueMs: started ? started - Date.parse(run.queuedAt) : undefined,
+      runMs: started ? Date.parse(run.endedAt!) - started : undefined,
+      outChars: run.output?.text.length,
+      tools: run.progress.length
+    })
     for (const w of this.waiters.get(run.id) ?? []) w(run)
     this.waiters.delete(run.id)
     if (this.runs.length > 100) this.runs = this.runs.filter((r) => r.status === 'queued' || r.status === 'running' || this.runs.indexOf(r) >= this.runs.length - 100)

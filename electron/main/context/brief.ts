@@ -76,6 +76,7 @@ export async function runBrief(vault: string, template: string, date: string, ev
   const run = await runEngine(ENGINES[profile.engine], {
     profile,
     mode: 'tools',
+    purpose: 'brief',
     prompt: buildBriefPrompt(template, { date, events, includeEmail }),
     cwd: vault,
     allowedTools: allowed,

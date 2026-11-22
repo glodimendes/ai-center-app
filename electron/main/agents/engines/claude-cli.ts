@@ -13,7 +13,7 @@ export const claudeCli: Engine = {
   prepare(spec) {
     const model = spec.model ?? spec.profile.model ?? CONTEXT_MODELS.claude.model
     const effort = spec.effort ?? CONTEXT_MODELS.claude.effort
-    const base = ['-p', spec.prompt, '--model', model, '--effort', effort]
+    const base = ['-p', spec.prompt, '--model', model, '--effort', effort, ...(spec.addDirs?.length ? ['--add-dir', ...spec.addDirs] : [])]
     // A chat keeps its session on disk so the next turn can resume it; every other run leaves nothing behind.
     const none = spec.session ? (spec.session.resume ? '--resume' : '--session-id') : '--no-session-persistence'
     const sessArgs = (rest: string[]) => (spec.session ? [...rest, none, spec.session.id] : [...rest, none])
@@ -47,7 +47,7 @@ export const claudeCli: Engine = {
     }
     if (ev.type === 'result') {
       const u = ev.usage
-      if (u || ev.total_cost_usd != null) out.push({ type: 'usage', usage: { inputTokens: u?.input_tokens, outputTokens: u?.output_tokens, costUsd: ev.total_cost_usd } })
+      if (u || ev.total_cost_usd != null) out.push({ type: 'usage', usage: { inputTokens: u?.input_tokens, outputTokens: u?.output_tokens, cacheReadTokens: u?.cache_read_input_tokens, cacheWriteTokens: u?.cache_creation_input_tokens, costUsd: ev.total_cost_usd } })
       out.push({ type: 'done', text: String(ev.result ?? ''), isError: Boolean(ev.is_error) })
     }
     return out

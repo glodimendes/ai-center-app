@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
 import type { AccountProfile, Action, ChatMessage, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits, OrganizeChange } from '@shared/agents'
@@ -22,7 +22,7 @@ import { parseMentions, routeCapture, withHistory } from './agents/capture'
 import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
 import { budgetPause, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
-import { MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef } from './agents/runner'
+import { MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef, resolveCwd } from './agents/runner'
 import { repeatKey } from './agents/goals'
 import { Supervisor, type Execute } from './agents/supervisor'
 import type { ContextSession } from './context/session'
@@ -78,7 +78,7 @@ export class AgentHub {
   private goalDir: string
   private goals: GoalRunner
   /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
-  private chats = new Map<string, { sessionId?: string; messages: ChatMessage[] }>()
+  private chats = new Map<string, { sessionId?: string; messages: ChatMessage[]; folder?: string; cwd?: string }>()
   /** Per handoff chain: what was already asked of whom, so a chain can't repeat itself. */
   private chainSeen = new Map<string, Set<string>>()
   /** When each agent was last started (by a trigger or by hand), ms. Persisted so a restart doesn't re-fire a schedule. */
@@ -209,6 +209,7 @@ export class AgentHub {
       goals: this.goals.list().slice(-20),
       // Transcripts are loaded from disk on first use, so a conversation survives a restart.
       chats: Object.fromEntries([CENTRAL, ...agents.filter((a) => !a.builtin).map((a) => a.id)].map((id) => [id, this.chat(id).messages.slice(-100)])),
+      chatFolders: Object.fromEntries(agents.filter((a) => !a.builtin && this.chat(a.id).folder).map((a) => [a.id, this.chat(a.id).folder!])),
       samples: SAMPLES.map((x) => ({ id: x.def.id, name: x.def.name, description: x.def.description ?? '', needs: x.needs, added: agents.some((a) => a.id === x.def.id) })),
       dir: this.deps.agentsDir(),
       review: this.reviewRunId && pending ? { runId: this.reviewRunId, ...pending } : null
@@ -422,6 +423,15 @@ export class AgentHub {
     this.deps.push()
   }
 
+  /** A conversation's own folder (any folder on the Mac). Its CLI session belongs to the old folder, so the next turn starts a new one. */
+  setChatFolder(agentId: string, folder: string | null) {
+    if (folder && (!isAbsolute(folder) || !existsSync(folder))) throw new AgentError('Choose an existing folder.')
+    const c = this.chat(agentId)
+    c.folder = folder || undefined
+    this.saveChat(agentId)
+    this.deps.push()
+  }
+
   resetChat(agentId: string) {
     this.chats.set(agentId, { messages: [] })
     this.saveChat(agentId)
@@ -508,6 +518,7 @@ export class AgentHub {
       const run = await runEngine(ENGINES[profile.engine], {
         profile,
         mode: profile.engine === 'claude' ? 'read' : 'ask',
+        purpose: 'test',
         prompt: 'Reply with the single word: ok',
         cwd: tmpdir(),
         timeoutMs: 60_000,
@@ -547,8 +558,8 @@ export class AgentHub {
     if (p.input.length > SPILL_CHARS) {
       const dir = join(HANDOFFS_DIR, chainId)
       const abs = join(this.deps.vaultRoot(), dir)
-      const reachable = !def.workdir || join(dir).startsWith(def.workdir.replace(/\/$/, '') + '/')
-      if (reachable) {
+      {
+        // The vault is always readable by the receiver (its working folder is its own, the vault is added), so the file can be read.
         mkdirSync(abs, { recursive: true })
         const n = readdirSync(abs).length + 1
         const rel = join(dir, `${String(n).padStart(2, '0')}-${a.agentId}-to-${def.id}.md`)
@@ -620,15 +631,22 @@ export class AgentHub {
     // First turn: Claude takes a session id we choose; Codex reports its own (kept after the run). Later turns resume it.
     const engine = this.profiles().find((p) => p.id === def.profile)?.engine
     // Engines that can't keep a conversation (Ollama, a custom command) get the transcript as text instead.
-    const sessionless = Boolean(chat && engine && !ENGINES[engine].chat)
+    // Working folder: the conversation's own, else the agent's setting, else its own empty workspace. The vault is added next to it.
+    const workspaces = join(this.deps.userData, 'workspaces')
+    const cwd = resolveCwd(def, { vaultRoot: root, workspaces, chatFolder: chat?.folder })
+    if (cwd.startsWith(workspaces)) mkdirSync(cwd, { recursive: true })
+    else if (!existsSync(cwd)) throw new AgentError(`The folder ${cwd} doesn't exist. Change it in the agent's settings or the chat header.`)
+    // A CLI session belongs to the folder it started in: if the folder changed, start a new session and carry the transcript as text.
+    const folderChanged = Boolean(chat?.sessionId) && (chat?.cwd ?? root) !== cwd
+    const sessionless = Boolean(chat && ((engine && !ENGINES[engine].chat) || folderChanged))
     const input = chat && sessionless ? withHistory(chat.messages, run.input.text) : run.input.text
-    const session = chat && !sessionless ? (chat.sessionId ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
+    const session = chat && !(engine && !ENGINES[engine].chat) ? (chat.sessionId && !folderChanged ? { id: chat.sessionId, resume: true } : { id: engine === 'claude' ? randomUUID() : '', resume: false }) : undefined
     let sessionId: string | undefined
     // Conversation runs may propose handing work on (run-agent, add-task) when there is anyone to hand it to.
     const conversation = Boolean(run.chat || run.input.from === 'central')
     const peers = this.registry.list().agents.filter((x) => x.id !== def.id)
     const handoff = conversation && peers.length && (run.hops ?? 0) < MAX_HOPS ? handoffFormat(peers) : undefined
-    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input, { handoff, session, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
+    const go = (onCancel: (c: () => void) => void) => runAgentDef(def, input, { handoff, session, cwd, vaultRoot: root, profiles: this.profiles(), date, onProgress, onCancel, sources, onLimits: (l) => this.setLimits(def.profile, l) })
     let text: string
     let usage: Awaited<ReturnType<typeof go>>['usage']
     if (needsReview(def)) {
@@ -665,6 +683,7 @@ export class AgentHub {
     if (chat) {
       // The turn counts only once it succeeded; a failed one leaves the conversation as it was.
       if (sessionId) chat.sessionId = sessionId
+      chat.cwd = cwd
       const t = new Date().toISOString()
       chat.messages.push({ role: 'user', text: run.input.text, t }, { role: 'agent', text, t, runId: run.id })
       this.saveChat(def.id)

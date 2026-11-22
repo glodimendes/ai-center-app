@@ -15,7 +15,7 @@ output: file             # reply | file | suggestions | actions
 triggers: [manual, "schedule: 17:00"]
 sources: [project-notes] # ids from Settings → Data sources
 model: claude-sonnet-5-5 # optional; empty = the profile's or the cheap default
-workdir: projects     # optional folder inside the vault
+workdir: projects     # optional: a folder in the vault or any folder on your Mac; default: the agent's own workspace
 budget: 60               # optional: pause when the account's window is at 60%
 ---
 
@@ -86,6 +86,19 @@ Each message is a normal run: it queues, respects the usage ceiling and your rev
 
 **Groups and pins.** Put each agent in a group you name (the group picker on its row; groups you no longer use disappear) and order groups with the arrows. The pin decides whether an agent is listed in the Chat sidebar; an unpinned agent's chat is still one click away from the Agents page, and it shows in the sidebar while it's working or open. New, sample and imported agents start pinned. This organization is kept in the app (`agents-org.json` in its data folder), not in the agent files.
 
+## Working folders
+
+Each agent works in its own empty workspace (kept in the app's data folder) unless you give it a folder: in its settings (**Working folder**, a vault folder like `projects` or any folder on your Mac) or for one conversation (the folder chip in the chat header, cleared by New chat). The vault is always readable too, wherever the agent works. Edits an agent makes inside the vault are reviewed as before; edits in another folder you chose are not.
+
+## Several agents at once
+
+Up to three agents run at the same time. An agent never runs twice at once, and an agent that may edit (`propose`, `act`) runs alone so its review shows only its own changes. In a goal, the delegations of one turn run side by side.
+
 ## Goals
 
-A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). The plan, each agent's output and the result are saved as files under `tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.
+A **goal** is how the coordinator works: it either delegates steps to your other agents or gives the final answer. Every delegated run is a normal run: it uses its own agent's permission, respects the usage ceiling, and anything it proposes waits for your approval. Limits are enforced by the app (8 turns, 12 delegations; a repeated request stops the goal and asks you). A delegated agent may also question another agent of the goal (one round, answers come back once); this needs no click because you started the goal, and the goal shows who asked whom. The plan, each agent's output and the result are saved as files under `tasks/agent-output/goals/<goal>/`. Start one from Activity, or just write an untagged message in Central.
+
+
+## Usage log
+
+The app keeps a local log of how it is used and how fast it runs (`metrics/` in its data folder, 90 days): calls from the screens, state build times, startup, screens opened, every model call (purpose, model, prompt size, time, tokens including cached ones, cost) and each agent run's queue wait and run time. It holds names, sizes and times only, never text, and never leaves your Mac. `npm run usage-report` summarises it.

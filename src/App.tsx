@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { AlertTriangle, Bell, BookOpen, CalendarRange, House, PanelLeftClose, PanelLeftOpen, Sun, FileText, Inbox, ListChecks, Bot, MessageCircle, Settings as Cog, Sparkles, TrendingUp, Wand2, type LucideProps } from 'lucide-react'
+import { api } from '@/lib/api'
 import { bootstrap, useStore, type View } from '@/store/app'
 import { cx } from '@/lib/util'
 import { Toasts } from '@/components/Toasts'
@@ -92,6 +93,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [rail, toggleRail] = useSidebar()
   const [errorsOpen, setErrorsOpen] = useState(false)
+
+  // Which screens get used (the usage log keeps only the view's name).
+  useEffect(() => {
+    void api.track('view', view).catch(() => {})
+  }, [view])
 
   // Views can open Update context with a ready-made instruction.
   useEffect(() => {

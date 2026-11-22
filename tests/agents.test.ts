@@ -6,8 +6,8 @@ import { AgentError, parseAgent, serializeAgent } from '../electron/main/agents/
 import { AgentRegistry } from '../electron/main/agents/registry'
 import { ApprovalStore, parseActions } from '../electron/main/agents/actions'
 import { canAutoRun, engineMode, needsReview } from '../electron/main/agents/permissions'
-import { Supervisor, type Execute } from '../electron/main/agents/supervisor'
-import { buildPrompt, handoffFormat, renderPacket } from '../electron/main/agents/runner'
+import { MAX_PARALLEL, Supervisor, type Execute } from '../electron/main/agents/supervisor'
+import { buildPrompt, handoffFormat, renderPacket, resolveCwd, vaultDirs } from '../electron/main/agents/runner'
 import { claudeCli } from '../electron/main/agents/engines/claude-cli'
 import { codexCli } from '../electron/main/agents/engines/codex-cli'
 import { findProfile } from '../electron/main/agents/profiles'
@@ -42,7 +42,7 @@ describe('agent definitions', () => {
     expect(() => parseAgent('a', 'no frontmatter')).toThrow(/frontmatter/)
     expect(() => parseAgent('a', '---\npermission: root\n---\nx')).toThrow(/permission/)
     expect(() => parseAgent('a', '---\nname: A\n---\n')).toThrow(/empty/)
-    expect(() => parseAgent('a', '---\nworkdir: ../out\n---\nx')).toThrow(/inside the vault/)
+    expect(() => parseAgent('a', '---\nworkdir: ../out\n---\nx')).toThrow(/can't contain/)
     expect(() => parseAgent('a', '---\nbudget: 400\n---\nx')).toThrow(/budget/)
     expect(() => parseAgent('Bad Id', FILE)).toThrow(AgentError)
   })
@@ -216,7 +216,7 @@ describe('supervisor', () => {
     expect(bad.error).toBe('engine failed')
     const month = readdirSync(dir)[0]
     const lines = readFileSync(join(dir, month, `${ok.id}.jsonl`), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-    expect(lines.map((l) => l.type)).toEqual(['queued', 'progress', 'end'])
+    expect(lines.map((l) => l.type)).toEqual(['queued', 'start', 'progress', 'end'])
     rmSync(dir, { recursive: true })
   })
 
@@ -442,7 +442,7 @@ describe('gmail source and drafts', () => {
   })
 })
 
-import { GOAL_LIMITS, GoalRunner, coordinatorPrompt, parseDelegations, repeatKey } from '../electron/main/agents/goals'
+import { GOAL_LIMITS, GoalRunner, askHint, coordinatorPrompt, parseAsks, parseDelegations, repeatKey } from '../electron/main/agents/goals'
 import type { Goal, Run } from '../shared/agents'
 
 describe('goals: coordinator delegating to agents', () => {
@@ -558,5 +558,170 @@ describe('central chat helpers', () => {
     expect(t).toContain('You: b')
     expect(t.endsWith('New message from the user: c')).toBe(true)
     expect(withHistory(Array.from({ length: 30 }, (_, i) => ({ role: 'user' as const, text: `m${i}` })), 'x', 3)).not.toContain('m26')
+  })
+})
+
+describe('parallel runs', () => {
+  const mk = (id: string, perm = 'read') => parseAgent(id, `---\nname: ${id}\npermission: ${perm}\n---\nx`)
+  /** An execute whose runs finish when released; records how many ran at once. */
+  const rig = () => {
+    const releases = new Map<string, () => void>()
+    const state = { active: 0, max: 0, started: [] as string[] }
+    const exec: Execute = (run) =>
+      new Promise((resolve) => {
+        state.active++
+        state.max = Math.max(state.max, state.active)
+        state.started.push(run.agentId)
+        releases.set(run.id, () => (state.active--, resolve({ text: 'ok' })))
+      })
+    return { state, releases, exec }
+  }
+
+  it('runs different agents side by side up to MAX_PARALLEL, and never one agent twice', async () => {
+    const { state, releases, exec } = rig()
+    const sup = new Supervisor(exec, null)
+    const runs = ['a', 'b', 'c', 'd'].map((id) => sup.enqueue(mk(id), 'go'))
+    const again = sup.enqueue(mk('a'), 'second')
+    await Promise.resolve()
+    expect(state.started).toEqual(['a', 'b', 'c'])
+    expect(runs[3].status).toBe('queued')
+    expect(again.status).toBe('queued')
+    expect(MAX_PARALLEL).toBe(3)
+    releases.get(runs[0].id)!()
+    await vi.waitFor(() => expect(state.started).toContain('d'))
+    expect(again.status).toBe('queued')
+    releases.get(runs[1].id)!()
+    await vi.waitFor(() => expect(again.status).toBe('running'))
+    expect(state.max).toBeLessThanOrEqual(MAX_PARALLEL)
+    for (const r of sup.list()) releases.get(r.id)?.()
+  })
+  it('runs a review (propose) run alone, without being overtaken', async () => {
+    const { state, releases, exec } = rig()
+    const sup = new Supervisor(exec, null)
+    const r1 = sup.enqueue(mk('reader'), 'go')
+    const rev = sup.enqueue(mk('editor', 'propose'), 'edit')
+    const r3 = sup.enqueue(mk('other'), 'go')
+    await Promise.resolve()
+    expect([r1.status, rev.status, r3.status]).toEqual(['running', 'queued', 'queued'])
+    releases.get(r1.id)!()
+    await vi.waitFor(() => expect(rev.status).toBe('running'))
+    expect(r3.status).toBe('queued')
+    releases.get(rev.id)!()
+    await vi.waitFor(() => expect(r3.status).toBe('running'))
+    expect(state.max).toBe(1)
+    releases.get(r3.id)!()
+  })
+})
+
+describe('goals: side by side and peer questions', () => {
+  const agent = (id: string, perm = 'read') => parseAgent(id, `---\nname: ${id}\npermission: ${perm}\ndescription: does ${id}\n---\nx`)
+  const coord = agent('coord')
+  const agents = [coord, agent('writer'), agent('editor')]
+  const run = (id: string, text: string): Run => ({ id, agentId: 'x', agentName: 'x', profile: 'claude', input: { from: 'u', to: 'x', text }, status: 'done', queuedAt: '', progress: [], output: { from: 'x', to: 'u', text } })
+  const rig = (script: Record<string, string[]>, delayMs = 0) => {
+    const calls: { agent: string; text: string; at: number }[] = []
+    const files: Record<string, string> = {}
+    const t0 = Date.now()
+    let n = 0
+    const runs = new Map<string, Promise<Run>>()
+    const runner = new GoalRunner({
+      agents: () => agents,
+      enqueue: (def, text) => {
+        calls.push({ agent: def.id, text, at: Date.now() - t0 })
+        const id = `r${++n}`
+        const reply = script[def.id]?.shift() ?? 'no script'
+        runs.set(id, new Promise((res) => setTimeout(() => res(run(id, reply)), def.id === 'coord' ? 0 : delayMs)))
+        return { id } as Run
+      },
+      wait: (id) => runs.get(id)!,
+      cancel: () => {},
+      write: (rel, text) => void (files[rel] = text),
+      save: () => {},
+      onChange: () => {}
+    })
+    return { runner, calls, files }
+  }
+  const finished = async (runner: GoalRunner, id: string) => {
+    await vi.waitFor(() => expect(runner.list().find((g) => g.id === id)!.status).not.toBe('running'), { timeout: 3000 })
+    return runner.list().find((g) => g.id === id)!
+  }
+
+  it("starts one turn's delegations together instead of one after another", async () => {
+    const { runner, calls } = rig({ coord: ['```delegate\n[{"agent":"writer","message":"a"},{"agent":"editor","message":"b"}]\n```', 'done'], writer: ['w'], editor: ['e'] }, 150)
+    const g = runner.start(coord, 'go')
+    const done = await finished(runner, g.id)
+    const [w, e] = calls.filter((c) => c.agent !== 'coord')
+    expect(Math.abs(w.at - e.at)).toBeLessThan(100)
+    expect(done.steps[0].delegations.map((d) => d.status)).toEqual(['done', 'done'])
+  })
+  it('parses ask blocks and offers the hint only when there are peers', () => {
+    const r = parseAsks('Draft.\n```ask\n[{"agent":"editor","message":"check tone"},{"agent":"a","message":"b"},{"agent":"c","message":"d"}]\n```')
+    expect(r.text).toBe('Draft.')
+    expect(r.asks.map((a) => a.agent)).toEqual(['editor', 'a'])
+    expect(parseAsks('No question.')).toEqual({ text: 'No question.', asks: [] })
+    expect(askHint([])).toBe('')
+    expect(askHint([agent('editor')])).toContain('editor: does editor')
+  })
+  it('lets a delegated agent ask a peer once, then finish; the coordinator sees who asked whom', async () => {
+    const { runner, calls, files } = rig({
+      coord: ['```delegate\n[{"agent":"writer","message":"write a slogan"}]\n```', 'Final'],
+      writer: ['Draft slogan.\n```ask\n[{"agent":"editor","message":"is it too long?"}]\n```', 'Slogan v2, trimmed.'],
+      editor: ['A bit long.']
+    })
+    const g = runner.start(coord, 'go')
+    const done = await finished(runner, g.id)
+    expect(done.status).toBe('done')
+    expect(calls.map((c) => c.agent)).toEqual(['coord', 'writer', 'editor', 'writer', 'coord'])
+    expect(calls[3].text).toContain('editor answered: A bit long.')
+    expect(calls[3].text).not.toContain('```ask')
+    expect(done.steps[0].delegations.map((d) => [d.agent, d.from, d.status])).toEqual([['writer', undefined, 'done'], ['editor', 'writer', 'done']])
+    expect(done.steps[0].delegations[0].result).toBe('Slogan v2, trimmed.')
+    expect(calls[4].text).toContain('asked by writer: is it too long?')
+    expect(Object.keys(files).some((f) => f.endsWith('writer-asks-editor.md'))).toBe(true)
+    expect(done.delegations).toBe(3)
+  })
+  it('an ask to an unknown agent, to itself or in the follow-up does not loop', async () => {
+    const { runner, calls } = rig({
+      coord: ['```delegate\n[{"agent":"writer","message":"x"}]\n```', 'Final'],
+      writer: ['d\n```ask\n[{"agent":"ghost","message":"hi"},{"agent":"writer","message":"me"}]\n```', 'fin\n```ask\n[{"agent":"editor","message":"again"}]\n```']
+    })
+    const g = runner.start(coord, 'go')
+    const done = await finished(runner, g.id)
+    expect(done.status).toBe('done')
+    expect(calls.map((c) => c.agent)).toEqual(['coord', 'writer', 'writer', 'coord'])
+    expect(done.steps[0].delegations[0].result).toBe('fin')
+  })
+})
+
+describe('workspaces: own folder, vault alongside', () => {
+  const o = { vaultRoot: '/v', workspaces: '/data/workspaces' }
+  const def = (workdir?: string) => ({ id: 'scout', workdir })
+  it('picks the chat folder, then the agent folder (vault-relative or absolute), then its own workspace', () => {
+    expect(resolveCwd(def(), o)).toBe('/data/workspaces/scout')
+    expect(resolveCwd(def('projects'), o)).toBe('/v/projects')
+    expect(resolveCwd(def('/Users/me/code'), o)).toBe('/Users/me/code')
+    expect(resolveCwd(def('projects'), { ...o, chatFolder: '/tmp/x' })).toBe('/tmp/x')
+  })
+  it('adds the vault unless the agent already works inside it', () => {
+    expect(vaultDirs('/data/workspaces/scout', '/v')).toEqual(['/v'])
+    expect(vaultDirs('/Users/me/code', '/v')).toEqual(['/v'])
+    expect(vaultDirs('/v', '/v')).toEqual([])
+    expect(vaultDirs('/v/projects', '/v')).toEqual([])
+  })
+  it('allows an absolute workdir but not ..; the prompt names the vault only when it is elsewhere', () => {
+    expect(parseAgent('a', '---\nname: a\nworkdir: /Users/me/code\n---\nx').workdir).toBe('/Users/me/code')
+    expect(() => parseAgent('a', '---\nname: a\nworkdir: ../x\n---\nx')).toThrow(/\.\./)
+    const d = parseAgent('a', '---\nname: a\n---\nDo it')
+    expect(buildPrompt(d, 'q', '2026-11-22', '', false, '', { cwd: '/w', vault: '/v' })).toContain('vault (their notes, tasks and projects) is at /v')
+    expect(buildPrompt(d, 'q', '2026-11-22', '', false, '', { cwd: '/v', vault: '/v' })).not.toContain('is at /v')
+  })
+  it('passes the vault to the CLIs as an extra folder (Codex only where it can write)', () => {
+    const profile = { id: 'p', label: 'p', engine: 'claude' as const }
+    const claude = claudeCli.prepare({ profile, mode: 'read', prompt: 'hi', cwd: '/w', addDirs: ['/v'], timeoutMs: 1 })
+    expect(claude.args).toEqual(expect.arrayContaining(['--add-dir', '/v']))
+    expect(claude.args[claude.args.indexOf('--add-dir') + 2]).toMatch(/^--/)
+    const codexProfile = { ...profile, engine: 'codex' as const }
+    expect(codexCli.prepare({ profile: codexProfile, mode: 'edit', prompt: 'hi', cwd: '/w', addDirs: ['/v'], timeoutMs: 1 }).args).toEqual(expect.arrayContaining(['--add-dir', '/v']))
+    expect(codexCli.prepare({ profile: codexProfile, mode: 'read', prompt: 'hi', cwd: '/w', addDirs: ['/v'], timeoutMs: 1 }).args).not.toContain('--add-dir')
   })
 })

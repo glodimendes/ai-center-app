@@ -37,7 +37,7 @@ export const codexCli: Engine = {
     // A chat keeps its thread so the next turn can resume it. `exec resume` has no -s/-C: the sandbox goes in as config, the folder is the process cwd.
     const args = spec.session?.resume
       ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, '--json', '-o', last, spec.session.id, spec.prompt]
-      : ['exec', ...common, '-C', cwd, '-s', sandbox, ...(spec.session ? [] : ['--ephemeral']), ...(edit || spec.session ? ['--json'] : []), '-o', last, spec.prompt]
+      : ['exec', ...common, '-C', cwd, '-s', sandbox, ...(edit ? (spec.addDirs ?? []).flatMap((d) => ['--add-dir', d]) : []), ...(spec.session ? [] : ['--ephemeral']), ...(edit || spec.session ? ['--json'] : []), '-o', last, spec.prompt]
     return { binary: 'codex', args, cwd, output: edit || spec.session ? 'stream' : 'none', lastMessageFile: last, tempDir: dir }
   },
   parse(ev): EngineEvent[] {
@@ -51,7 +51,7 @@ export const codexCli: Engine = {
     if (item?.type === 'token_count' && item.rate_limits) out.push({ type: 'limits', limits: codexLimits(item.rate_limits) })
     if (item?.type === 'token_count' && item.info?.total_token_usage) {
       const u = item.info.total_token_usage
-      out.push({ type: 'usage', usage: { inputTokens: u.input_tokens, outputTokens: u.output_tokens } })
+      out.push({ type: 'usage', usage: { inputTokens: u.input_tokens, outputTokens: u.output_tokens, cacheReadTokens: u.cached_input_tokens } })
     }
     return out
   }

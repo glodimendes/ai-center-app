@@ -23,6 +23,9 @@ export interface AccountProfile {
 export interface Usage {
   inputTokens?: number
   outputTokens?: number
+  /** Input served from the provider's prompt cache (cheap) and written to it (dearer), when the CLI reports them. */
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   costUsd?: number
 }
 
@@ -52,7 +55,7 @@ export interface AgentDef {
   model?: string
   effort?: string
   permission: Permission
-  /** Folder the agent works in, relative to the vault; default the vault root. */
+  /** Folder the agent works in: relative to the vault or an absolute path. Unset = its own empty workspace; the vault is always readable too. */
   workdir?: string
   /** Data source ids from Settings (Phase 3). */
   sources: string[]
@@ -192,6 +195,8 @@ export interface ChatMessage {
 export interface GoalDelegation {
   agent: string
   message: string
+  /** Set when another agent of the goal asked this one (a peer question), not the coordinator. */
+  from?: string
   runId?: string
   status: 'queued' | 'done' | 'error'
   result?: string
@@ -274,6 +279,8 @@ export interface AgentsState {
   samples: SampleInfo[]
   /** Chat transcripts per agent id (the last 100 messages each). */
   chats: Record<string, ChatMessage[]>
+  /** Folder a conversation works in (set from the chat header); absent = the agent's own setting. */
+  chatFolders: Record<string, string>
   goals: Goal[]
   /** Folder the definitions are read from. */
   dir: string

@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { promisify } from 'node:util'
+import { metrics } from '../../metrics'
 import type { AccountProfile, Engine, EngineEvent, EngineRun, RunResult, RunSpec, Usage } from './types'
 
 const exec = promisify(execFile)
@@ -51,6 +52,37 @@ export class EngineTimeout extends Error {
 
 /** Starts the run. Rejects with EngineTimeout, Error('Cancelled.') or the spawn error; a failed exit code resolves, callers decide. */
 export async function runEngine(engine: Engine, spec: RunSpec): Promise<EngineRun> {
+  // Every model call of the app goes through here, so this is the one place that logs speed and tokens (sizes only, never text).
+  const t0 = performance.now()
+  let first: number | undefined
+  const run = await runEngineRaw(engine, { ...spec, onEvent: (ev) => ((first ??= performance.now() - t0), spec.onEvent?.(ev)) })
+  const log = (r?: RunResult, error?: string) => {
+    const u = r?.usage
+    metrics.event('ai', {
+      purpose: spec.purpose ?? 'other',
+      engine: engine.id,
+      model: spec.model ?? spec.profile.model,
+      mode: spec.mode,
+      resumed: spec.session?.resume,
+      promptChars: spec.prompt.length,
+      addDirs: spec.addDirs?.length,
+      ms: performance.now() - t0,
+      firstOutputMs: first,
+      inputTokens: u?.inputTokens,
+      outputTokens: u?.outputTokens,
+      cacheReadTokens: u?.cacheReadTokens,
+      cacheWriteTokens: u?.cacheWriteTokens,
+      costUsd: u?.costUsd,
+      exit: r?.code,
+      failed: r ? r.isError || (r.code !== 0 && !r.text) : true,
+      error: error?.slice(0, 60)
+    })
+  }
+  void run.done.then((r) => log(r), (e) => log(undefined, e instanceof EngineTimeout ? 'timeout' : (e as Error).message === 'Cancelled.' ? 'cancelled' : 'error'))
+  return run
+}
+
+async function runEngineRaw(engine: Engine, spec: RunSpec): Promise<EngineRun> {
   if (engine.run) return engine.run(spec)
   const prep = engine.prepare(spec)
   const bin = await resolveBinary(prep.binary)

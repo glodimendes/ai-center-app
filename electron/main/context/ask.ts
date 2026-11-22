@@ -10,7 +10,7 @@ import { findProfile } from '../agents/profiles'
 export async function askJson<T>(engine: ContextEngine, prompt: string, timeoutMs = 120_000): Promise<T> {
   const profile = findProfile(engine)
   try {
-    const run = await runEngine(ENGINES[profile.engine], { profile, mode: 'ask', prompt, cwd: process.cwd(), timeoutMs })
+    const run = await runEngine(ENGINES[profile.engine], { profile, mode: 'ask', purpose: 'ask', prompt, cwd: process.cwd(), timeoutMs })
     const r = await run.done
     const tail = r.code !== 0 || !r.text ? failureMessage(r.stderr, r.code, profile.engine) : ''
     if (profile.engine === 'claude') {

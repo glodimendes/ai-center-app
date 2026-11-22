@@ -67,7 +67,7 @@ export function parseAgent(id: string, text: string): AgentDef {
   const budget = fm.budget == null ? undefined : Number(fm.budget)
   if (budget !== undefined && !(budget > 0 && budget <= 100)) throw new AgentError('"budget" is a percent between 1 and 100.')
   const workdir = fm.workdir == null ? undefined : String(fm.workdir)
-  if (workdir && (workdir.startsWith('/') || workdir.split('/').includes('..'))) throw new AgentError('"workdir" must stay inside the vault.')
+  if (workdir && workdir.split('/').includes('..')) throw new AgentError('"workdir" can\'t contain "..". Use a folder in the vault (projects) or an absolute path.')
   const instructions = m[2].trim()
   if (!instructions) throw new AgentError('The instructions (text after the frontmatter) are empty.')
   return {

@@ -480,8 +480,12 @@ function Editor({ def, onClose }: { def: AgentDef; onClose: () => void }) {
               {unavailable && <span className="text-[12px] text-danger">This account can't run “{d.model}”. Pick one from the list.</span>}
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-muted">Folder in the vault</span>
-              <input className={field} value={d.workdir ?? ''} onChange={(e) => set({ workdir: e.target.value || undefined })} placeholder="whole vault" />
+              <span className="text-muted">Working folder</span>
+              <div className="flex gap-2">
+                <input className={cx(field, 'flex-1 min-w-0')} value={d.workdir ?? ''} onChange={(e) => set({ workdir: e.target.value || undefined })} placeholder="its own workspace" />
+                <Button onClick={async () => { const f = await api.chooseVault(); if (f) set({ workdir: f }) }}>Choose…</Button>
+              </div>
+              <span className="text-[11.5px] text-faint">A folder in the vault (projects) or any folder on your Mac. The vault is always readable too. Edits outside the vault aren't reviewed.</span>
             </label>
             <label className="flex flex-col gap-1.5 col-span-2 @max-3xl:col-span-1">
               <span className="text-muted">Runs on its own (one per line: schedule: 07:00, on-open, file-watch: {TASKS_DIR}/*.md)</span>

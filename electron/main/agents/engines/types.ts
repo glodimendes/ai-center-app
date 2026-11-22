@@ -32,6 +32,10 @@ export interface RunSpec {
   effort?: string
   /** Where the CLI runs. `ask` ignores it for Codex and uses an empty temp folder. */
   cwd: string
+  /** Folders the run may use besides `cwd` (the vault, for an agent working in its own workspace). Engines without a flag ignore it; the prompt names them. */
+  addDirs?: string[]
+  /** What the call is for, for the usage log (`agent:<id>`, `brief`, `context`, `ask`, …). */
+  purpose?: string
   allowedTools?: string[]
   disallowedTools?: string[]
   timeoutMs: number

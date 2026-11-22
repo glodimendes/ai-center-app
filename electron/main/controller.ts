@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { metrics, startedAt } from './metrics'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Api, AppState, EstimateSuggestion, PlanOption, PlanVariant, Wish } from '@shared/api'
@@ -77,6 +78,7 @@ export class Controller implements Api {
   private briefError: string | undefined
   private briefAttemptDay = ''
   private pushQueued = false
+  private stateBuilds = 0
   /** Task ids already known (created by the app, or reviewed); others are new from outside. Null until seeded. */
   private seenTasks: Set<string> | null = null
   private lastCacheText = ''
@@ -406,10 +408,13 @@ export class Controller implements Api {
   }
 
   async getState(): Promise<AppState> {
+    const t0 = performance.now()
     const vault = this.vault.state()
+    const t1 = performance.now()
     const p = this.computePlan(vault)
+    const t2 = performance.now()
     const gitError = this.vault.git.lastError
-    return {
+    const state: AppState = {
       vault: gitError ? { ...vault, errors: [...vault.errors, `Couldn't commit to the vault's git history (will retry): ${gitError}`] } : vault,
       plan: p,
       planVariant: { ...this.variant, label: PLAN_VARIANTS.find((x) => x.key === this.variant.key)?.label ?? 'Balanced' },
@@ -421,6 +426,11 @@ export class Controller implements Api {
       agents: this.agents.state(),
       setup: { check: { ...checkFramework(this.settings.vaultPath), added: this.setupAdded }, synced: Object.keys(this.synced).length > 0 }
     }
+    // Speed of building the state that every change pushes; its size (an extra serialisation) is measured on every 20th build only.
+    const n = ++this.stateBuilds
+    metrics.event('state', { vaultMs: t1 - t0, planMs: t2 - t1, restMs: performance.now() - t2, totalMs: performance.now() - t0, tasks: vault.tasks.length, blocks: p.blocks.length, kb: n % 20 === 1 ? Math.round(JSON.stringify(state).length / 1024) : undefined })
+    if (n === 1) metrics.event('startup', { phase: 'first-state', ms: Date.now() - startedAt })
+    return state
   }
 
   /** Several changes in one tick (a mutation plus its follow-ups) become one re-plan and one broadcast. */
@@ -695,7 +705,7 @@ export class Controller implements Api {
       const prefs = this.vault.preferences
       const from = addDays(weekStart(new Date()), -7)
       const to = addDays(startOfDay(new Date()), prefs.horizonDays + 7)
-      this.events = await this.cal.events(calendars, from, to)
+      this.events = await metrics.time('calendar', () => this.cal.events(calendars, from, to), { provider: this.cal.kind })
       if (!this.context.running) this.adoptCalendarEdits(from, calendars.map((c) => c.id))
       this.calendar = { provider: this.cal.kind, connected: true, configured: true, calendars, lastRefresh: new Date().toISOString() }
     } catch (err) {
@@ -774,6 +784,14 @@ export class Controller implements Api {
   async chatSend(agentId: string, text: string, origin?: string): Promise<string> {
     return this.agents.sendChat(agentId, text, origin)
   }
+  async track(kind: string, name: string) {
+    metrics.event('ui', { kind: String(kind).slice(0, 30), name: String(name).slice(0, 40) })
+  }
+
+  async chatSetFolder(agentId: string, folder: string | null) {
+    this.agents.setChatFolder(agentId, folder)
+  }
+
   async chatReset(agentId: string) {
     this.agents.resetChat(agentId)
   }
