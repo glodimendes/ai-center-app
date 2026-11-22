@@ -13,7 +13,7 @@ const CENTRAL = '_central'
 
 /** `@tags` in a user message, highlighted. */
 function withTags(text: string): ReactNode[] {
-  return text.split(/(^|\s)(@[^\s@]+)/g).map((part, i) => (part.startsWith('@') ? <span key={i} className="text-accent font-medium">{part}</span> : part))
+  return text.split(/(^|\s)(@[^\s@]+)/g).map((part, i) => (part.startsWith('@') ? <span key={i} className="rounded-full bg-accent px-2 py-0.5 text-white">{part}</span> : part))
 }
 
 /** Chat: a central conversation where you coordinate (tag agents with @), and one conversation per agent. */
