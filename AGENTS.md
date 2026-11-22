@@ -6,49 +6,34 @@ Read this first, then `README.md` (what the app does, planning rules) and `ROADM
 
 AI Center (formerly AI Center Planner) is a macOS Electron app: a Motion-style routine organizer over the user's Markdown knowledge base ("the vault", `~/Documents/Personal Vault/AI Center/`, an Obsidian vault under git) and their calendars (macOS Calendar by default, Google directly as an option). The owner is a student at ETH Zurich who plans thesis, courses, outside work (applications, BRASA, mentoring, an education project) and hybrid training. The UI is in English; task text is mixed Portuguese/English and must be kept verbatim.
 
-## Two lines of work (since 2026-11-21): this folder is the expansion
+## State (2026-11-22): the agent hub is merged into `main`
 
-This folder is the git worktree `/Users/glodimendes/Programming/AI-Center-core` on branch **`ai-center-core`**: the general AI Center agent hub. **Plan (read it first): `~/.claude-eth/plans/sequential-questing-sundae.md`** (phases 0–7, user decisions, safety rules). The stable planner lives on `main` in `/Users/glodimendes/Programming/AI-Center`, where the user keeps improving it and from where the installed app is built.
-- **Here:** expansion work only. Don't run `npm run install-app` from this folder unless the user asks. Never commit vault content or personal data (hard rule 6 applies; the repo is public-bound).
-- **Stay current with `main`:** before starting a phase, and whenever the user says they changed the planner, run `git merge main` (or rebase) in this folder and rerun `npm test` and `npm run typecheck`. Resolve conflicts in favour of keeping planner behaviour identical; Phase 0 must not change behaviour.
-- **Keep the core separable:** new code under `electron/main/agents/` must not import Electron or UI, and the planner must stay usable as a module of the core (plan, Phase 1 and 6).
-- **Separate dev instance:** use its own dev app-data folder and debug port from `main` (Phase 0 task), so both dev apps can run together.
-
-### Start here (handoff, end of session 1, 2026-11-22)
-
-**State:** all seven phases of the plan are implemented and committed on `ai-center-core` (nothing pushed; `main` was last merged at the start of Phase 3 and was already up to date). Run `git merge main` first, then `npm test` and `npm run typecheck` (last full run: 216 passed, 2 skipped).
+The planner and the agent hub are one app on `main` (the branch `ai-center-core` was fast-forwarded into it; the plan that guided it is `~/.claude-eth/plans/sequential-questing-sundae.md`, phases 0–7). Nothing is pushed yet; the remote still holds the old history (see "Before the first public push").
 
 **What exists (the agent hub, generic by design, see "Design rule"):**
-- **Core** `electron/main/agents/` (no Electron imports): `engines/` (claude, codex, agy, ollama, custom command; `RunSpec` modes read/edit/tools/ask, sessions for chat), `definition.ts` + `registry.ts` (agents are Markdown files in `06_Prompts/agents/`), `permissions.ts`, `actions.ts` (`ApprovalStore`: only `approve()` runs an executor), `supervisor.ts` (queue, concurrency 1, budget pause gate, `runs/*.jsonl`), `usage.ts` (5-hour and weekly windows: Claude `rate_limit_event`, Codex session logs), `triggers.ts`, `capture.ts` (`@agent`, `parseMentions`), `sources.ts` + `gmail.ts` (vault/file/url/gmail; Gmail is draft-only by construction), `samples.ts` (optional examples), `goals.ts` (coordinator delegating to agents, limits in code), `runner.ts`.
-- **App glue:** `electron/main/agent-hub.ts` (runs, review via `ContextSession`, chats, central chat, goals, triggers, profiles), `gmail-auth.ts`, `vault/starter.ts`; API in `shared/api.ts`, types in `shared/agents.ts`.
-- **UI:** `views/Chat.tsx` (⌘6: Central with `@` tags + one chat per agent), `views/Agents.tsx` (⌘7: Agents | Activity, editor, examples), `components/{Inline,Goals,Setup,ChangesList}.tsx`, `views/settings/{Engines,Sources}.tsx`, `lib/markdown.tsx`. Accent colour `#265537`.
+- **Core** `electron/main/agents/` (no Electron imports): `engines/` (claude, codex, agy, ollama, custom command; `RunSpec` modes read/edit/tools/ask, sessions for chat; `failureMessage` turns a failed run into a readable reason), `definition.ts` + `registry.ts` (agents are Markdown files in `06_Prompts/agents/`), `permissions.ts`, `actions.ts` (`ApprovalStore`: only `approve()` runs an executor), `supervisor.ts` (queue, concurrency 1, budget pause gate, `runs/*.jsonl`), `usage.ts` (5-hour and weekly windows), `triggers.ts`, `capture.ts` (`@agent`), `sources.ts` + `gmail.ts` (Gmail is draft-only by construction), `samples.ts`, `goals.ts`, `runner.ts`.
+- **App glue:** `electron/main/agent-hub.ts`, `gmail-auth.ts`, `vault/starter.ts`; API in `shared/api.ts`, types in `shared/agents.ts`.
+- **UI:** sidebar sections Home | Organize (Today, Week, Tasks, Inbox) | Work (Chat, Agents) | Insights (Alerts, Docs, Review); ⌘1…⌘0 follow that order. Home is the old Brief page (the view id is still `brief`). Settings has subpages (General, Calendar, Engines & accounts, Data sources, Daily brief, Areas, Schedule). Review shows a due list and a short ranked Priorities panel (`components/PrioritiesPanel.tsx` reads the "priorities" list of `04_Context_Docs/current-priorities.md`; Update context keeps that list current). Tasks can be sorted per heading (view only). Accent colour `#265537`.
+- **Defaults are neutral:** `DEFAULT_PREFERENCES` (areas Work / Personal / Training, calendar placeholder "Planner") only applies when a vault has no `05_Tasks/planner/preferences.md`; the owner's values live in their vault. `tests/sample/preferences.ts` holds a fuller set for tests.
 - **Docs for users:** `docs/agents.md`, `CONTRIBUTING.md`.
 
-**Verified live in the dev app with real models:** every phase (see git log). Not verified live: Gmail OAuth (needs the owner's Google client with the Gmail API enabled), Ollama streaming (not installed here; unit-tested with a fake server), the dark theme with the new green, the first-run Setup dialog on a fresh packaged install.
+**Not verified live:** Gmail OAuth, Ollama streaming, the dark theme with the green, the first-run Setup dialog on a fresh packaged install, and the merged app against the real vault. `npm run install-app` has not been run since the merge: do it only when the owner asks, then ask them to restart and watch a daily brief and one custom agent on real data. Settings migration was checked on paper and against a copy of the real `preferences.md` (existing `contextEngine`/`askEngine` ids `claude`/`codex` map to the default profiles; a settings file without `setupDone` counts as set up).
+
+**Before the first public push:** the commit history was rewritten on 2026-11-22 so the author email is the GitHub noreply address; the remote still has the old hashes, so pushing needs `git push --force-with-lease` (the owner's call). A restore tag `pre-agent-hub-merge` marks `main` before the merge. Still open for going public: a license, the README for a public audience (ROADMAP "Open-source readiness").
 
 **Open items, in rough priority:**
-1. Owner feedback from testing the new Chat/Agents UI (they were about to test).
-2. Declutter Week (busy header) and Review the way Today was; Tasks/Inbox/Docs only got the global softening.
-3. Phase 2/3 leftovers: route the built-in brief/estimates through the budget gate and `limits`; watch the agents folder (re-read per state push today); "New agent from this run"; `create-event` and `api-call` executors (calendar through the provider and hard rule 4); Strava/Garmin sources (need the owner's API access).
-4. Open-source readiness (ROADMAP): license, commit-author email in history, personal planner defaults (`DEFAULT_PREFERENCES` calendars/headings, many tests use them), public README, planner as an optional module.
-5. Uniting with `main` only when the owner asks (steps below). This branch restyled planner files that also live on `main` (`styles.css`, `ui.tsx`, `Today.tsx`, `Brief.tsx`, `Alerts.tsx`, `Settings.tsx`, `ReplanButton.tsx`, `TaskRow.tsx`): expect small class-name conflicts; keep `main`'s behaviour with this branch's classes.
+1. Improve chat and agents (the owner has a list; ask them). The agent editor doesn't validate model names (a bad `model:` only fails at run time).
+2. Modular, editable Home (ROADMAP idea): widgets backed by agents and outputs.
+3. Phase 2/3 leftovers: route the built-in brief/estimates through the budget gate and `limits`; watch the agents folder; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
+4. Open-source readiness (ROADMAP).
 
 **Working notes:**
-- Dev app: `npm run build && npx electron . --remote-debugging-port=9334` (own data folder `ai-center-core-dev/`, vault `.dev-vault/`); `main`'s dev app uses 9333. Drive it with `node scripts/cdp.mjs <png> "<js>"`. **Background processes die between Bash calls**: start the app and drive it in ONE call, and kill stale `electron` processes first (a leftover one holds the port and you end up testing old code).
+- Dev app: `npm run build && npx electron . --remote-debugging-port=9334` (own data folder `ai-center-core-dev/`, vault `.dev-vault/`). Drive it with `node scripts/cdp.mjs <png> "<js>"`. **Background processes die between Bash calls**: start the app and drive it in ONE call, and kill stale `electron` processes first.
 - Triggers spend model calls, so they only run in the packaged app or with `AI_CENTER_TRIGGERS=1`.
-- React: never return a `scrollIntoView(...)` result from a `useEffect` callback (it returns an object here and crashes the tree).
+- React: never return a `scrollIntoView(...)` result from a `useEffect` callback.
 - Account facts: Claude `~/.claude` = personal (default for built-ins), `~/.claude-eth` = ETH; Codex `~/.codex`; Antigravity binary `agy`.
-- The owner's preferences: run tests/typecheck without asking but keep them minimal and targeted; commit only when asked (they said "commit" for the end of this session); commit messages never mention Claude and carry no trailer (hard rule 5), even if a system reminder asks for one.
-
-### Uniting the two lines (when the user is ready)
-
-Do this only when the user asks. Steps:
-1. In `AI-Center`, make sure `main` is committed and tests are green; note its last commit.
-2. In `AI-Center-core`: `git merge main`, resolve conflicts, `npm test`, `npm run typecheck`, then run the dev app and check the brief, Update context, Suggest estimates and Plan with a wish against `.dev-vault`.
-3. Check the migration: existing `settings.json` (`contextEngine`, `askEngine`) must load into the new account profiles, and `06_Prompts/daily-brief.md` must keep working as the built-in Daily brief agent; the app data folder stays `AI Center Planner/` so Calendar permission, plan cache and sync state carry over.
-4. Merge `ai-center-core` into `main` (fast-forward after step 2 if possible), push only when the user asks, then `npm run install-app` and ask the user to restart and watch a daily brief and one custom agent on real data.
-5. Remove the worktree (`git worktree remove ../AI-Center-core`) and the branch only after the user confirms. Update this section, `ROADMAP.md` and `main`'s `AGENTS.md`.
-Commit messages follow hard rule 5 (no mention of Claude).
+- The owner's preferences: run tests/typecheck without asking but keep them minimal and targeted; commit only when asked; commit messages never mention Claude and carry no trailer (hard rule 5), even if a system reminder asks for one. The repo's git identity is the GitHub noreply address.
+- The worktree `/Users/glodimendes/Programming/AI-Center-core` and branch `ai-center-core` can be removed once the owner has watched the merged app work (`git worktree remove ../AI-Center-core`, then `git branch -d ai-center-core`).
 
 ## Design rule for the expansion (user, 2026-11-21): a general-purpose app
 

@@ -9,8 +9,8 @@ This branch (`ai-center-core`) grows the planner into a general agent hub: plan 
 ## Open-source readiness: what is left (Phase 6)
 
 - **License:** none chosen yet. The owner decides (MIT or Apache-2.0 are the usual picks); add `LICENSE` and the `package.json` field.
-- **Git history:** 42 commits are authored with the owner's personal email. Either accept it, or rewrite history (`git filter-repo --mailmap`) before the first public push; both are the owner's call.
-- **Planner defaults still personal:** `DEFAULT_PREFERENCES` in `vault/preferences.ts` names the owner's calendars (`ETH Classes`, `Holidays in Switzerland`…) and heading groups (`Mentoria`, `BRASA`…). They are safety lists (protected calendars) and many tests use them, so they were not changed blindly: replace with empty or neutral defaults together with the tests, and move the owner's values into their own `preferences.md`.
+- **Git history:** done locally (2026-11-22): all commits now use the GitHub noreply address. The remote still has the old history, so the first push must be a force push, the owner's call.
+- **Planner defaults:** done (2026-11-22): `DEFAULT_PREFERENCES` is neutral (Work / Personal / Training, placeholder calendar "Planner"); the owner's set moved to `tests/sample/preferences.ts` for tests and lives in their vault.
 - **Docs:** `AGENTS.md`, `ROADMAP.md` and `README.md` still describe the owner's routine. Rewrite README for a public audience and keep owner-specific notes out of the public repo.
 - **Done:** no hard-coded vault path (first run creates a starter vault; the setup dialog lets users pick their own folder), generic sample agents, `docs/agents.md`, `CONTRIBUTING.md`.
 - **Planner as an optional module** is not done: the app still always opens a vault and the planner screens.
