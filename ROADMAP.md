@@ -49,12 +49,23 @@ Decided: **the app owns the calendar blocks it creates** (2026-11-11). The weekl
   - the weekly review on real data, especially **Archive checked tasks** (it removes `[x]` lines; they go to `tasks/archive/done-YYYY.md`);
   - a day rule, a habit (`3x/week`), Wrap up, Suggest estimates, Plan with a wish (also through Codex);
   - narrow windows, including dragging a task from Today's narrow drawer onto the timeline (CDP can't drive HTML5 drag);
-  - the chat and agents work: an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex and Ollama.
+  - the chat and agents work: an agent-proposed handoff through a real model, the long-text file spill, Send back on a real chain, the queue across a real restart, the model dropdown for Codex and Ollama;
+  - agent organization: importing real files written by Codex or Claude Code, groups and Chat pins over days of use, an agent's data sources (`file` sources outside the vault) in a real run;
+  - first launch on a fresh install (the Setup dialog, choosing an existing folder that lacks the framework, the Home checklist): tested in the dev app only; the maintainer will test it on a fresh install later.
 - **Live streaming of agent answers** (engines already emit `text` events).
 - **"Ask an agent"** from task rows, Home cards, Docs and ⌘K, with the item as context.
 - **The daily brief as an agent.** The maintainer wants the built-in brief to become an agent (or part of one) in the hub, instead of its own code path in `context/brief.ts`. To keep: read-only tools, calendar only from the app's visible calendars, Gmail read-only, the Home cards (they parse the `## ` headings of `BRIEF_FORMAT`, which then belongs to the agent's output contract), suggested todos only on a click, no auto-run in dev. The vault's `prompts/daily-brief.md` can stay as the agent's instructions; the app-specific parts (output format, read-only rule, calendar handling) stay in code, not in the prompt.
 - **An agent to replace the removed "AI preparation opportunities" Home card.** Exists as a user-defined agent in the maintainer's vault (the daily brief no longer covers it); shipping a generic sample is optional.
 - **Phase 2/3 leftovers:** route the built-in brief and estimates through the budget gate and `limits`; watch the agents folder for changes; "New agent from this run"; `create-event` and `api-call` executors; Strava/Garmin sources.
+
+## Future goals (maintainer, 2026-11-22)
+
+Both to be measured before anything is changed; nothing here is designed yet.
+
+- **App optimization: storage and processing.**
+  - *Storage:* app data only grows today: `runs/*.jsonl`, `chats/`, `goals/`, `queue.json`, the plan cache; the vault's git history gets a `planner: …` commit for most saves and the weekly files keep their overrides forever (see Known limitations). Measure first, then rotate or prune logs and transcripts, and consider squashing the app's own commits.
+  - *Processing:* every state push rebuilds the whole `AppState` (vault parse, plan, framework check, agent registry listing that reads every agent file, usage totals); the renderer bundle is about 4.4 MB. Candidates: cache what didn't change, re-plan only on relevant changes, read agent files only when the folder changes, split the bundle.
+- **AI and agents' usage optimization.** Fewer tokens and calls for the same result: keep prompts pointing to files instead of pasting them (already the rule for built-in prompts), trim what source bundles and handoff packets carry, reuse chat sessions, choose the cheapest model that does the job per agent, and route the built-in brief and estimates through the budget gate (Phase 2/3 leftover). Make cost visible per agent and per week in Activity so the user can see what is worth running.
 
 ## Protocols, later
 
@@ -109,5 +120,7 @@ Home should become editable and modular: people arrange the cards that show thei
 - **Calendar:** macOS Calendar provider (Swift EventKit helper) with Google API as the alternative; protected calendars; tagged-only sync with a confirm dialog (week or single day); calendar edits win; hand edits of the user's own events; visibility and Busy/Free per calendar and per event; web edits pulled without opening Calendar.app.
 - **Daily brief:** in-app, first open per day, read-only, with an editable prompt; polished cards; TEMPORARY INBOX suggestions behind an Add click.
 - **Update context (⌘U):** Codex or Claude edits the vault; diff review with Keep/Undo; undo reverts only the AI's lines.
+- **Vault framework (2026-11-22):** every vault path in `shared/paths.ts`, plain lowercase folders, root `AGENTS.md` + `CLAUDE.md`; shipped templates (`vault/framework.ts`); a chosen folder gets the files it lacks; the missing-files check at every start; Setup with sample agents; the Home checklist; a new vault gets its own git history.
+- **Agent organization (2026-11-22):** only agents made or accepted in the app count; files other tools write are found and imported (Claude Code and Codex formats read leniently) or ignored; named, ordered groups; Chat pins; frontmatter with an unquoted `: ` is read instead of failing.
 - **Agent hub:** Markdown agent definitions, permissions and approvals, engines (Claude, Codex, Antigravity, Ollama, custom command) with account profiles and usage windows, triggers, sources (vault, files, URLs, Gmail draft-only), goals with a coordinator, chat with Markdown rendering and a central thread, Hand over (whole answer, section or selection, suggested agent), agent-proposed handoffs, a persisted queue for busy agents, handoff packets with chain limits, chain view with cost, model dropdown.
 - **Packaging:** signed app via `scripts/sign-app.sh`; the README has install steps.
