@@ -150,10 +150,7 @@ export function Brief() {
 
           <div className="grid grid-cols-1 gap-6">
             <Card title="Due" icon={<Flag size={14} />}>
-              <TaskList title="Overdue" tasks={overdue} tone="danger" />
-              <TaskList title="Today" tasks={dueToday} />
-              <TaskList title="Next 7 days" tasks={dueWeek} />
-              {!overdue.length && !dueToday.length && !dueWeek.length && <div className="text-[12px] text-muted">No deadlines this week.</div>}
+              <DueLists overdue={overdue} today={dueToday} week={dueWeek} limit={4} />
             </Card>
           </div>
 
@@ -277,20 +274,49 @@ function Stat({ icon, label, value, sub, tone, children }: { icon: ReactNode; la
   )
 }
 
+/** The Due card: overdue, today, next 7 days. Like the brief cards, only the first `limit` tasks show (overdue first), with a button for the rest. */
+function DueLists({ overdue, today, week, limit }: { overdue: Task[]; today: Task[]; week: Task[]; limit: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const total = overdue.length + today.length + week.length
+  if (!total) return <div className="text-[12px] text-muted">No deadlines this week.</div>
+  let left = expanded ? Infinity : limit
+  const take = (list: Task[]) => {
+    const shown = list.slice(0, Math.max(0, left))
+    left -= shown.length
+    return shown
+  }
+  const groups = [
+    { title: 'Overdue', tasks: take(overdue), tone: 'danger' as const },
+    { title: 'Today', tasks: take(today) },
+    { title: 'Next 7 days', tasks: take(week) }
+  ]
+  return (
+    <>
+      {groups.map((g) => (
+        <TaskList key={g.title} title={g.title} tasks={g.tasks} tone={g.tone} />
+      ))}
+      {total > limit && (
+        <button onClick={() => setExpanded(!expanded)} className="text-[12px] font-medium text-accent hover:underline">
+          {expanded ? 'Show less' : `Show ${total - limit} more`}
+        </button>
+      )}
+    </>
+  )
+}
+
 function TaskList({ title, tasks, tone }: { title: string; tasks: Task[]; tone?: 'danger' }) {
   const s = useStore((st) => st.state)!
   if (!tasks.length) return null
   return (
     <div className="mb-3">
       <div className={cx('text-[12px] mb-1', tone === 'danger' ? 'text-danger' : 'text-faint')}>{title}</div>
-      {tasks.slice(0, 6).map((t) => (
+      {tasks.map((t) => (
         <div key={t.id} className="flex items-center gap-2 text-[13px] py-1">
           <Dot color={categoryOf(s, t.category).color} />
           <span className="truncate flex-1" dangerouslySetInnerHTML={{ __html: inlineMd(t.title) }} />
           <span className="text-[10.5px] text-faint whitespace-nowrap">{relDay(t.due!)}</span>
         </div>
       ))}
-      {tasks.length > 6 && <div className="text-[11px] text-faint">+{tasks.length - 6} more</div>}
     </div>
   )
 }
