@@ -32,15 +32,32 @@ export const MAX_HOPS = 3
 /** A handed-over text longer than this travels as a vault file; the receiver gets the path and a short head. */
 export const SPILL_CHARS = 2000
 
-/** Chat answers may point at another agent. Only handing work over and adding a task can be proposed this way; the user's click decides. */
+/** Conversation runs: tasks and handoffs are proposed in one block; the user's click decides. */
 export function handoffFormat(peers: { id: string; description?: string }[]): string {
   const list = peers.map((p) => `- ${p.id}${p.description ? `: ${p.description}` : ''}`).join('\n')
-  return `If part of your answer is clearly better handled by one of the user's other agents, or is a task worth adding, you may end your answer with a fenced block (no sentence or label before it):
+  const run = peers.length ? `{"kind": "run-agent", "title": "short label", "payload": {"agent": "agent-id", "objective": "what that agent should achieve", "input": "only the material it needs", "expect": "the form the answer should take"}}, ` : ''
+  return `You are running inside the AI Center app (a planner and agent hub over the user's notes and calendar). The user reads your answers there and approves what you propose with a click.
+If part of your answer is ${peers.length ? 'clearly better handled by one of the user\'s other agents, or is ' : ''}a task worth adding to their todo list, you may end your answer with a fenced block (no sentence or label before it):
 \`\`\`actions
-[{"kind": "run-agent", "title": "short label", "payload": {"agent": "agent-id", "objective": "what that agent should achieve", "input": "only the material it needs", "expect": "the form the answer should take"}}, {"kind": "add-task", "title": "short label", "payload": {"section": ["Heading"], "body": "task text"}}]
+[${run}{"kind": "add-task", "title": "short label", "payload": {"section": ["Heading"], "body": "task text"}}]
 \`\`\`
-The other agent sees nothing of this conversation, so the objective and input must stand on their own. Nothing in that block happens without the user's click. Propose only when it clearly helps; most answers need none.${list ? `\nOther agents:\n${list}` : ''}`
+${peers.length ? 'The other agent sees nothing of this conversation, so the objective and input must stand on their own. ' : ''}Nothing in that block happens without the user's click. Propose only when it clearly helps; most answers need none.${list ? `\nOther agents:\n${list}` : ''}`
 }
+
+/**
+ * Chat only: scheduled work and questions with choices go through the app. Without this a CLI model sets up recurring work in its own
+ * tooling (cron, loops, scheduled agents) where the user never sees it, and can't show its question form (no terminal here).
+ */
+export const CHAT_FORMAT = `Recurring or later work: when the user wants you to do something on a schedule (every morning, each Monday, weekdays at 18:00…), the app runs it for you: it sends you the prompt in this chat at that time and the user reads your answer here. Never set it up with your own tools or the CLI's (no cron, loops, scheduled or remote agents, hooks, scripts or settings): those would run where the user never sees them. Propose it in the actions block instead:
+\`\`\`actions
+[{"kind": "schedule", "title": "short name", "payload": {"title": "short name", "prompt": "what to do each time, standing on its own (the chat may have been cleared by then)", "time": "07:00", "days": "daily | weekdays | weekends | mon,thu"}}]
+\`\`\`
+It starts only when the user clicks Schedule; they can pause or delete it from the chat header.
+Questions: when you need the user to choose before you go on (an option, a time, a scope), you may end your answer with a fenced block instead of asking in prose; the app shows it as a form with buttons and sends their choices back as the next message:
+\`\`\`questions
+[{"question": "Which days?", "header": "Days", "options": [{"label": "Weekdays", "description": "Mon to Fri"}, {"label": "Every day"}], "multiSelect": false}]
+\`\`\`
+At most 4 questions with 2 to 6 options each; the user can always write their own answer. Ask only what you can't decide sensibly yourself.`
 
 /** The message the receiving agent gets for a handoff (also what the chat shows). */
 export function renderPacket(p: HandoffPacket, fromName: string): string {

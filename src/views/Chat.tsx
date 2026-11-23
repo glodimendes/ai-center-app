@@ -12,6 +12,8 @@ import { FileChips } from '@/components/FileChips'
 import { ModelPicker } from '@/components/ModelPicker'
 import { FolderMenu } from '@/components/FolderMenu'
 import { MemoryMenu } from '@/components/MemoryMenu'
+import { RoutinesMenu } from '@/components/RoutinesMenu'
+import { QuestionForm } from '@/components/QuestionForm'
 
 const CENTRAL = '_central'
 
@@ -167,6 +169,7 @@ export function Chat() {
             <h1 className="text-[15px] font-semibold truncate">{title}</h1>
             {subtitle && <div className="text-[12px] text-muted truncate">{subtitle}</div>}
           </div>
+          {agent && <RoutinesMenu agent={agent} routines={a.routines.filter((r) => r.agentId === agent.id)} />}
           {agent && <MemoryMenu agent={agent} />}
           {agent && <FolderMenu agent={agent} convo={key} folder={folder} extra={a.chatExtraFolders[key] ?? []} vault={s.vault.vaultPath} />}
           {messages.length > 0 && (
@@ -198,6 +201,9 @@ export function Chat() {
                   return isCentral ? api.centralSend(q) : api.chatSend(agent!.id, q)
                 }}
                 canRetry={!busy}
+                // Questions are open until the next message: only the last answer's form can be used.
+                onAnswer={agent && i === messages.length - 1 && m.questions?.length ? (t) => api.chatSend(agent.id, t).catch((e) => toast((e as Error).message, 'error')) : undefined}
+                answering={active.length > 0}
                 proposals={m.runId ? pending.filter((x) => x.runId === m.runId) : []}
                 kept={m.runId ? a.approvals.filter((x) => x.runId === m.runId && x.kind === 'remember' && x.status === 'done') : []}
                 backTo={(() => {
@@ -357,7 +363,7 @@ function ListItem({ active, onClick, icon, label, dot }: { active: boolean; onCl
   )
 }
 
-function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals, kept, backTo }: { m: ChatMessage; agentIds: Set<string>; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; proposals: Action[]; kept: Action[]; backTo?: { key: string; name: string } }) {
+function Message({ m, agentIds, name, origin, run, onRetry, canRetry, onAnswer, answering, proposals, kept, backTo }: { m: ChatMessage; agentIds: Set<string>; name: string; origin: string; run?: Run; onRetry: () => Promise<unknown>; canRetry: boolean; onAnswer?: (text: string) => Promise<unknown>; answering?: boolean; proposals: Action[]; kept: Action[]; backTo?: { key: string; name: string } }) {
   const openDoc = useStore((st) => st.openDoc)
   const openChat = useStore((st) => st.openChat)
   const [sel, setSel] = useState<{ text: string; x: number; y: number } | null>(null)
@@ -373,11 +379,14 @@ function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals,
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-3xl bg-sunken px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
+          {m.routine && <div className="text-[11.5px] text-faint mb-0.5">Scheduled · {m.routine}</div>}
           {m.files && <FileChips files={m.files} className="mb-1.5" />}
           {withTags(m.text, agentIds)}
         </div>
       </div>
     )
+  // An answer that was only a proposal leaves nothing to show once the card is resolved (the app's note says what happened).
+  if (!m.text.trim() && !onAnswer && !proposals.length && !kept.length) return null
   const time = new Date(m.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   // A selection inside the answer offers to hand just that part on.
   const onMouseUp = () => {
@@ -398,6 +407,7 @@ function Message({ m, agentIds, name, origin, run, onRetry, canRetry, proposals,
         <div className="text-[15px] leading-7 pr-9" onMouseUp={onMouseUp}>
           <Markdown text={m.text} onOpenDoc={openDoc} segmentActions={(source) => <PartButton text={source} origin={origin} />} />
         </div>
+        {onAnswer && m.questions && <QuestionForm questions={m.questions} onAnswer={onAnswer} disabled={answering} />}
         {kept.map((x) => (
           <RememberedNote key={x.id} action={x} />
         ))}

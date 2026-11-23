@@ -2,12 +2,14 @@ import { Check, Undo2, X } from 'lucide-react'
 import type { Action, Run } from '@shared/agents'
 import { api } from '@/lib/api'
 import { act, useStore } from '@/store/app'
+import { describeRoutine } from '@shared/routines'
 import { ChangesList } from './ChangesList'
 import { Button } from './ui'
 
 const KIND: Record<Action['kind'], string> = {
   remember: 'Remember',
   'update-instructions': 'Change its instructions',
+  schedule: 'Schedule',
   'add-task': 'Add a task',
   'complete-task': 'Complete a task',
   'create-event': 'Create a calendar event',
@@ -24,17 +26,22 @@ export function ApprovalCard({ action, compact }: { action: Action; compact?: bo
   const isChange = action.kind === 'update-instructions'
   const detail = Object.entries(action.payload).filter(([k, v]) => (typeof v === 'string' || Array.isArray(v)) && !(isChange && k === 'instructions'))
   const target = action.kind === 'run-agent' ? useStore.getState().state?.agents.agents.find((g) => g.id === action.payload.agent)?.name ?? String(action.payload.agent ?? '') : ''
+  // A schedule shows when it runs and, on hover, what it will be asked each time.
+  const when = action.kind === 'schedule' ? describeRoutine({ time: String(action.payload.time ?? ''), days: String(action.payload.days ?? 'daily') }) : ''
   // Under the message that proposed it: one line with the two choices (a change of instructions needs the whole card, to read before applying).
   if (compact && !isChange)
     return (
       <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-panel pl-3 pr-1.5 py-1.5 text-[13px]">
         <span className="text-faint shrink-0">{action.kind === 'run-agent' ? `→ ${target}` : KIND[action.kind]}</span>
-        <span className="flex-1 min-w-0 truncate" title={action.title}>{action.title}</span>
+        <span className="flex-1 min-w-0 truncate" title={when ? String(action.payload.prompt ?? action.title) : action.title}>
+          {action.title}
+          {when && <span className="text-faint"> · {when}</span>}
+        </span>
         <Button kind="ghost" onClick={() => act(api.rejectAction(action.id))}>
           Dismiss
         </Button>
         <Button kind="primary" onClick={() => act(api.approveAction(action.id).then((r) => r.status === 'failed' && toast(r.error ?? 'Failed', 'error')))}>
-          {action.kind === 'run-agent' ? 'Send' : action.kind === 'remember' ? 'Keep' : 'Add'}
+          {action.kind === 'run-agent' ? 'Send' : action.kind === 'remember' ? 'Keep' : action.kind === 'schedule' ? 'Schedule' : 'Add'}
         </Button>
       </div>
     )

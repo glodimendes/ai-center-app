@@ -133,7 +133,35 @@ export interface Run {
 }
 
 /** Everything with an effect outside the agent's own output: only ever proposed, then run when the user approves. */
-export type ActionKind = 'remember' | 'update-instructions' | 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call' | 'run-agent' | 'new-agent'
+export type ActionKind = 'remember' | 'update-instructions' | 'schedule' | 'add-task' | 'complete-task' | 'create-event' | 'email-draft' | 'api-call' | 'run-agent' | 'new-agent'
+
+/**
+ * Scheduled AI work: at `time` on its days the app sends `prompt` to the agent's own chat, as if the user had typed it.
+ * Proposed by the agent from its chat (action `schedule`), created only on the user's click; kept in app data `routines.json`.
+ */
+export interface Routine {
+  id: string
+  agentId: string
+  title: string
+  prompt: string
+  /** HH:MM, local time. */
+  time: string
+  /** `daily`, `weekdays`, `weekends` or weekday names like `mon,thu`. */
+  days: string
+  paused?: boolean
+  createdAt: string
+  /** When it last started a turn (ISO). */
+  lastRun?: string
+}
+
+/** A question the agent asks with choices (like Claude Code's question form); the chat shows it as a form, the reply is the next message. */
+export interface ChatQuestion {
+  question: string
+  /** Short label for the answer line. */
+  header?: string
+  options: { label: string; description?: string }[]
+  multiSelect?: boolean
+}
 
 export interface Action {
   id: string
@@ -207,6 +235,10 @@ export interface ChatMessage {
   link?: string
   /** user: absolute paths of the files attached to this message. */
   files?: string[]
+  /** user: sent by a routine (its title), not typed. */
+  routine?: string
+  /** agent: questions it asked with choices, shown as a form until the user answers. */
+  questions?: ChatQuestion[]
 }
 
 /** A conversation's own account, model and effort, chosen in the chat (the agent's own settings are the default). */
@@ -333,6 +365,7 @@ export interface AgentsState {
   /** Account, model and effort a conversation switched to (absent = the agent's own). */
   chatModels: Record<string, ChatOverride>
   goals: Goal[]
+  routines: Routine[]
   /** Folder the definitions are read from. */
   dir: string
   /** The unreviewed edits of a propose/act run, shown with Keep/Undo. */

@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto'
 import type { AccountProfile, Action, ChatMessage, ChatModelOption, ChatOverride, Goal, HandoffPacket, SourceDef, AgentDef, AgentsState, CliInfo, Limits, OrganizeChange } from '@shared/agents'
 import { isoDate } from '@shared/time'
 import { AGENT_OUTPUT_DIR, BRIEFS_DIR, HANDOFFS_DIR } from '@shared/paths'
-import { ApprovalStore, parseActions } from './agents/actions'
+import { ApprovalStore, parseActions, parseQuestions } from './agents/actions'
+import { RoutineStore, checkRoutine, describeRoutine, dueRoutines } from './agents/routines'
 import { AgentError, ID_RE } from './agents/definition'
 import { needsReview } from './agents/permissions'
 import { ENGINES, failureMessage, ollamaModels, profileEnv, resolveBinary, runEngine } from './agents/engines'
@@ -22,7 +23,7 @@ import { parseMentions, routeCapture, withHistory } from './agents/capture'
 import { dueAgents, watchMatches, type TickEvent } from './agents/triggers'
 import { budgetPause, dailyTotals, readCodexLimits, readRunRows, usageTotals } from './agents/usage'
 import { AgentRegistry } from './agents/registry'
-import { ADAPT_FORMAT, MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef, resolveDirs } from './agents/runner'
+import { ADAPT_FORMAT, CHAT_FORMAT, MAX_HOPS, SPILL_CHARS, handoffFormat, renderPacket, runAgentDef, resolveDirs } from './agents/runner'
 import { attachDirs, attachmentBlock } from './agents/attachments'
 import { loadHistory } from './agents/history'
 import { notice, type NoticeKind } from './agents/notice'
@@ -91,6 +92,7 @@ export class AgentHub {
   private memoryDir: string
   private goalDir: string
   private goals: GoalRunner
+  readonly routines: RoutineStore
   /** Per agent: the CLI conversation id and the transcript. Persisted under app data `chats/`. */
   private chats = new Map<string, { sessionId?: string; messages: ChatMessage[]; folder?: string; extra?: string[]; cwd?: string; override?: ChatOverride; sessionProfile?: string; freshSession?: boolean }>()
   /** Per handoff chain: what was already asked of whom, so a chain can't repeat itself. */
@@ -114,6 +116,7 @@ export class AgentHub {
       /* worst case a schedule catches up once more */
     }
     this.registry = new AgentRegistry(deps.agentsDir, join(deps.userData, 'agents-org.json'))
+    this.routines = new RoutineStore(join(deps.userData, 'routines.json'))
     this.approvals = new ApprovalStore(
       join(deps.userData, 'approvals.json'),
       {
@@ -174,6 +177,15 @@ export class AgentHub {
           if (instructions.length > 20_000) throw new Error('The proposed instructions are too long.')
           this.registry.save({ ...def, instructions })
           this.chat(def.id).freshSession = true
+          this.saveChat(def.id)
+        },
+        // Scheduled work for the agent that proposed it: from now on the app sends the prompt to its chat at that time.
+        'schedule': async (a) => {
+          const def = this.registry.get(a.agentId)
+          if (!def || def.builtin) throw new Error('That agent can\'t be scheduled here.')
+          const r = checkRoutine(a.payload)
+          this.routines.add({ ...r, id: randomUUID().slice(0, 8), agentId: def.id, createdAt: new Date().toISOString() })
+          this.chat(def.id).messages.push({ role: 'note', text: `Scheduled “${r.title}”: ${describeRoutine(r).toLowerCase()}`, link: def.id, t: new Date().toISOString() })
           this.saveChat(def.id)
         },
         'complete-task': async (a) => {
@@ -242,6 +254,7 @@ export class AgentHub {
       sources: this.deps.sources() ?? [],
       gmail: { configured: this.deps.gmail.configured(), connected: this.deps.gmail.connected() },
       goals: this.goals.list().slice(-50),
+      routines: this.routines.list(),
       // Transcripts are loaded from disk on first use, so a conversation survives a restart.
       chats: Object.fromEntries([CENTRAL, ...agents.filter((a) => !a.builtin).map((a) => a.id)].map((id) => [id, this.chat(id).messages.slice(-100)])),
       ...this.chatSettings(agents),
@@ -276,7 +289,27 @@ export class AgentHub {
       this.supervisor.enqueue(def, event === 'open' ? 'Started because the app was opened.' : 'Started by its schedule.', { from: 'trigger' })
       started.push(id)
     }
+    // Routines continue the agent's own chat. A busy agent is fine (the turn queues); a full queue tries again next tick.
+    for (const r of dueRoutines(this.routines.list(), now)) {
+      if (!this.registry.get(r.agentId)) continue
+      try {
+        this.sendChat(r.agentId, r.prompt, undefined, { from: `routine:${r.id}` })
+        this.routines.update(r.id, { lastRun: now.toISOString() })
+        started.push(r.agentId)
+      } catch {
+        /* next tick */
+      }
+    }
     return started
+  }
+
+  setRoutinePaused(id: string, paused: boolean) {
+    this.routines.update(id, { paused: paused || undefined })
+    this.deps.push()
+  }
+  removeRoutine(id: string) {
+    this.routines.remove(id)
+    this.deps.push()
   }
 
   /** A markdown file changed outside the app: runs agents watching it, at most once per 30 s each. Their own outputs never count. */
@@ -401,7 +434,7 @@ export class AgentHub {
   }
 
   /** One chat turn: a run that continues the agent's conversation. It queues, passes the budget gate and, for propose/act agents, is reviewed like any run. */
-  sendChat(agentId: string, text: string, origin?: string, extra: { packet?: HandoffPacket; parentRunId?: string; chainId?: string; hops?: number; attachments?: string[] } = {}): string {
+  sendChat(agentId: string, text: string, origin?: string, extra: { from?: string; packet?: HandoffPacket; parentRunId?: string; chainId?: string; hops?: number; attachments?: string[] } = {}): string {
     const base = this.registry.get(agentId)
     if (!base) throw new AgentError('That agent no longer exists.')
     // The conversation's own account, model and effort (chosen in the chat) win over the agent's.
@@ -737,6 +770,7 @@ export class AgentHub {
     if (!ID_RE.test(id)) throw new AgentError('Invalid agent id.')
     this.registry.remove(id)
     removeMemory(this.memoryDir, id)
+    this.routines.removeAgent(id)
     this.deps.push()
   }
 
@@ -795,9 +829,9 @@ export class AgentHub {
     // Conversation runs may propose handing work on (run-agent, add-task) when there is anyone to hand it to.
     const conversation = Boolean(run.chat || run.input.from === 'central')
     const peers = this.registry.list().agents.filter((x) => x.id !== def.id)
-    const handoffText = conversation && peers.length && (run.hops ?? 0) < MAX_HOPS ? handoffFormat(peers) : undefined
-    // In a chat the agent may also propose changing its own instructions (the user's click applies it).
-    const handoff = [handoffText, run.chat && !def.builtin ? ADAPT_FORMAT : ''].filter(Boolean).join('\n\n') || undefined
+    const handoffText = conversation ? handoffFormat((run.hops ?? 0) < MAX_HOPS ? peers : []) : undefined
+    // In a chat the agent may also propose changing its own instructions or scheduled work (the user's click applies it), and ask with a form.
+    const handoff = [handoffText, run.chat && !def.builtin ? `${ADAPT_FORMAT}\n\n${CHAT_FORMAT}` : ''].filter(Boolean).join('\n\n') || undefined
     // `/agent` in a chat message: the user pointed at another agent, so say so; a handoff still needs their click.
     const refs = run.chat && handoffText ? parseMentions(run.input.text, peers).agents : []
     const refNote = refs.length ? `\n\nThe user referred to ${refs.map((r) => `/${r.id}${r.description ? ` (${r.description})` : ''}`).join(', ')}. If they want that agent to do part of this, propose handing it over.` : ''
@@ -829,12 +863,19 @@ export class AgentHub {
       // Agents that didn't ask for actions may only propose handing work on or adding a task. Notes need memory switched on;
       // changing the agent's own instructions is a chat thing (the user is there to read it) and never for a built-in.
       const wide = def.output === 'actions' || def.output === 'suggestions'
-      const mayPropose = (kind: string) => (kind === 'remember' ? Boolean(def.memory) : kind === 'update-instructions' ? Boolean(run.chat) && !def.builtin : wide || kind === 'run-agent' || kind === 'add-task')
+      const mayPropose = (kind: string) => (kind === 'remember' ? Boolean(def.memory) : kind === 'update-instructions' || kind === 'schedule' ? Boolean(run.chat) && !def.builtin : wide || kind === 'run-agent' || kind === 'add-task')
       for (const a of parsed.actions)
         if (mayPropose(a.kind)) {
           const proposed = await this.approvals.propose(run.id, def.id, def.permission, a)
           if (proposed.status === 'pending') this.alert('approval', def.name, proposed.title)
         }
+    }
+    // A chat answer may end with questions for a form (the reply is the user's next message).
+    let questions: ChatMessage['questions']
+    if (run.chat) {
+      const q = parseQuestions(text)
+      text = q.text
+      questions = q.questions.length ? q.questions : undefined
     }
     if (def.output === 'file' && text) {
       // The app writes the answer itself: an agent never needs write access for its own output.
@@ -851,7 +892,9 @@ export class AgentHub {
       chat.sessionProfile = def.profile
       chat.freshSession = undefined
       const t = new Date().toISOString()
-      chat.messages.push({ role: 'user', text: run.input.text, t, files: files.length ? files : undefined }, { role: 'agent', text, t, runId: run.id })
+      const routine = run.input.from.startsWith('routine:') ? (this.routines.list().find((r) => `routine:${r.id}` === run.input.from)?.title ?? 'Routine') : undefined
+      chat.messages.push({ role: 'user', text: run.input.text, t, files: files.length ? files : undefined, routine }, { role: 'agent', text, t, runId: run.id, questions })
+      if (routine) this.alert('routine', def.name, routine)
       this.saveChat(def.id)
     }
     if (run.input.from === 'central') {

@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { canAutoRun } from './permissions'
-import type { Action, ActionKind, Permission } from '@shared/agents'
+import type { Action, ActionKind, ChatQuestion, Permission } from '@shared/agents'
 
 export type { Action, ActionKind }
-export const ACTION_KINDS: ActionKind[] = ['remember', 'update-instructions', 'add-task', 'complete-task', 'create-event', 'email-draft', 'api-call', 'run-agent', 'new-agent']
+export const ACTION_KINDS: ActionKind[] = ['remember', 'update-instructions', 'schedule', 'add-task', 'complete-task', 'create-event', 'email-draft', 'api-call', 'run-agent', 'new-agent']
 
 export type Executor = (action: Action) => Promise<void>
 
@@ -21,6 +21,32 @@ export function parseActions(text: string): { text: string; actions: { kind: Act
     return { text: rest, actions }
   } catch {
     return { text: rest, actions: [] }
+  }
+}
+
+/** Pulls the ```questions [...] ``` block a chat answer may end with (shown as a form). Malformed questions are dropped. */
+export function parseQuestions(text: string): { text: string; questions: ChatQuestion[] } {
+  const m = text.match(/```questions\s*([\s\S]*?)```/)
+  if (!m) return { text, questions: [] }
+  const rest = text.replace(m[0], '').trim()
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  try {
+    const arr = JSON.parse(m[1])
+    const questions = (Array.isArray(arr) ? arr : [])
+      .filter((q) => q && str(q.question) && Array.isArray(q.options))
+      .map((q): ChatQuestion => ({
+        question: str(q.question),
+        header: str(q.header) || undefined,
+        options: (q.options as unknown[])
+          .map((o) => (typeof o === 'string' ? { label: o.trim() } : o && typeof o === 'object' ? { label: str((o as any).label), description: str((o as any).description) || undefined } : { label: '' }))
+          .filter((o) => o.label)
+          .slice(0, 6),
+        multiSelect: q.multiSelect === true || undefined
+      }))
+      .slice(0, 4)
+    return { text: rest, questions }
+  } catch {
+    return { text: rest, questions: [] }
   }
 }
 

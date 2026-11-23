@@ -2,9 +2,11 @@ import { CONTEXT_MODELS } from './models'
 import type { Engine, EngineEvent } from './types'
 
 const FILE_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep']
-const NO_SHELL = ['Bash', 'WebFetch', 'WebSearch']
+// The CLI's own schedulers: a routine set up there runs where the user never sees it (the app plans repeating tasks itself).
+const NO_SCHEDULE = ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup', 'RemoteTrigger', 'EnterWorktree']
+const NO_SHELL = ['Bash', 'WebFetch', 'WebSearch', ...NO_SCHEDULE]
 const READ_ONLY = ['Read', 'Glob', 'Grep']
-const NO_WRITE = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch']
+const NO_WRITE = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', ...NO_SCHEDULE]
 
 /** Claude Code CLI. Claude can be restricted tool by tool, so every mode is enforced by flags, not by the prompt. */
 export const claudeCli: Engine = {

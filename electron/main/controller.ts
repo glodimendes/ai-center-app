@@ -860,6 +860,12 @@ export class Controller implements Api {
   async saveAgentMemory(id: string, text: string) {
     this.agents.saveAgentMemory(id, text)
   }
+  async setRoutinePaused(id: string, paused: boolean) {
+    this.agents.setRoutinePaused(id, paused)
+  }
+  async removeRoutine(id: string) {
+    this.agents.removeRoutine(id)
+  }
   async undoRemember(actionId: string) {
     await this.agents.undoRemember(actionId)
   }
