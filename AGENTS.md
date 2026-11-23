@@ -11,11 +11,20 @@ AI Center (formerly AI Center Planner) is a macOS Electron app with two parts th
 
 The UI is in English. Task text is whatever language the user writes, and it must be kept verbatim.
 
-## State (2026-11-22)
+## State (2026-11-23)
 
 The planner and the agent hub are one app on `main`, pushed to the public repo `glodimendes/ai-center-app` (default branch `main`). History was rewritten once so every commit uses the GitHub noreply address, and force-pushed with the maintainer's OK; **any further force push needs their explicit OK again**. A local restore tag `pre-agent-hub-merge` marks `main` before the hub was merged. The README is written for a public audience; the planner reference lives in `docs/planner.md`. Personal sample data was replaced with neutral names in `tests/` and `docs/planner.md` (the old text is still in the public git history). License: MIT (`LICENSE`, 2026-11-22). Still open for going public: see ROADMAP "Open-source readiness".
 
-**Handoff (end of 2026-11-22, fourth session):** the Agents features were made dependable for daily use. One commit on `main` (pushed), **not installed**, exercised in the dev app only (the dev QA agents QA Reader / QA Editor / QA Codex still exist in the dev data folder). What was added (docs: `docs/agents.md` "Agents page", "Chat", "Goals"):
+**Handoff (2026-11-23, fifth session):** chat agents now schedule their own recurring work in the app and ask with forms. Commit `58d92db` on `main`, pushed and **installed** (so the fourth session's work below is installed too). Started from the maintainer's complaint: chats weren't interactive, and asked for a routine, agents set it up in Claude/Codex themselves (cron, loops) instead of in the app. The maintainer wants **scheduled AI work with that agent**, not a repeating planner task (a first attempt that steered agents to `repeat:` tasks was rejected). What was added (docs: `docs/agents.md` "Chat" → "Scheduled work", "Questions with choices"):
+- **Routines (scheduled agent work):** action kind `schedule` (chat runs only, never built-ins, never auto-run: hard rule 8), payload `{title, prompt, time: "HH:MM", days: daily|weekdays|weekends|mon,thu}`. Approve → `RoutineStore` (`agents/routines.ts`, app data `routines.json`; pure helpers `parseDays`/`parseTime`/`describeRoutine` in `shared/routines.ts`) and a note in the chat. `AgentHub.fire` (60 s tick, same `triggersEnabled` gate as triggers) runs `dueRoutines` (today's slot, catch-up once, never a slot before `createdAt`) and sends the prompt as a chat turn with `from: 'routine:<id>'`; the user message carries `ChatMessage.routine` ("Scheduled · title"), and a `routine` notice is raised. Chat header **Scheduled** menu (`components/RoutinesMenu.tsx`: pause/resume, delete; API `setRoutinePaused`, `removeRoutine`). Deleting an agent deletes its routines.
+- **Question forms:** a chat answer may end with a ```questions block (AskUserQuestion's shape: question, header, options with label/description, multiSelect; max 4×6); `parseQuestions` (`agents/actions.ts`) stores it on the agent `ChatMessage.questions`; `components/QuestionForm.tsx` renders it under the last message only (one single-choice question answers on click, else "Send answers"; free text per question); the reply is an ordinary `chatSend`. The CLI's own question tool can't work: chat turns are `claude -p` / `codex exec`, which end with the answer.
+- **Prompts** (`agents/runner.ts`): `handoffFormat` now always goes to conversation runs (says the agent runs inside AI Center; `add-task` always, `run-agent` only with peers and under `MAX_HOPS`); `CHAT_FORMAT` (schedule + questions, never the CLI's schedulers) is added to agent chats next to `ADAPT_FORMAT`. Claude read/edit runs also disallow `CronCreate`, `CronDelete`, `CronList`, `ScheduleWakeup`, `RemoteTrigger`, `EnterWorktree` (`NO_SCHEDULE` in `engines/claude-cli.ts`); Codex has no such flag, so there only the prompt guards it.
+- **Verified in the dev app with Haiku (QA Reader):** a two-question form, the one-click follow-up, a Schedule card, approval and the note, the Scheduled menu, and a routine firing by catch-up after a restart ("PONG"). An answer that is only a proposal no longer leaves an empty row.
+- **Not verified:** Codex proposing a schedule or a form, a routine firing on the real installed app over days, the routine notification on screen, multi-select on screen.
+- **Dev-test gotcha:** `pkill -f "electron \."` misses the `Electron` binary (two dev instances then overwrite each other's `routines.json`); stop the dev app with `pkill -f "remote-debugging-port=9334"`, never a broad `pkill electron` (it would hit the real app). Sidebar buttons' text includes the shortcut (`Chat⌘6`) and the chat list's includes the initial (`QQA Reader`).
+- **Left for later:** editing a routine (today: delete and ask again), a routine for another agent or Central, schedules richer than daily times (intervals, monthly), routines on the Agents page.
+
+**Handoff (end of 2026-11-22, fourth session):** the Agents features were made dependable for daily use. One commit on `main` (pushed; installed 2026-11-23 together with the fifth session's work), exercised in the dev app only (the dev QA agents QA Reader / QA Editor / QA Codex still exist in the dev data folder). What was added (docs: `docs/agents.md` "Agents page", "Chat", "Goals"):
 - **Run history survives restarts:** `agents/history.ts` (`loadHistory`, `runFromLog`) rebuilds `Run`s from `runs/YYYY-MM/<id>.jsonl`; `Supervisor.seed`, `HISTORY_CAP` 200; the `queued`/`end` log events now also carry `agentName`, `profile`, `chat`, `queuedAt`, `outputFile`. A log with no `end` shows as cancelled "Interrupted when the app closed".
 - **Notifications:** `agents/notice.ts` (pure: `shouldNotify`, `notice`) + `notify.ts` (Electron shim, dock badge = pending approvals + paused runs + review); `Supervisor` takes an `onEvent('failed'|'paused')`; the hub raises `alert()` for failures, pauses, approvals, review, goals; Settings → General switch `agentNotifications`; click navigates via the new `navigate` channel (`window.api.onNavigate`). Never contains answer text.
 - **Streaming:** Claude assistant text blocks now emit `text` events (message-level, no `--include-partial-messages`); `RunContext.onText` → `Execute` signal `text()` → `Run.partial` (throttled 150 ms, not logged); Chat shows a growing `StreamingAnswer`.
@@ -183,7 +192,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 - `seen-tasks.json`: task ids the app created or the user reviewed; any other open task is "new in your todo list" (Inbox). Seeded with everything on first run.
 - `google-tokens.bin`: Keychain-encrypted.
 - `metrics/` (usage log), `workspaces/<agent>/` (default working folders).
-- Agents: `agents-org.json` (per agents folder: accepted, ignored, groups, pins), `chats/` (transcripts), `runs/` (JSON-lines logs), `approvals.json`, `goals/`, `queue.json` (waiting turns), `limits.json`, `triggers.json`.
+- Agents: `agents-org.json` (per agents folder: accepted, ignored, groups, pins), `chats/` (transcripts), `runs/` (JSON-lines logs), `approvals.json`, `goals/`, `queue.json` (waiting turns), `limits.json`, `triggers.json`, `routines.json` (scheduled agent work), `memory/` (agent notes).
 
 ## Conventions
 
@@ -197,7 +206,7 @@ Data flow: the main process computes `AppState` (vault + calendar + plan + brief
 ## Verify your changes
 
 ```bash
-npm test              # 293 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
+npm test              # 298 tests; must stay green (2 skip on a fresh clone without tests/fixtures/)
 npm run typecheck
 npm run build && npx electron . --remote-debugging-port=9333 &   # runs against .dev-vault
 node scripts/cdp.mjs /tmp/shot.png "document.body.innerText.slice(0,300)"   # screenshot + eval in renderer
